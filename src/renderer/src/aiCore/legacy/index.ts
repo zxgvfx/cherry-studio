@@ -154,7 +154,12 @@ export default class AiProvider {
   }
 
   public async models(): Promise<SdkModel[]> {
-    return this.apiClient.listModels()
+    console.log('[LegacyAiProvider] 🔧 models() called');
+    console.log('[LegacyAiProvider] 🔧 API Client type:', this.apiClient.constructor.name);
+    console.log('[LegacyAiProvider] 🔧 Calling apiClient.listModels()...');
+    const models = await this.apiClient.listModels()
+    console.log('[LegacyAiProvider] 🔧 apiClient.listModels() returned:', models.length, 'models');
+    return models
   }
 
   public async getEmbeddingDimensions(model: Model): Promise<number> {

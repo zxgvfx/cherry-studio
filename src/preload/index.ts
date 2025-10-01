@@ -479,10 +479,140 @@ const api = {
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
+
+// 检测是否在 Houdini 环境中
+function isHoudiniEnvironment(): boolean {
+  // 检查多种可能的 Houdini 环境标识
+  const hasQt = !!(window as any).qt;
+  const hasQWebChannel = !!(window as any).QWebChannel;
+  const hasHoudiniUserAgent = navigator.userAgent.includes("Houdini");
+  const hasHoudiniFlag = !!(window as any).houdini;
+  const hasHostBridge = !!(window as any).hostBridge;
+  
+  // 如果不在真正的 Electron 环境中，就认为是 Houdini 环境
+  const isNotElectron = !(window as any).electron && !process.versions?.electron;
+  
+  const isHoudini = hasQt || hasQWebChannel || hasHoudiniUserAgent || hasHoudiniFlag || hasHostBridge || isNotElectron;
+  
+  console.log(`[Preload] Environment detection:`, {
+    hasQt, hasQWebChannel, hasHoudiniUserAgent, hasHoudiniFlag, hasHostBridge, isNotElectron, isHoudini
+  });
+  
+  return isHoudini;
+}
+
+// 为 Houdini 环境创建模拟的 Electron API
+function createHoudiniElectronAPI() {
+  return {
+    ipcRenderer: {
+      send: (channel: string, ...args: any[]) => {
+        console.log(`[Houdini] IPC send: ${channel}`, args);
+      },
+      sendTo: (webContentsId: number, channel: string, ...args: any[]) => {
+        console.log(`[Houdini] IPC sendTo: ${webContentsId} ${channel}`, args);
+      },
+      sendSync: (channel: string, ...args: any[]) => {
+        console.log(`[Houdini] IPC sendSync: ${channel}`, args);
+        return null;
+      },
+      sendToHost: (channel: string, ...args: any[]) => {
+        console.log(`[Houdini] IPC sendToHost: ${channel}`, args);
+      },
+      postMessage: (channel: string, message: any, _transfer?: any[]) => {
+        console.log(`[Houdini] IPC postMessage: ${channel}`, message);
+      },
+      invoke: async (channel: string, ...args: any[]) => {
+        console.log(`[Houdini] IPC invoke: ${channel}`, args);
+        // 返回模拟的响应
+        if (channel === "app:info") return { version: "1.0.0", platform: "win32", arch: "x64" };
+        if (channel === "app:get-cache-size") return { size: 0, count: 0 };
+        if (channel === "app:is-full-screen") return false;
+        if (channel.startsWith("get-")) {
+          if (channel === "get-app-version") return "1.0.0";
+          if (channel === "get-platform") return "win32";
+          if (channel === "get-arch") return "x64";
+          if (channel === "get-path") return "/tmp/cherry-studio";
+          if (channel === "get-locale") return "zh-CN";
+          if (channel === "get-theme") return "light";
+        }
+        return null;
+      },
+      on: (channel: string, _listener: (...args: any[]) => void) => {
+        console.log(`[Houdini] IPC on: ${channel}`);
+        return () => {
+          console.log(`[Houdini] IPC removeListener: ${channel}`);
+        };
+      },
+      removeListener: (channel: string, _listener: (...args: any[]) => void) => {
+        console.log(`[Houdini] IPC removeListener: ${channel}`);
+      },
+      removeAllListeners: (channel: string) => {
+        console.log(`[Houdini] IPC removeAllListeners: ${channel}`);
+      }
+    },
+    process: {
+      platform: "win32",
+      versions: { node: "18.0.0", chrome: "100.0.0", electron: "20.0.0" }
+    }
+  };
+}
+
+// 为 Houdini 环境创建模拟的 API
+function createHoudiniAPI() {
+  return {
+    getDiskInfo: async (path: string) => {
+      console.log(`[Houdini] getDiskInfo: ${path}`);
+      return { total: 1000000000, free: 500000000 };
+    },
+    getAppInfo: async () => {
+      console.log(`[Houdini] getAppInfo`);
+      return { version: "1.0.0", platform: "win32", arch: "x64" };
+    },
+    logToMain: (source: string, level: string, message: string, data?: any) => {
+      console.log(`[Houdini] logToMain [${level}] ${source}:`, message, data);
+    },
+    file: {
+      isTextFile: async (filePath: string) => {
+        console.log(`[Houdini] isTextFile: ${filePath}`);
+        return filePath.toLowerCase().endsWith('.txt') || 
+               filePath.toLowerCase().endsWith('.md') || 
+               filePath.toLowerCase().endsWith('.json');
+      },
+      select: async (options: any) => {
+        console.log(`[Houdini] file.select:`, options);
+        return [];
+      },
+      binaryImage: async (fileId: string) => {
+        console.log(`[Houdini] binaryImage: ${fileId}`);
+        return null;
+      }
+    },
+    selection: {
+      setEnabled: (enabled: boolean) => console.log(`[Houdini] setEnabled: ${enabled}`),
+      setTriggerMode: (mode: string) => console.log(`[Houdini] setTriggerMode: ${mode}`),
+      setFollowToolbar: (isFollowToolbar: boolean) => console.log(`[Houdini] setFollowToolbar: ${isFollowToolbar}`),
+      setRemeberWinSize: (isRemeberWinSize: boolean) => console.log(`[Houdini] setRemeberWinSize: ${isRemeberWinSize}`),
+      setFilterMode: (mode: string) => console.log(`[Houdini] setFilterMode: ${mode}`),
+      setFilterList: (list: string[]) => console.log(`[Houdini] setFilterList:`, list)
+    },
+    storeSync: {
+      onUpdate: (syncAction: any) => console.log(`[Houdini] storeSync.onUpdate:`, syncAction),
+      subscribe: () => console.log(`[Houdini] storeSync.subscribe`),
+      unsubscribe: () => console.log(`[Houdini] storeSync.unsubscribe`)
+    }
+  };
+}
+
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
+    if (isHoudiniEnvironment()) {
+      console.log('[Preload] Detected Houdini environment, using mock APIs');
+      contextBridge.exposeInMainWorld('electron', createHoudiniElectronAPI())
+      contextBridge.exposeInMainWorld('api', createHoudiniAPI())
+    } else {
+      contextBridge.exposeInMainWorld('electron', electronAPI)
+      contextBridge.exposeInMainWorld('api', api)
+    }
   } catch (error) {
     console.error('[Preload]Failed to expose APIs:', error as Error)
   }

@@ -179,9 +179,47 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
   }, [list, models, onAddModel, provider, t])
 
   const loadModels = useCallback(async (provider: Provider) => {
+    console.log('[ManageModelsPopup] 🔄 loadModels called for provider:', provider.id);
+    console.log('[ManageModelsPopup] 🔄 Provider details:', {
+      id: provider.id,
+      name: provider.name,
+      apiKey: provider.apiKey ? 'Yes' : 'No',
+      apiHost: provider.apiHost
+    });
     setLoadingModels(true)
     try {
+      // 优先：Ollama 直接调用 Qt 桥接，绕过 SDK/网络探测导致的 Connection error
+      if (provider.id === 'ollama') {
+        try {
+          const host = provider.apiHost || 'http://localhost:11434'
+          console.log('[ManageModelsPopup] 🔄 Primary (Ollama): window.api.ollama.listModels with host:', host)
+          const raw: any = await (window as any)?.api?.ollama?.listModels?.({ host })
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : (raw || {})
+          const data: any[] = Array.isArray(parsed?.data) ? parsed.data : []
+          const filteredModels = data
+            .map((model: any) => ({
+              id: model?.id || model?.name,
+              name: model?.display_name || model?.displayName || model?.name || model?.id,
+              provider: provider.id,
+              group: getDefaultGroupName(model?.id || model?.name, provider.id),
+              description: model?.description || '',
+              owned_by: model?.owned_by || 'ollama',
+              supported_endpoint_types: model?.supported_endpoint_types
+            }))
+            .filter((m) => !isEmpty(m.name)) as unknown as Model[]
+          console.log('[ManageModelsPopup] 🔄 Primary (Ollama) models:', filteredModels.length)
+          setListModels(filteredModels)
+          return
+        } catch (primaryErr) {
+          console.warn('[ManageModelsPopup] ⚠️ Primary (Ollama) failed, fallback to fetchModels:', primaryErr)
+        }
+      }
+
+      console.log('[ManageModelsPopup] 🔄 Calling fetchModels...');
       const models = await fetchModels(provider)
+      console.log('[ManageModelsPopup] 🔄 fetchModels returned:', models.length, 'models');
+      console.log('[ManageModelsPopup] 🔄 Raw models data:', models);
+      
       const filteredModels = models
         .map((model) => ({
           // @ts-ignore modelId
@@ -200,8 +238,10 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
         }))
         .filter((model) => !isEmpty(model.name))
 
+      console.log('[ManageModelsPopup] 🔄 Filtered models:', filteredModels.length, 'models');
       setListModels(filteredModels)
     } catch (error) {
+      console.error('[ManageModelsPopup] ❌ Error loading models:', error);
       logger.error(`Failed to load models for provider ${getFancyProviderName(provider)}`, error as Error)
     } finally {
       setLoadingModels(false)

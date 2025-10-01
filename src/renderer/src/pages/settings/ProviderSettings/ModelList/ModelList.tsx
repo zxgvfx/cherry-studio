@@ -82,6 +82,13 @@ const ModelList: React.FC<ModelListProps> = ({ providerId }) => {
   }, [displayedModelGroups])
 
   const onManageModel = useCallback(() => {
+    console.log('[ModelList] 🎯 onManageModel called for provider:', provider.id);
+    console.log('[ModelList] 🎯 Provider details:', {
+      id: provider.id,
+      name: provider.name,
+      apiKey: provider.apiKey ? 'Yes' : 'No',
+      apiHost: provider.apiHost
+    });
     ManageModelsPopup.show({ providerId: provider.id })
   }, [provider.id])
 

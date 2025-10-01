@@ -358,11 +358,77 @@ export function hasApiKey(provider: Provider) {
 // }
 
 export async function fetchModels(provider: Provider): Promise<SdkModel[]> {
+  console.log('[ApiService] 📡 fetchModels called for provider:', provider.id);
+  console.log('[ApiService] 📡 Provider details:', {
+    id: provider.id,
+    name: provider.name,
+    apiKey: provider.apiKey ? 'Yes' : 'No',
+    apiHost: provider.apiHost
+  });
+  
   const AI = new AiProviderNew(provider)
+  console.log('[ApiService] 📡 Created AiProviderNew instance');
 
   try {
-    return await AI.models()
+    console.log('[ApiService] 📡 Calling AI.models()...');
+    const models = await AI.models()
+    console.log('[ApiService] 📡 AI.models() returned:', models.length, 'models');
+    console.log('[ApiService] 📡 Models data:', models);
+    // 兜底：如果是 ollama 且未获取到模型，尝试直接调用 window.api.ollama.listModels
+    if ((!models || models.length === 0) && provider.id === 'ollama') {
+      try {
+        const host = provider.apiHost || 'http://localhost:11434'
+        console.log('[ApiService] 📡 Fallback to window.api.ollama.listModels with host:', host)
+        const raw = await (window as any)?.api?.ollama?.listModels?.({ host })
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : (raw || {})
+        const data = Array.isArray(parsed?.data) ? parsed.data : []
+        const mapped: SdkModel[] = data
+          .map((item: any) => {
+            const id = (item?.id || '').trim()
+            if (!id) return null
+            return {
+              id,
+              description: item?.description || item?.owned_by || id,
+              object: 'model',
+              owned_by: 'ollama'
+            } as unknown as SdkModel
+          })
+          .filter(Boolean)
+        console.log('[ApiService] 📡 Fallback mapped models:', mapped.length)
+        return mapped
+      } catch (e) {
+        console.warn('[ApiService] ⚠️ Fallback to ollama.listModels failed:', e)
+      }
+    }
+    return models
   } catch (error) {
+    console.error('[ApiService] ❌ Error in fetchModels:', error);
+    // 错误兜底：ollama 直接尝试一次本地列表
+    if (provider.id === 'ollama') {
+      try {
+        const host = provider.apiHost || 'http://localhost:11434'
+        console.log('[ApiService] 📡 Error fallback to window.api.ollama.listModels with host:', host)
+        const raw = await (window as any)?.api?.ollama?.listModels?.({ host })
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : (raw || {})
+        const data = Array.isArray(parsed?.data) ? parsed.data : []
+        const mapped: SdkModel[] = data
+          .map((item: any) => {
+            const id = (item?.id || '').trim()
+            if (!id) return null
+            return {
+              id,
+              description: item?.description || item?.owned_by || id,
+              object: 'model',
+              owned_by: 'ollama'
+            } as unknown as SdkModel
+          })
+          .filter(Boolean)
+        console.log('[ApiService] 📡 Error fallback mapped models:', mapped.length)
+        return mapped
+      } catch (e) {
+        console.warn('[ApiService] ⚠️ Error fallback to ollama.listModels failed:', e)
+      }
+    }
     return []
   }
 }

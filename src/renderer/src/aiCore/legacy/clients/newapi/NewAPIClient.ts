@@ -89,6 +89,38 @@ export class NewAPIClient extends MixedBaseAPIClient {
 
   override async listModels(): Promise<NewApiModel[]> {
     try {
+      // 在Houdini环境中，使用window.api.models.list
+      const isHoudiniEnv = !!(globalThis as any)?.isHoudini || 
+                           !!(globalThis as any)?.houdini || 
+                           !!(globalThis as any)?.qt || 
+                           !!(globalThis as any)?.QWebChannel ||
+                           !!(globalThis as any)?.hostBridge;
+      
+      if (isHoudiniEnv) {
+        console.log('[NewAPIClient] Using Houdini environment, calling window.api.models.list');
+        const host = this.provider.apiHost || 'http://localhost:11434'
+        const modelUrl = `${host.replace(/\/$/, '')}/v1/models`
+        
+        const response = await window.api?.models?.list?.({
+          url: modelUrl,
+          method: 'GET',
+          apiKey: this.provider.apiKey,
+          fallback: { object: 'list', data: [] }
+        });
+        
+        const data = Array.isArray(response?.data) ? response.data : []
+        const models: NewApiModel[] = data.map((item: any) => ({
+          id: item.id || item.name,
+          name: item.name || item.id,
+          description: item.description || '',
+          owned_by: item.owned_by || this.provider.id,
+          created: item.created || Date.now()
+        }));
+        
+        console.log('[NewAPIClient] Houdini models result:', models.length, 'models');
+        return models;
+      }
+      
       const sdk = await this.defaultClient.getSdkInstance()
       // Explicitly type the expected response shape so that `data` is recognised.
       const response = await sdk.request<{ data: NewApiModel[] }>({

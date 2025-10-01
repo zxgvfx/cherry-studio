@@ -183,6 +183,38 @@ export class AnthropicAPIClient extends BaseApiClient<
   }
 
   override async listModels(): Promise<Anthropic.ModelInfo[]> {
+    console.log('[AnthropicAPIClient] listModels called for provider:', this.provider.id);
+    
+    // 在Houdini环境中，使用window.api.models.list
+    const isHoudiniEnv = !!(globalThis as any)?.isHoudini || 
+                         !!(globalThis as any)?.houdini || 
+                         !!(globalThis as any)?.qt || 
+                         !!(globalThis as any)?.QWebChannel ||
+                         !!(globalThis as any)?.hostBridge;
+    
+    if (isHoudiniEnv) {
+      console.log('[AnthropicAPIClient] Using Houdini environment, calling window.api.models.list');
+      const host = this.provider.apiHost || 'https://api.anthropic.com'
+      const modelUrl = `${host.replace(/\/$/, '')}/v1/models`
+      
+      const response = await window.api?.models?.list?.({
+        url: modelUrl,
+        method: 'GET',
+        apiKey: this.provider.apiKey,
+        fallback: { object: 'list', data: [] }
+      });
+      
+      const data = Array.isArray(response?.data) ? response.data : []
+      const models: Anthropic.ModelInfo[] = data.map((item: any) => ({
+        id: item.id || item.name,
+        name: item.name || item.id,
+        created: item.created || Date.now()
+      }));
+      
+      console.log('[AnthropicAPIClient] Houdini models result:', models.length, 'models');
+      return models;
+    }
+    
     if (this.provider.authType === 'oauth') {
       this.oauthToken = await window.api.anthropic_oauth.getAccessToken()
       this.isOAuthMode = true

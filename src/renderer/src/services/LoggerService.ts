@@ -2,11 +2,14 @@
 import type { LogContextData, LogLevel, LogSourceWithContext } from '@shared/config/logger'
 import { LEVEL, LEVEL_MAP } from '@shared/config/logger'
 
+import { getElectronAPI } from '../utils/houdini'
+
 // check if the current process is a worker
 const IS_WORKER = typeof window === 'undefined'
 // check if we are in the dev env
 // DO NOT use `constants.ts` here, because the files contains other dependencies that will fail in worker process
-const IS_DEV = IS_WORKER ? false : window.electron?.process?.env?.NODE_ENV === 'development'
+const electronAPI = IS_WORKER ? null : getElectronAPI()
+const IS_DEV = IS_WORKER ? false : electronAPI?.process?.env?.NODE_ENV === 'development'
 
 const DEFAULT_LEVEL = IS_DEV ? LEVEL.SILLY : LEVEL.INFO
 const MAIN_LOG_LEVEL = LEVEL.WARN
@@ -33,12 +36,12 @@ class LoggerService {
   private context: Record<string, any> = {}
 
   private constructor() {
-    if (IS_DEV) {
+    if (IS_DEV && electronAPI) {
       if (
-        window.electron?.process?.env?.CSLOGGER_RENDERER_LEVEL &&
-        Object.values(LEVEL).includes(window.electron?.process?.env?.CSLOGGER_RENDERER_LEVEL as LogLevel)
+        electronAPI.process?.env?.CSLOGGER_RENDERER_LEVEL &&
+        Object.values(LEVEL).includes(electronAPI.process?.env?.CSLOGGER_RENDERER_LEVEL as LogLevel)
       ) {
-        this.envLevel = window.electron?.process?.env?.CSLOGGER_RENDERER_LEVEL as LogLevel
+        this.envLevel = electronAPI.process?.env?.CSLOGGER_RENDERER_LEVEL as LogLevel
 
         console.log(
           `%c[LoggerService] env CSLOGGER_RENDERER_LEVEL loaded: ${this.envLevel}`,
@@ -46,8 +49,8 @@ class LoggerService {
         )
       }
 
-      if (window.electron?.process?.env?.CSLOGGER_RENDERER_SHOW_MODULES) {
-        const showModules = window.electron?.process?.env?.CSLOGGER_RENDERER_SHOW_MODULES.split(',')
+      if (electronAPI.process?.env?.CSLOGGER_RENDERER_SHOW_MODULES) {
+        const showModules = electronAPI.process?.env?.CSLOGGER_RENDERER_SHOW_MODULES.split(',')
           .map((module) => module.trim())
           .filter((module) => module !== '')
         if (showModules.length > 0) {

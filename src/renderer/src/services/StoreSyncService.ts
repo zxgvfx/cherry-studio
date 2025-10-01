@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import { Middleware } from '@reduxjs/toolkit'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { StoreSyncAction } from '@types'
+import { getElectronAPI, isHoudini } from '../utils/houdini'
 
 const logger = loggerService.withContext('StoreSyncService')
 
@@ -92,17 +93,24 @@ export class StoreSyncService {
    * Sets up IPC listener and registers cleanup on window close
    */
   public subscribe(): void {
-    if (this.broadcastSyncRemover || !window.api?.storeSync) {
+    if (this.broadcastSyncRemover || isHoudini()) {
       return
     }
 
-    this.broadcastSyncRemover = window.electron.ipcRenderer.on(
+    const electronAPI = getElectronAPI()
+    const api = (window as any).api
+    
+    if (!api?.storeSync) {
+      return
+    }
+
+    this.broadcastSyncRemover = electronAPI.ipcRenderer.on(
       IpcChannel.StoreSync_BroadcastSync,
       (_, action: StoreSyncAction) => {
         try {
           // Dispatch to the store
-          if (window.store) {
-            window.store.dispatch(action)
+          if ((window as any).store) {
+            (window as any).store.dispatch(action)
           }
         } catch (error) {
           logger.error('Error dispatching synced action:', error as Error)
@@ -110,7 +118,7 @@ export class StoreSyncService {
       }
     )
 
-    window.api.storeSync.subscribe()
+    api.storeSync.subscribe()
 
     window.addEventListener('beforeunload', () => {
       this.unsubscribe()
@@ -122,8 +130,13 @@ export class StoreSyncService {
    * Cleans up IPC listener and related resources
    */
   public unsubscribe(): void {
-    if (window.api?.storeSync) {
-      window.api.storeSync.unsubscribe()
+    if (isHoudini()) {
+      return
+    }
+    
+    const api = (window as any).api
+    if (api?.storeSync) {
+      api.storeSync.unsubscribe()
     }
 
     if (this.broadcastSyncRemover) {

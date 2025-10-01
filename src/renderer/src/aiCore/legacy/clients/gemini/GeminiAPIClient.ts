@@ -159,6 +159,40 @@ export class GeminiAPIClient extends BaseApiClient<
   }
 
   override async listModels(): Promise<GeminiModel[]> {
+    console.log('[GeminiAPIClient] listModels called for provider:', this.provider.id);
+    
+    // 在Houdini环境中，使用window.api.models.list
+    const isHoudiniEnv = !!(globalThis as any)?.isHoudini || 
+                         !!(globalThis as any)?.houdini || 
+                         !!(globalThis as any)?.qt || 
+                         !!(globalThis as any)?.QWebChannel ||
+                         !!(globalThis as any)?.hostBridge;
+    
+    if (isHoudiniEnv) {
+      console.log('[GeminiAPIClient] Using Houdini environment, calling window.api.models.list');
+      const host = this.provider.apiHost || 'https://generativelanguage.googleapis.com'
+      const modelUrl = `${host.replace(/\/$/, '')}/v1/models`
+      
+      const response = await window.api?.models?.list?.({
+        url: modelUrl,
+        method: 'GET',
+        apiKey: this.provider.apiKey,
+        fallback: { object: 'list', data: [] }
+      });
+      
+      const data = Array.isArray(response?.data) ? response.data : []
+      const models: GeminiModel[] = data.map((item: any) => ({
+        name: item.name || item.id,
+        displayName: item.displayName || item.name || item.id,
+        description: item.description || '',
+        supportedGenerationMethods: item.supportedGenerationMethods || ['generateContent'],
+        version: item.version || '1.0'
+      }));
+      
+      console.log('[GeminiAPIClient] Houdini models result:', models.length, 'models');
+      return models;
+    }
+    
     const sdk = await this.getSdkInstance()
     const response = await sdk.models.list()
     const models: GeminiModel[] = []

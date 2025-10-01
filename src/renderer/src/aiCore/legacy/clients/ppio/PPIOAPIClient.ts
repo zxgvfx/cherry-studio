@@ -18,6 +18,39 @@ export class PPIOAPIClient extends OpenAIAPIClient {
 
   override async listModels(): Promise<OpenAI.Models.Model[]> {
     try {
+      console.log('[PPIOAPIClient] listModels called for provider:', this.provider.id);
+      
+      // 在Houdini环境中，使用window.api.models.list
+      const isHoudiniEnv = !!(globalThis as any)?.isHoudini || 
+                           !!(globalThis as any)?.houdini || 
+                           !!(globalThis as any)?.qt || 
+                           !!(globalThis as any)?.QWebChannel ||
+                           !!(globalThis as any)?.hostBridge;
+      
+      if (isHoudiniEnv) {
+        console.log('[PPIOAPIClient] Using Houdini environment, calling window.api.models.list');
+        const host = this.provider.apiHost || 'https://api.ppio.ai'
+        const modelUrl = `${host.replace(/\/$/, '')}/v1/models`
+        
+        const response = await window.api?.models?.list?.({
+          url: modelUrl,
+          method: 'GET',
+          apiKey: this.provider.apiKey,
+          fallback: { object: 'list', data: [] }
+        });
+        
+        const data = Array.isArray(response?.data) ? response.data : []
+        const models: OpenAI.Models.Model[] = data.map((item: any) => ({
+          id: item.id || item.name,
+          object: 'model' as const,
+          owned_by: item.owned_by || item.publisher || item.organization || 'ppio',
+          created: item.created || Date.now()
+        }));
+        
+        console.log('[PPIOAPIClient] Houdini models result:', models.length, 'models');
+        return models.filter(isSupportedModel);
+      }
+      
       const sdk = await this.getSdkInstance()
 
       // PPIO requires three separate requests to get all model types

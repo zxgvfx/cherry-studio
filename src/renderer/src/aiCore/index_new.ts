@@ -439,7 +439,17 @@ export default class ModernAiProvider {
 
   // 代理其他方法到原有实现
   public async models() {
-    return this.legacyProvider.models()
+    console.log('[ModernAiProvider] 🤖 models() called');
+    console.log('[ModernAiProvider] 🤖 Provider details:', {
+      id: this.actualProvider.id,
+      name: this.actualProvider.name,
+      apiKey: this.actualProvider.apiKey ? 'Yes' : 'No',
+      apiHost: this.actualProvider.apiHost
+    });
+    console.log('[ModernAiProvider] 🤖 Calling legacyProvider.models()...');
+    const models = await this.legacyProvider.models()
+    console.log('[ModernAiProvider] 🤖 legacyProvider.models() returned:', models.length, 'models');
+    return models
   }
 
   public async getEmbeddingDimensions(model: Model): Promise<number> {

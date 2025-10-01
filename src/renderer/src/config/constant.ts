@@ -6,12 +6,17 @@ export const DEFAULT_KNOWLEDGE_DOCUMENT_COUNT = 6
 export const DEFAULT_KNOWLEDGE_THRESHOLD = 0.0
 export const DEFAULT_WEBSEARCH_RAG_DOCUMENT_COUNT = 1
 
-export const platform = window.electron?.process?.platform
+import { getElectronAPI, isHoudini } from '../utils/houdini'
+
+// 安全地获取平台信息
+const electronAPI = getElectronAPI()
+export const platform = electronAPI?.process?.platform || 'win32'
 export const isMac = platform === 'darwin'
 export const isWin = platform === 'win32' || platform === 'win64'
 export const isLinux = platform === 'linux'
-export const isDev = window.electron?.process?.env?.NODE_ENV === 'development'
-export const isProd = window.electron?.process?.env?.NODE_ENV === 'production'
+export const isDev = electronAPI?.process?.env?.NODE_ENV === 'development'
+export const isProd = electronAPI?.process?.env?.NODE_ENV === 'production'
+export const isHoudiniEnv = isHoudini()
 
 export const SILICON_CLIENT_ID = 'SFaJLLq0y6CAMoyDm81aMu'
 export const PPIO_CLIENT_ID = '37d0828c96b34936a600b62c'
