@@ -22,7 +22,7 @@ import type { Model, ModelCapability, ModelType, Provider } from '@renderer/type
 import { getDefaultGroupName, getDifference, getUnion, uniqueObjectArray } from '@renderer/utils'
 import { isNewApiProvider } from '@renderer/utils/provider'
 import type { ModalProps } from 'antd'
-import { Button, Divider, Flex, Form, Input, InputNumber, message, Modal, Select, Switch, Tooltip } from 'antd'
+import { Button, Divider, Flex, Form, Input, InputNumber, message, Modal, Select, Switch, Tooltip, Tag } from 'antd'
 import { cloneDeep } from 'lodash'
 import { ChevronDown, ChevronUp, RotateCcw, SaveIcon } from 'lucide-react'
 import type { FC } from 'react'
@@ -234,9 +234,20 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   }
 
   return (
-    <Modal title={t('models.edit')} footer={null} transitionName="animation-move-down" centered {...props}>
+    <Modal
+      title={
+        <Flex align="center" gap={8}>
+          {t('models.edit')}
+          {model.isCentralized && <Tag color="gold">{t('settings.centralized_config_readonly', 'Managed')}</Tag>}
+        </Flex>
+      }
+      footer={null}
+      transitionName="animation-move-down"
+      centered
+      {...props}>
       <Form
         form={form}
+        disabled={model.isCentralized}
         labelCol={{ flex: isNewApiProvider(provider) ? labelWidth : '110px' }}
         labelAlign="left"
         colon={false}
@@ -325,9 +336,11 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
               style={{ color: 'var(--color-text-3)' }}>
               {t('settings.moresetting.label')}
             </Button>
-            <Button type="primary" htmlType="submit" icon={<SaveIcon size={16} />}>
-              {t('common.save')}
-            </Button>
+            {!model.isCentralized && (
+              <Button type="primary" htmlType="submit" icon={<SaveIcon size={16} />}>
+                {t('common.save')}
+              </Button>
+            )}
           </Flex>
         </Form.Item>
         {showMoreSettings && (

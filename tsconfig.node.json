@@ -13,7 +13,7 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "incremental": true,
+    "incremental": false,
     "moduleResolution": "bundler",
     "tsBuildInfoFile": ".tsbuildinfo/tsconfig.node.tsbuildinfo",
     "types": [

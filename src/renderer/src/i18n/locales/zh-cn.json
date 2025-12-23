@@ -3094,6 +3094,8 @@
     }
   },
   "settings": {
+    "centralized": "已托管",
+    "centralized_config_readonly": "由管理员托管",
     "about": {
       "checkUpdate": {
         "available": "立即更新",

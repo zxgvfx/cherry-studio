@@ -532,6 +532,7 @@ const McpSettings: React.FC = () => {
       children: (
         <Form
           form={form}
+          disabled={server?.isCentralized}
           layout="vertical"
           onValuesChange={() => setIsFormChanged(true)}
           style={{
@@ -770,6 +771,11 @@ const McpSettings: React.FC = () => {
               <Flex align="center" gap={8}>
                 <ServerName className="text-nowrap">{server?.name}</ServerName>
                 {serverVersion && <VersionBadge count={serverVersion} color="blue" />}
+                {server?.isCentralized && (
+                  <Tag color="gold" style={{ marginLeft: 8 }}>
+                    {t('settings.centralized', 'Managed')}
+                  </Tag>
+                )}
               </Flex>
               <Button size="small" onClick={() => setLogModalOpen(true)}>
                 {t('settings.mcp.logs', 'View Logs')}
@@ -778,6 +784,7 @@ const McpSettings: React.FC = () => {
                 danger
                 icon={<DeleteIcon size={14} className="lucide-custom" />}
                 type="text"
+                disabled={server?.isCentralized}
                 onClick={() => onDeleteMcpServer(server)}
               />
             </Flex>
@@ -787,6 +794,7 @@ const McpSettings: React.FC = () => {
                 key={server.id}
                 loading={loadingServer === server.id}
                 onChange={onToggleActive}
+                disabled={server?.isCentralized}
               />
               <Button
                 type="primary"
@@ -794,7 +802,7 @@ const McpSettings: React.FC = () => {
                 onClick={onSave}
                 loading={loading}
                 shape="round"
-                disabled={!isFormChanged || activeTab !== 'settings'}>
+                disabled={!isFormChanged || activeTab !== 'settings' || server?.isCentralized}>
                 {t('common.save')}
               </Button>
             </Flex>

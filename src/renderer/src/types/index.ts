@@ -290,6 +290,14 @@ export type Model = {
   endpoint_type?: EndpointType
   supported_endpoint_types?: EndpointType[]
   supported_text_delta?: boolean
+  /**
+   * 是否为中心化配置的模型（只读）
+   */
+  isCentralized?: boolean
+  /**
+   * 模型头像/图标 (URL 或 Base64)
+   */
+  avatar?: string
 }
 
 export type Suggestion = {
@@ -732,6 +740,10 @@ export interface MCPServer {
   trustedAt?: number
   /** 安装时间戳 */
   installedAt?: number
+  /**
+   * 是否为中心化配置的MCP服务器（只读）
+   */
+  isCentralized?: boolean
 }
 
 export type BuiltinMCPServer = MCPServer & {

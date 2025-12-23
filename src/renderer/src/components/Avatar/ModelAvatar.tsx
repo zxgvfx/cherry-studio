@@ -15,7 +15,7 @@ interface Props {
 const ModelAvatar: FC<Props> = ({ model, size, props, className }) => {
   return (
     <Avatar
-      src={getModelLogo(model)}
+      src={model?.avatar || getModelLogo(model)}
       style={{
         width: size,
         height: size,

@@ -42,6 +42,8 @@ import appService from './services/AppService'
 import AppUpdater from './services/AppUpdater'
 import BackupManager from './services/BackupManager'
 import { codeToolsService } from './services/CodeToolsService'
+import { configService } from './services/config/ConfigService'
+import { userConfigManager } from './services/config/UserConfigManager'
 import { ConfigKeys, configManager } from './services/ConfigManager'
 import CopilotService from './services/CopilotService'
 import DxtService from './services/DxtService'
@@ -304,6 +306,24 @@ export function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
 
   ipcMain.handle(IpcChannel.Config_Get, (_, key: string) => {
     return configManager.get(key)
+  })
+
+  ipcMain.handle(IpcChannel.Config_GetMergedConfig, async () => {
+    return await configService.load()
+  })
+
+  ipcMain.handle(IpcChannel.Config_Reload, async () => {
+    return await configService.reload()
+  })
+
+  ipcMain.handle(IpcChannel.Config_UpdateUserModels, async (_, models: any[]) => {
+    await userConfigManager.updateModels(models)
+    return await configService.reload()
+  })
+
+  ipcMain.handle(IpcChannel.Config_UpdateUserMcpServers, async (_, servers: any[]) => {
+    await userConfigManager.updateMcpServers(servers)
+    return await configService.reload()
   })
 
   // theme

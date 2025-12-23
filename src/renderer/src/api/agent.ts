@@ -254,6 +254,12 @@ export class AgentApiClient {
       const data = ApiModelsResponseSchema.parse(response.data)
       return data
     } catch (error) {
+      // Houdini environment fix: suppress error when agent server is not available
+      // @ts-ignore
+      if (window.api) {
+        logger.warn('AgentApiClient getModels failed (Houdini environment). Error details:', [JSON.stringify(error, Object.getOwnPropertyNames(error))])
+        return { object: 'list', data: [], total: 0 }
+      }
       throw processError(error, 'Failed to get models.')
     }
   }

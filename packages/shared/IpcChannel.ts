@@ -66,6 +66,10 @@ export enum IpcChannel {
 
   Config_Set = 'config:set',
   Config_Get = 'config:get',
+  Config_GetMergedConfig = 'config:get-merged',
+  Config_Reload = 'config:reload',
+  Config_UpdateUserModels = 'config:update-user-models',
+  Config_UpdateUserMcpServers = 'config:update-user-mcp-servers',
 
   MiniWindow_Show = 'miniwindow:show',
   MiniWindow_Hide = 'miniwindow:hide',

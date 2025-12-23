@@ -127,6 +127,7 @@ export type Provider = {
   isVertex?: boolean
   notes?: string
   extra_headers?: Record<string, string>
+  icon?: string
 }
 
 export const SystemProviderIdSchema = z.enum([

@@ -137,6 +137,24 @@ export abstract class OpenAIBaseClient<
         const baseUrl = withoutTrailingSlash(this.getBaseURL())
           .replace(/\/v1$/, '')
           .replace(/\/api$/, '')
+
+        // @ts-ignore - Houdini specific handling
+        if (window.api?.ollama?.list) {
+          try {
+            // @ts-ignore
+            const data = await window.api.ollama.list({ host: baseUrl })
+            if (data?.models && Array.isArray(data.models)) {
+              return data.models.map((model) => ({
+                id: model.name,
+                object: 'model',
+                owned_by: 'ollama'
+              }))
+            }
+          } catch (e) {
+            logger.error('Failed to list ollama models via IPC', e as Error)
+          }
+        }
+
         const response = await fetch(`${baseUrl}/api/tags`, {
           headers: {
             Authorization: `Bearer ${this.apiKey}`,

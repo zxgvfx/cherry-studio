@@ -105,6 +105,20 @@ export const ProviderAvatar: React.FC<ProviderAvatarProps> = ({
       />
     )
   }
+  
+  // Check for icon in provider object (e.g. from centralized config)
+  if (provider.icon) {
+    return (
+      <ProviderAvatarPrimitive
+        size={size}
+        providerId={provider.id}
+        providerName={provider.name}
+        logoSrc={provider.icon}
+        className={className}
+        style={style}
+      />
+    )
+  }
 
   const customLogo = customLogos[provider.id]
   if (customLogo) {

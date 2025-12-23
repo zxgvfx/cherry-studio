@@ -3094,6 +3094,8 @@
     }
   },
   "settings": {
+    "centralized": "Managed",
+    "centralized_config_readonly": "Managed by Administrator",
     "about": {
       "checkUpdate": {
         "available": "Update",

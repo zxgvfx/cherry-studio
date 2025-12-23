@@ -339,7 +339,11 @@ const api = {
   config: {
     set: (key: string, value: any, isNotify: boolean = false) =>
       ipcRenderer.invoke(IpcChannel.Config_Set, key, value, isNotify),
-    get: (key: string) => ipcRenderer.invoke(IpcChannel.Config_Get, key)
+    get: (key: string) => ipcRenderer.invoke(IpcChannel.Config_Get, key),
+    getMergedConfig: () => ipcRenderer.invoke(IpcChannel.Config_GetMergedConfig),
+    reload: () => ipcRenderer.invoke(IpcChannel.Config_Reload),
+    updateUserModels: (models: any[]) => ipcRenderer.invoke(IpcChannel.Config_UpdateUserModels, models),
+    updateUserMcpServers: (servers: any[]) => ipcRenderer.invoke(IpcChannel.Config_UpdateUserMcpServers, servers)
   },
   miniWindow: {
     show: () => ipcRenderer.invoke(IpcChannel.MiniWindow_Show),
