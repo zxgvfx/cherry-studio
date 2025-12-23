@@ -35,6 +35,9 @@ const ModelListGroup: React.FC<ModelListGroupProps> = ({
 }) => {
   const { t } = useTranslation()
   const listRef = useRef<DynamicVirtualListRef>(null)
+  
+  // 检查是否有中心化模型
+  const hasCentralizedModels = models.some(model => model.isCentralized)
 
   const handleCollapseChange = useCallback((activeKeys: string[] | string) => {
     const isNowExpanded = Array.isArray(activeKeys) ? activeKeys.length > 0 : !!activeKeys
@@ -55,18 +58,20 @@ const ModelListGroup: React.FC<ModelListGroupProps> = ({
           </Flex>
         }
         extra={
-          <Tooltip title={t('settings.models.manage.remove_whole_group')} mouseLeaveDelay={0}>
-            <Button
-              type="text"
-              className="toolbar-item"
-              icon={<Minus size={14} />}
-              onClick={(e) => {
-                e.stopPropagation()
-                onRemoveGroup()
-              }}
-              disabled={disabled}
-            />
-          </Tooltip>
+          !hasCentralizedModels ? (
+            <Tooltip title={t('settings.models.manage.remove_whole_group')} mouseLeaveDelay={0}>
+              <Button
+                type="text"
+                className="toolbar-item"
+                icon={<Minus size={14} />}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRemoveGroup()
+                }}
+                disabled={disabled}
+              />
+            </Tooltip>
+          ) : null
         }
         styles={{
           header: {

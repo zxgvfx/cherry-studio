@@ -110,9 +110,9 @@ const ProviderSetting: FC<Props> = ({ providerId }) => {
   const isCherryIN = provider.id === 'cherryin'
   const isChineseUser = i18n.language.startsWith('zh')
   const noAPIInputProviders = ['aws-bedrock'] as const satisfies SystemProviderId[]
-  const hideApiInput = noAPIInputProviders.some((id) => id === provider.id)
+  const hideApiInput = noAPIInputProviders.some((id) => id === provider.id) || provider.isCentralized
   const noAPIKeyInputProviders = ['copilot', 'vertexai'] as const satisfies SystemProviderId[]
-  const hideApiKeyInput = noAPIKeyInputProviders.some((id) => id === provider.id)
+  const hideApiKeyInput = noAPIKeyInputProviders.some((id) => id === provider.id) || provider.isCentralized
 
   const providerConfig = PROVIDER_URLS[provider.id]
   const officialWebsite = providerConfig?.websites?.official
@@ -409,6 +409,7 @@ const ProviderSetting: FC<Props> = ({ providerId }) => {
         <Switch
           value={provider.enabled}
           key={provider.id}
+          disabled={provider.isCentralized}
           onChange={(enabled) => {
             updateProvider({ apiHost, enabled })
             if (enabled) {
@@ -491,7 +492,7 @@ const ProviderSetting: FC<Props> = ({ providerId }) => {
               </SettingHelpTextRow>
             </>
           )}
-          {!isDmxapi && (
+          {!isDmxapi && !provider.isCentralized && (
             <>
               <SettingSubtitle style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div className="flex items-center gap-1">

@@ -27,6 +27,11 @@ const mcpSlice = createSlice({
       }
     },
     deleteMCPServer: (state, action: PayloadAction<string>) => {
+      // 不允许删除中心化配置的 MCP 服务器
+      const server = state.servers.find((s) => s.id === action.payload)
+      if (server?.isCentralized) {
+        return
+      }
       state.servers = state.servers.filter((server) => server.id !== action.payload)
     },
     setMCPServerActive: (state, action: PayloadAction<{ id: string; isActive: boolean }>) => {

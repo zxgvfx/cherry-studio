@@ -158,6 +158,10 @@ const llmSlice = createSlice({
       )
     },
     removeModel: (state, action: PayloadAction<{ providerId: string; model: Model }>) => {
+      // 不允许删除中心化配置的模型
+      if (action.payload.model.isCentralized) {
+        return
+      }
       state.providers = state.providers.map((p) =>
         p.id === action.payload.providerId
           ? {

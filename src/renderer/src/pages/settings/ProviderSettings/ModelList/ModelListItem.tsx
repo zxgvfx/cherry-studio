@@ -55,9 +55,11 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, modelStatus, 
           <Tooltip title={model.isCentralized ? t('settings.centralized_config_readonly', 'Managed by Administrator') : t('models.edit')} mouseLeaveDelay={0}>
             <Button type="text" onClick={() => onEdit(model)} disabled={disabled} icon={<Bolt size={14} />} />
           </Tooltip>
-          <Tooltip title={model.isCentralized ? t('settings.centralized_config_readonly', 'Managed by Administrator') : t('settings.models.manage.remove_model')} mouseLeaveDelay={0}>
-            <Button type="text" onClick={() => onRemove(model)} disabled={disabled || model.isCentralized} icon={<Minus size={14} />} />
-          </Tooltip>
+          {!model.isCentralized && (
+            <Tooltip title={t('settings.models.manage.remove_model')} mouseLeaveDelay={0}>
+              <Button type="text" onClick={() => onRemove(model)} disabled={disabled} icon={<Minus size={14} />} />
+            </Tooltip>
+          )}
         </HStack>
       </HStack>
     </ListItem>

@@ -12,6 +12,7 @@ import { handleSaveData } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
 import { addModel, updateModel, addProvider } from '@renderer/store/llm'
+import { addMCPServer, updateMCPServer } from '@renderer/store/mcp'
 import {
   type ToolPermissionRequestPayload,
   type ToolPermissionResultPayload,
@@ -73,58 +74,95 @@ export function useAppInit() {
         
         if (!config) return
 
-        const centralizedModels = config.centralizedModels || []
+        const centralizedProviders = config.centralizedProviders || []
+        const centralizedMcpServers = config.centralizedMcpServers || []
+        // Fallback for old config structure (single provider)
+        const oldCentralizedModels = config.centralizedModels || []
+        const oldCentralizedProvider = config.centralizedProvider
         
-        if (centralizedModels.length > 0) {
-          logger.info('Loading centralized models:', centralizedModels)
-          
-          // Ensure Centralized Provider exists
+        // Handle new multi-provider structure
+        if (centralizedProviders.length > 0) {
+            logger.info('Loading centralized providers:', centralizedProviders)
+            centralizedProviders.forEach((cProvider: any) => {
+                const providerId = cProvider.id || 'centralized-unknown'
+                
+                // Check if provider exists (by ID)
+                const hasProvider = providers.some(p => p.id === providerId)
+                if (!hasProvider) {
+                    dispatch(addProvider({
+                        id: providerId,
+                        name: cProvider.name || 'Centralized',
+                        type: cProvider.type || 'openai',
+                        apiKey: cProvider.apiKey || '',
+                        apiHost: cProvider.apiHost || '',
+                        models: [],
+                        enabled: true,
+                        isSystem: true,
+                        icon: cProvider.icon,
+                        isCentralized: true // Mark provider as centralized
+                    }))
+                } else {
+                   // Update existing provider (e.g. if config changed)
+                   // But be careful not to overwrite user settings if they share ID (unlikely for centralized IDs)
+                   // dispatch(updateProvider({ ...cProvider, id: providerId, isCentralized: true }))
+                }
+                
+                // Add models for this provider
+                if (cProvider.models && Array.isArray(cProvider.models)) {
+                    cProvider.models.forEach((model: any) => {
+                        const modelWithFlag = { ...model, isCentralized: true, group: cProvider.name || 'Centralized' }
+                        dispatch(updateModel({ providerId: providerId, model: modelWithFlag }))
+                        dispatch(addModel({ providerId: providerId, model: modelWithFlag }))
+                    })
+                }
+            })
+        }
+        
+        // Handle backward compatibility or mix (old structure)
+        if (oldCentralizedModels.length > 0) {
           // Use config from centralized-config.json if available, otherwise default
-          const centralizedProviderConfig = config.centralizedProvider || {}
+          const centralizedProviderConfig = oldCentralizedProvider || {}
           const centralizedProviderId = centralizedProviderConfig.id || 'centralized'
           const centralizedProviderName = centralizedProviderConfig.name || 'Centralized'
           const centralizedProviderIcon = centralizedProviderConfig.icon
-          
-          // We need to check if it exists in the CURRENT store state, but providers from useAppSelector 
-          // might be stale inside this closure if we rely on the captured variable 'providers'.
-          // However, useEffect dependency array is [], so 'providers' will be the initial state.
-          // To be safe, we can just try to add it if we think it's missing, but we can't easily check 'latest' state here without ref.
-          // Alternatively, we rely on the fact that this runs once on mount. 
-          // If 'providers' changes, this effect won't rerun.
-          // Let's assume 'providers' captured is enough, or we can check via a dispatch if we had a thunk.
-          // For now, let's just check the captured 'providers'.
           
           const hasCentralizedProvider = providers.some(p => p.id === centralizedProviderId)
           if (!hasCentralizedProvider) {
              dispatch(addProvider({
                 id: centralizedProviderId,
                 name: centralizedProviderName,
-                type: 'openai', // Default to openai compatible
+                type: 'openai', 
                 apiKey: 'placeholder',
                 apiHost: '',
                 models: [],
                 enabled: true,
                 isSystem: true,
-                icon: centralizedProviderIcon
+                icon: centralizedProviderIcon,
+                isCentralized: true
              }))
           }
 
-          centralizedModels.forEach((model: any) => {
-            // 确保 isCentralized 标记
+          oldCentralizedModels.forEach((model: any) => {
             const modelWithFlag = { ...model, isCentralized: true }
-            
-            // 如果模型属于 Centralized 组，则强制放入 centralized provider
-            // 否则按照 model.provider 放入对应 provider
-            // Check against provider name, id, or default 'Centralized' alias
             if (model.group === 'Centralized' || model.group === centralizedProviderName || model.group === centralizedProviderId) {
                dispatch(updateModel({ providerId: centralizedProviderId, model: modelWithFlag }))
                dispatch(addModel({ providerId: centralizedProviderId, model: modelWithFlag }))
             } else if (model.provider) {
-               // 尝试更新（覆盖），如果不存在则添加
                dispatch(updateModel({ providerId: model.provider, model: modelWithFlag }))
                dispatch(addModel({ providerId: model.provider, model: modelWithFlag }))
             }
           })
+        }
+        
+        // Handle centralized MCP servers
+        if (centralizedMcpServers.length > 0) {
+            logger.info('Loading centralized MCP servers:', centralizedMcpServers)
+            centralizedMcpServers.forEach((mcpServer: any) => {
+                const serverWithFlag = { ...mcpServer, isCentralized: true }
+                // Try to update existing server, then add if not exists
+                dispatch(updateMCPServer(serverWithFlag))
+                dispatch(addMCPServer(serverWithFlag))
+            })
         }
       } catch (error) {
         logger.error('Failed to load centralized config:', error as Error)

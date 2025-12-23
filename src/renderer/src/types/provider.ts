@@ -128,6 +128,7 @@ export type Provider = {
   notes?: string
   extra_headers?: Record<string, string>
   icon?: string
+  isCentralized?: boolean
 }
 
 export const SystemProviderIdSchema = z.enum([
