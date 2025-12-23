@@ -1,7 +1,7 @@
-# Cherry Studio for Houdini - Centralized Config Feature
+# Cherry Studio - Centralized Config Feature
 
 ## Overview
-This feature implements a centralized configuration management system specifically for the Houdini integration. It allows administrators to define read-only models and providers via a JSON file, which are then merged with the user's local configuration.
+This feature implements a centralized configuration management system. It allows administrators to define read-only models and providers via a JSON file, which are then merged with the user's local configuration. This feature is useful for enterprise deployment or managed environments.
 
 ## Key Changes
 
@@ -27,16 +27,12 @@ This feature implements a centralized configuration management system specifical
 - **Model List**: 
   - Logic ensures centralized models appear in their specific group.
 
-### 4. Persistence Filtering (Python Backend)
-- **File**: `cherrystudio/web/electron_injector.py` (Note: This file is in the Python backend, not the web repo, but interacts with web state).
+### 4. Persistence Filtering
 - **Logic**: 
-  - Modified the `saveLocalStorage` function injected into the browser.
-  - Before saving to `localStorage.json`, it parses the Redux state.
-  - Filters out any providers or models marked as `isCentralized` or belonging to the centralized group.
-  - Ensures that read-only config data is **not** duplicated into the user's permanent local storage file.
+  - Ensures that read-only centralized configuration data is **not** duplicated into the user's permanent local storage file, keeping the user config clean.
 
 ## Usage
-1.  **Config File**: Located at `resources/centralized-config.json`.
+1.  **Config File**: Located at `resources/centralized-config.json` (or configured via environment variables).
 2.  **Format**:
     ```json
     {
@@ -50,6 +46,5 @@ This feature implements a centralized configuration management system specifical
     ```
 
 ## Branch Information
-- **Branch Name**: `houdini-feature`
-- **Base**: `v1.7.6` (detached head state previously)
-
+- **Branch Name**: `feat/centralized-config`
+- **Base**: `v1.7.6`
