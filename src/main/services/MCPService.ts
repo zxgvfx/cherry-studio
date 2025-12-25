@@ -142,6 +142,8 @@ function withCache<T extends unknown[], R>(
 class McpService {
   private clients: Map<string, Client> = new Map()
   private pendingClients: Map<string, Promise<Client>> = new Map()
+  private clientLastCheckTimes: Map<string, number> = new Map()
+  private pendingPings: Map<string, Promise<boolean>> = new Map()
   private dxtService = new DxtService()
   private activeToolCalls: Map<string, AbortController> = new Map()
   private serverLogs = new ServerLogBuffer(200)
@@ -203,22 +205,54 @@ class McpService {
     const existingClient = this.clients.get(serverKey)
     if (existingClient) {
       try {
-        // Check if the existing client is still connected
-        const pingResult = await existingClient.ping({
-          // add short timeout to prevent hanging
-          timeout: 1000
-        })
-        getServerLogger(server).debug(`Ping result`, { ok: !!pingResult })
+        // Optimization: Check if we recently verified this client (within 10 seconds)
+        const lastCheck = this.clientLastCheckTimes.get(serverKey) || 0
+        const now = Date.now()
+
+        let pingResult = true
+        if (now - lastCheck >= 10000) {
+          // Check for pending ping to avoid concurrent pings
+          let pingPromise = this.pendingPings.get(serverKey)
+          if (!pingPromise) {
+            pingPromise = (async () => {
+              try {
+                const result = await existingClient.ping({
+                  // add short timeout to prevent hanging
+                  timeout: 1000
+                })
+                if (result) {
+                  this.clientLastCheckTimes.set(serverKey, Date.now())
+                }
+                return !!result
+              } catch {
+                return false
+              }
+            })()
+
+            this.pendingPings.set(serverKey, pingPromise)
+            // Cleanup pending ping map after completion
+            pingPromise.finally(() => {
+              this.pendingPings.delete(serverKey)
+            })
+          }
+          pingResult = (await pingPromise) as boolean
+          getServerLogger(server).debug(`Ping result`, { ok: !!pingResult })
+        } else {
+          getServerLogger(server).debug(`Skipping ping, last check was recent`)
+        }
+
         // If the ping fails, remove the client from the cache
         // and create a new one
         if (!pingResult) {
           this.clients.delete(serverKey)
+          this.clientLastCheckTimes.delete(serverKey)
         } else {
           return existingClient
         }
       } catch (error: any) {
         getServerLogger(server).error(`Error pinging server ${server.name}`, error as Error)
         this.clients.delete(serverKey)
+        this.clientLastCheckTimes.delete(serverKey)
       }
     }
 
@@ -491,6 +525,7 @@ class McpService {
 
           // Store the new client in the cache
           this.clients.set(serverKey, client)
+          this.clientLastCheckTimes.set(serverKey, Date.now())
 
           // Set up notification handlers
           this.setupNotificationHandlers(client, server)
@@ -614,6 +649,7 @@ class McpService {
       await client.close()
       logger.debug(`Closed server`, { serverKey })
       this.clients.delete(serverKey)
+      this.clientLastCheckTimes.delete(serverKey)
       // Clear all caches for this server
       this.clearServerCache(serverKey)
       this.serverLogs.remove(serverKey)
@@ -824,7 +860,18 @@ class McpService {
   }
 
   public async getInstallInfo() {
-    const dir = path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
+    let envBinDir = process.env.CHERRY_STUDIO_BIN_DIR
+    
+    if (!envBinDir) {
+      try {
+        const shellEnv = await getLoginShellEnvironment()
+        envBinDir = shellEnv.CHERRY_STUDIO_BIN_DIR
+      } catch (error) {
+        logger.warn('Failed to get shell environment for CHERRY_STUDIO_BIN_DIR', { error })
+      }
+    }
+
+    const dir = envBinDir || path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
     const uvName = await getBinaryName('uv')
     const bunName = await getBinaryName('bun')
     const uvPath = path.join(dir, uvName)

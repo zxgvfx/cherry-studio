@@ -22,10 +22,35 @@ export class CentralizedConfigManager {
     // 优先使用环境变量 CHERRY_STUDIO_CENTRALIZED_CONFIG_PATH
     if (process.env.CHERRY_STUDIO_CENTRALIZED_CONFIG_PATH) {
       this.configPath = process.env.CHERRY_STUDIO_CENTRALIZED_CONFIG_PATH
+      logger.info(`Using centralized config from environment variable: ${this.configPath}`)
     } else if (process.env.NODE_ENV === 'development') {
-      this.configPath = path.join(app.getAppPath(), 'centralized-config.json')
+      // 开发环境：项目根目录下的 resources/centralized-config.json
+      this.configPath = path.join(app.getAppPath(), '..', 'resources', 'centralized-config.json')
     } else {
-      this.configPath = path.join((process as any).resourcesPath, 'centralized-config.json')
+      // 生产环境：尝试从多个可能的位置查找配置文件
+      // 1. 应用安装目录旁边的 centralized-config.json
+      // 2. resources 目录下的 centralized-config.json
+      const possiblePaths = [
+        path.join(path.dirname(app.getPath('exe')), 'centralized-config.json'),
+        path.join((process as any).resourcesPath, 'centralized-config.json')
+      ]
+      
+      // 默认使用第一个路径
+      this.configPath = possiblePaths[0]
+      
+      // 尝试找到第一个存在的文件
+      for (const p of possiblePaths) {
+        if (fs.pathExistsSync(p)) {
+          this.configPath = p
+          logger.info(`Found centralized config at: ${this.configPath}`)
+          break
+        }
+      }
+      
+      // 如果没有找到存在的文件，记录日志
+      if (!fs.pathExistsSync(this.configPath)) {
+        logger.info(`No centralized config found. Will check: ${this.configPath}`)
+      }
     }
   }
 
@@ -79,20 +104,46 @@ export class CentralizedConfigManager {
   private validateAndNormalizeConfig(config: any): CentralizedConfig {
     const defaultConfig = this.getDefaultConfig()
 
-    // 确保所有模型和MCP服务器都标记为只读
-    const models = (config.models || defaultConfig.models || []).map((m: any) => ({
-      ...m,
-      isCentralized: true
-    }))
+    // 处理 providers 结构（新格式）或 models 数组（旧格式）
+    let models: any[] = []
+    if (config.providers && Array.isArray(config.providers)) {
+      // 从 providers 中提取所有 models
+      config.providers.forEach((provider: any) => {
+        if (provider.models && Array.isArray(provider.models)) {
+          provider.models.forEach((model: any) => {
+            models.push({
+              ...model,
+              provider: provider.id,
+              isCentralized: true
+            })
+          })
+        }
+      })
+    } else if (config.models && Array.isArray(config.models)) {
+      // 旧格式：直接使用 models 数组
+      models = config.models.map((m: any) => ({
+        ...m,
+        isCentralized: true
+      }))
+    }
 
     const mcpServers = (config.mcpServers || defaultConfig.mcpServers || []).map((s: any) => ({
       ...s,
       isCentralized: true
     }))
 
+    // 支持 defaultModels 或 defaultModelSettings 字段名
+    const defaultModelSettings = config.defaultModels || config.defaultModelSettings || {}
+
+    logger.info(`Normalized centralized config: ${models.length} models, ${mcpServers.length} MCP servers`)
+    if (Object.keys(defaultModelSettings).length > 0) {
+      logger.info(`Default model settings:`, defaultModelSettings)
+    }
+
     return {
       models,
       mcpServers,
+      defaultModelSettings,
       version: config.version || '1.0.0',
       lastUpdated: config.lastUpdated || new Date().toISOString()
     }
@@ -105,6 +156,7 @@ export class CentralizedConfigManager {
     return {
       models: [],
       mcpServers: [],
+      defaultModelSettings: {},
       version: '1.0.0',
       lastUpdated: new Date().toISOString()
     }

@@ -8,6 +8,7 @@ import path from 'path'
 
 import { isWin } from '../constant'
 import { ConfigKeys, configManager } from '../services/ConfigManager'
+import getLoginShellEnvironment from './shell-env'
 import { getResourcePath } from '.'
 
 const logger = loggerService.withContext('Utils:Process')
@@ -49,12 +50,24 @@ export async function getBinaryName(name: string): Promise<string> {
 }
 
 export async function getBinaryPath(name?: string): Promise<string> {
+  let envBinDir = process.env.CHERRY_STUDIO_BIN_DIR
+  
+  if (!envBinDir) {
+    try {
+      const shellEnv = await getLoginShellEnvironment()
+      envBinDir = shellEnv.CHERRY_STUDIO_BIN_DIR
+    } catch (error) {
+      logger.warn('Failed to get shell environment for CHERRY_STUDIO_BIN_DIR', { error })
+    }
+  }
+
+  const binariesDir = envBinDir || path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
+
   if (!name) {
-    return path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
+    return binariesDir
   }
 
   const binaryName = await getBinaryName(name)
-  const binariesDir = path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
   const binariesDirExists = fs.existsSync(binariesDir)
   return binariesDirExists ? path.join(binariesDir, binaryName) : binaryName
 }

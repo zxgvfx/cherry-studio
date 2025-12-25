@@ -11,7 +11,7 @@ import { useAppSelector } from '@renderer/store'
 import { handleSaveData } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
-import { addModel, updateModel, addProvider } from '@renderer/store/llm'
+import { addModel, updateModel, addProvider, initialState } from '@renderer/store/llm'
 import { addMCPServer, updateMCPServer } from '@renderer/store/mcp'
 import {
   type ToolPermissionRequestPayload,
@@ -163,6 +163,105 @@ export function useAppInit() {
                 dispatch(updateMCPServer(serverWithFlag))
                 dispatch(addMCPServer(serverWithFlag))
             })
+        }
+
+        // 等待模型加载完成后，处理默认模型配置
+        await delay(0.2) // 给 Redux 更多时间更新
+        
+        // Handle default models from centralized config
+        const defaultModels = config.defaultModels || {}
+        if (Object.keys(defaultModels).length > 0) {
+          logger.info('Found centralized default models config:', defaultModels)
+          
+          // 获取当前 Redux store 中的 llm state
+          const currentState = window.store?.getState?.()?.llm
+          
+          if (!currentState) {
+            logger.warn('Redux store not ready, skipping default models setup')
+            return
+          }
+          
+          // 辅助函数：检查用户是否设置了模型（不是初始值）
+          const isUserSetModel = (currentModel: any, initialModel: any) => {
+            if (!currentModel || !initialModel) return false
+            return currentModel.id !== initialModel.id
+          }
+          
+          // 辅助函数：根据 model ID 在所有 providers 中查找模型
+          const findModelById = (modelId: string, providers: any[]) => {
+            for (const provider of providers) {
+              const model = provider.models?.find((m: any) => m.id === modelId)
+              if (model) return model
+            }
+            return null
+          }
+          
+          // 获取初始默认模型（用于判断用户是否修改过）
+          const initialDefaultModel = initialState.defaultModel
+          const initialQuickModel = initialState.quickModel
+          const initialTranslateModel = initialState.translateModel
+          
+          // 获取所有 providers（包括刚加载的中心化 providers）
+          const allProviders = currentState.providers || []
+          
+          logger.info(`Current providers count: ${allProviders.length}`)
+          logger.info(`Looking for models: default=${defaultModels.defaultModel}, quick=${defaultModels.quickModel}, translate=${defaultModels.translateModel}`)
+          
+          // 如果用户没有设置 defaultModel，使用中心化配置
+          if (defaultModels.defaultModel) {
+            const hasUserSetDefaultModel = isUserSetModel(currentState.defaultModel, initialDefaultModel)
+            logger.info(`User has set defaultModel: ${hasUserSetDefaultModel}, current: ${currentState.defaultModel?.id}, initial: ${initialDefaultModel?.id}`)
+            
+            if (!hasUserSetDefaultModel) {
+              const centralizedDefaultModel = findModelById(defaultModels.defaultModel, allProviders)
+              if (centralizedDefaultModel) {
+                logger.info('✓ Setting centralized default model:', centralizedDefaultModel.name)
+                setDefaultModel(centralizedDefaultModel)
+              } else {
+                logger.warn(`✗ Model not found: ${defaultModels.defaultModel}`)
+              }
+            } else {
+              logger.info('User has custom defaultModel, skipping centralized config')
+            }
+          }
+          
+          // 如果用户没有设置 quickModel，使用中心化配置
+          if (defaultModels.quickModel) {
+            const hasUserSetQuickModel = isUserSetModel(currentState.quickModel, initialQuickModel)
+            logger.info(`User has set quickModel: ${hasUserSetQuickModel}, current: ${currentState.quickModel?.id}, initial: ${initialQuickModel?.id}`)
+            
+            if (!hasUserSetQuickModel) {
+              const centralizedQuickModel = findModelById(defaultModels.quickModel, allProviders)
+              if (centralizedQuickModel) {
+                logger.info('✓ Setting centralized quick model:', centralizedQuickModel.name)
+                setQuickModel(centralizedQuickModel)
+              } else {
+                logger.warn(`✗ Model not found: ${defaultModels.quickModel}`)
+              }
+            } else {
+              logger.info('User has custom quickModel, skipping centralized config')
+            }
+          }
+          
+          // 如果用户没有设置 translateModel，使用中心化配置
+          if (defaultModels.translateModel) {
+            const hasUserSetTranslateModel = isUserSetModel(currentState.translateModel, initialTranslateModel)
+            logger.info(`User has set translateModel: ${hasUserSetTranslateModel}, current: ${currentState.translateModel?.id}, initial: ${initialTranslateModel?.id}`)
+            
+            if (!hasUserSetTranslateModel) {
+              const centralizedTranslateModel = findModelById(defaultModels.translateModel, allProviders)
+              if (centralizedTranslateModel) {
+                logger.info('✓ Setting centralized translate model:', centralizedTranslateModel.name)
+                setTranslateModel(centralizedTranslateModel)
+              } else {
+                logger.warn(`✗ Model not found: ${defaultModels.translateModel}`)
+              }
+            } else {
+              logger.info('User has custom translateModel, skipping centralized config')
+            }
+          }
+        } else {
+          logger.info('No defaultModels in centralized config')
         }
       } catch (error) {
         logger.error('Failed to load centralized config:', error as Error)
