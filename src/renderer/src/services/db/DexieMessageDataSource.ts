@@ -22,9 +22,19 @@ export class DexieMessageDataSource implements MessageDataSource {
     blocks: MessageBlock[]
   }> {
     try {
-      const topic = await db.topics.get(topicId)
+      let topic = await db.topics.get(topicId)
+      
+      // Try to load from file if not found or empty
+      if (!topic || !topic.messages || topic.messages.length === 0) {
+        const loaded = await this.loadTopicFromFile(topicId)
+        if (loaded) {
+          topic = await db.topics.get(topicId)
+        }
+      }
+
       if (!topic) {
         await db.topics.add({ id: topicId, messages: [] })
+        topic = await db.topics.get(topicId)
       }
       const messages = topic?.messages || []
 
@@ -96,6 +106,9 @@ export class DexieMessageDataSource implements MessageDataSource {
       })
 
       store.dispatch(updateTopicUpdatedAt({ topicId }))
+      
+      // Persist to file
+      this.saveTopicToFile(topicId)
     } catch (error) {
       logger.error(`Failed to append message to topic ${topicId}:`, error as Error)
       throw error
@@ -119,6 +132,9 @@ export class DexieMessageDataSource implements MessageDataSource {
       })
 
       store.dispatch(updateTopicUpdatedAt({ topicId }))
+      
+      // Persist to file
+      this.saveTopicToFile(topicId)
     } catch (error) {
       logger.error(`Failed to update message ${messageId} in topic ${topicId}:`, error as Error)
       throw error
@@ -157,6 +173,9 @@ export class DexieMessageDataSource implements MessageDataSource {
       })
 
       store.dispatch(updateTopicUpdatedAt({ topicId }))
+      
+      // Persist to file
+      this.saveTopicToFile(topicId)
     } catch (error) {
       logger.error(`Failed to update message and blocks for ${messageUpdates.id}:`, error as Error)
       throw error
@@ -197,6 +216,9 @@ export class DexieMessageDataSource implements MessageDataSource {
       })
 
       store.dispatch(updateTopicUpdatedAt({ topicId }))
+      
+      // Persist to file
+      this.saveTopicToFile(topicId)
     } catch (error) {
       logger.error(`Failed to delete message ${messageId} from topic ${topicId}:`, error as Error)
       throw error
@@ -243,6 +265,9 @@ export class DexieMessageDataSource implements MessageDataSource {
         await db.topics.update(topicId, { messages: remainingMessages })
       })
       store.dispatch(updateTopicUpdatedAt({ topicId }))
+      
+      // Persist to file
+      this.saveTopicToFile(topicId)
     } catch (error) {
       logger.error(`Failed to delete messages from topic ${topicId}:`, error as Error)
       throw error
@@ -348,6 +373,9 @@ export class DexieMessageDataSource implements MessageDataSource {
       })
 
       store.dispatch(updateTopicUpdatedAt({ topicId }))
+      
+      // Persist to file
+      this.saveTopicToFile(topicId)
     } catch (error) {
       logger.error(`Failed to clear messages for topic ${topicId}:`, error as Error)
       throw error
@@ -415,6 +443,56 @@ export class DexieMessageDataSource implements MessageDataSource {
     } catch (error) {
       logger.error('Failed to update file counts:', error as Error)
       throw error
+    }
+  }
+
+  // ============ Persistence Helpers ============
+  
+  private async saveTopicToFile(topicId: string): Promise<void> {
+    try {
+      const api = (window as any).api?.topic;
+      if (!api?.save) return;
+
+      const topic = await db.topics.get(topicId);
+      if (!topic) return;
+
+      const messageIds = topic.messages.map((m) => m.id);
+      const blocks = await db.message_blocks.where('messageId').anyOf(messageIds).toArray();
+
+      const data = {
+        topic,
+        blocks
+      };
+
+      await api.save(topicId, JSON.stringify(data));
+    } catch (error) {
+      logger.error('Failed to save topic to file:', error as Error);
+    }
+  }
+
+  private async loadTopicFromFile(topicId: string): Promise<boolean> {
+    try {
+      const api = (window as any).api?.topic;
+      if (!api?.load) return false;
+
+      const dataStr = await api.load(topicId);
+      if (!dataStr) return false;
+
+      const data = JSON.parse(dataStr);
+      if (!data.topic) return false;
+
+      // Restore to IndexedDB
+      await db.transaction('rw', db.topics, db.message_blocks, async () => {
+        await db.topics.put(data.topic);
+        if (data.blocks && data.blocks.length > 0) {
+          await db.message_blocks.bulkPut(data.blocks);
+        }
+      });
+      
+      return true;
+    } catch (error) {
+      logger.error('Failed to load topic from file:', error as Error);
+      return false;
     }
   }
 }

@@ -1,12 +1,15 @@
-import { isLinux, isWin } from '@renderer/config/constant'
-import { Tooltip } from 'antd'
-import { Minus, Square, X } from 'lucide-react'
-import type { SVGProps } from 'react'
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+// 所有导入已移除，因为组件不再使用
+// import { isLinux, isWin } from '@renderer/config/constant'
+// import { Tooltip } from 'antd'
+// import { Minus, Square, X } from 'lucide-react'
+// import type { SVGProps } from 'react'
+// import { useEffect, useState } from 'react'
+// import { useTranslation } from 'react-i18next'
 
-import { ControlButton, WindowControlsContainer } from './WindowControls.styled'
+// import { ControlButton, WindowControlsContainer } from './WindowControls.styled'
 
+// 以下代码已禁用，因为页面嵌入到 Qt 窗口中
+/*
 interface WindowRestoreIconProps extends SVGProps<SVGSVGElement> {
   size?: string | number
 }
@@ -45,8 +48,14 @@ export const WindowRestoreIcon = ({ size = '1.1em', ...props }: WindowRestoreIco
 )
 
 const DEFAULT_DELAY = 1
+*/
 
 const WindowControls: React.FC = () => {
+  // 嵌入到 Qt 窗口中时，不显示窗口控制按钮
+  return null
+  
+  // 以下代码已禁用，因为页面嵌入到 Qt 窗口中
+  /*
   const [isMaximized, setIsMaximized] = useState(false)
   const { t } = useTranslation()
 
@@ -107,6 +116,7 @@ const WindowControls: React.FC = () => {
       </Tooltip>
     </WindowControlsContainer>
   )
+  */
 }
 
 export default WindowControls

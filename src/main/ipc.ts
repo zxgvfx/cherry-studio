@@ -326,6 +326,11 @@ export function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
     return await configService.reload()
   })
 
+  ipcMain.handle(IpcChannel.Config_UpdateDefaultModelSettings, async (_, settings: any) => {
+    await userConfigManager.updateDefaultModelSettings(settings)
+    return await configService.reload()
+  })
+
   // theme
   ipcMain.handle(IpcChannel.App_SetTheme, (_, theme: ThemeMode) => {
     themeService.setTheme(theme)

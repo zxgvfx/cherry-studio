@@ -131,8 +131,8 @@ export class ConfigService {
    * 用户配置会覆盖中心化配置中相同ID的项
    */
   private mergeConfigs(
-    centralized: { models: ModelConfig[]; mcpServers: MCPServer[] },
-    user: { models: ModelConfig[]; mcpServers: MCPServer[]; version?: string; lastUpdated?: string }
+    centralized: { models: ModelConfig[]; mcpServers: MCPServer[]; defaultModelSettings?: any },
+    user: { models: ModelConfig[]; mcpServers: MCPServer[]; defaultModelSettings?: any; version?: string; lastUpdated?: string }
   ): MergedConfig {
     // 创建ID映射，用于快速查找
     const userModelIds = new Set(user.models.map((m) => m.id))
@@ -150,9 +150,20 @@ export class ConfigService {
     // 合并MCP服务器：中心化服务器 + 用户服务器
     const mergedMcpServers = [...centralizedMcpServers, ...user.mcpServers]
 
+    // 合并默认模型设置：用户设置优先，如果用户未设置则使用中心化配置
+    const userDefaultSettings = user.defaultModelSettings || {}
+    const centralizedDefaultSettings = centralized.defaultModelSettings || {}
+    
+    const mergedDefaultSettings = {
+      quickModel: userDefaultSettings.quickModel || centralizedDefaultSettings.quickModel,
+      translateModel: userDefaultSettings.translateModel || centralizedDefaultSettings.translateModel,
+      defaultModel: userDefaultSettings.defaultModel || centralizedDefaultSettings.defaultModel
+    }
+
     return {
       models: mergedModels,
       mcpServers: mergedMcpServers,
+      defaultModelSettings: mergedDefaultSettings,
       centralizedModels,
       centralizedMcpServers,
       userModels: user.models,

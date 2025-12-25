@@ -4,19 +4,17 @@ import { Sortable, useDndReorder } from '@renderer/components/dnd'
 import HorizontalScrollContainer from '@renderer/components/HorizontalScrollContainer'
 import { isMac } from '@renderer/config/constant'
 import { DEFAULT_MIN_APPS } from '@renderer/config/minapps'
-import { useTheme } from '@renderer/context/ThemeProvider'
+// import { useTheme } from '@renderer/context/ThemeProvider' // 已移除主题切换功能
 import { useFullscreen } from '@renderer/hooks/useFullscreen'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
-import { getThemeModeLabel, getTitleLabel } from '@renderer/i18n/label'
+import { getTitleLabel } from '@renderer/i18n/label'
 import tabsService from '@renderer/services/TabsService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import type { Tab } from '@renderer/store/tabs'
 import { addTab, removeTab, setActiveTab, setTabs } from '@renderer/store/tabs'
 import type { MinAppType } from '@renderer/types'
-import { ThemeMode } from '@renderer/types'
 import { classNames } from '@renderer/utils'
-import { Tooltip } from 'antd'
 import type { LRUCache } from 'lru-cache'
 import {
   FileSearch,
@@ -25,24 +23,19 @@ import {
   Home,
   Languages,
   LayoutGrid,
-  Monitor,
-  Moon,
   NotepadText,
   Palette,
   Settings,
   Sparkle,
-  Sun,
   Terminal,
   X
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
 import MinAppIcon from '../Icons/MinAppIcon'
 import MinAppTabsPool from '../MinApp/MinAppTabsPool'
-import WindowControls from '../WindowControls'
 
 interface TabsContainerProps {
   children: React.ReactNode
@@ -122,10 +115,10 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   const tabs = useAppSelector((state) => state.tabs.tabs)
   const activeTabId = useAppSelector((state) => state.tabs.activeTabId)
   const isFullscreen = useFullscreen()
-  const { settedTheme, toggleTheme } = useTheme()
+  // const { settedTheme, toggleTheme } = useTheme() // 已移除主题切换功能
   const { hideMinappPopup, minAppsCache } = useMinappPopup()
   const { minapps } = useMinapps()
-  const { t } = useTranslation()
+  // const { t } = useTranslation() // 已移除主题切换相关翻译
 
   const getTabId = (path: string): string => {
     if (path === '/') return 'home'
@@ -272,7 +265,8 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
           </AddTabButton>
         </HorizontalScrollContainer>
         <RightButtonsContainer>
-          <Tooltip
+          {/* 主题切换按钮已移除 - 页面嵌入到 Qt 窗口中 */}
+          {/* <Tooltip
             title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
             mouseEnterDelay={0.8}
             placement="bottom">
@@ -285,12 +279,13 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
                 <Monitor size={16} />
               )}
             </ThemeButton>
-          </Tooltip>
+          </Tooltip> */}
           <SettingsButton onClick={handleSettingsClick} $active={activeTabId === 'settings'}>
             <Settings size={16} />
           </SettingsButton>
         </RightButtonsContainer>
-        <WindowControls />
+        {/* 窗口控制按钮已移除 - 页面嵌入到 Qt 窗口中 */}
+        {/* <WindowControls /> */}
       </TabsBar>
       <TabContent>
         {/* MiniApp WebView 池（Tab 模式保活） */}
@@ -422,20 +417,21 @@ const RightButtonsContainer = styled.div`
   flex-shrink: 0;
 `
 
-const ThemeButton = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-  color: var(--color-text);
-
-  &:hover {
-    background: var(--color-list-item);
-    border-radius: 8px;
-  }
-`
+// 主题按钮样式已移除 - 页面嵌入到 Qt 窗口中
+// const ThemeButton = styled.div`
+//   display: flex;
+//   align-items: center;
+//   justify-content: center;
+//   width: 30px;
+//   height: 30px;
+//   cursor: pointer;
+//   color: var(--color-text);
+//
+//   &:hover {
+//     background: var(--color-list-item);
+//     border-radius: 8px;
+//   }
+// `
 
 const SettingsButton = styled.div<{ $active: boolean }>`
   display: flex;

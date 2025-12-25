@@ -202,6 +202,21 @@ export class UserConfigManager {
   }
 
   /**
+   * 更新默认模型设置
+   */
+  async updateDefaultModelSettings(settings: UserConfig['defaultModelSettings']): Promise<void> {
+    await this.load()
+    if (!this.config) {
+      throw new Error('Config not loaded')
+    }
+    this.config.defaultModelSettings = {
+      ...this.config.defaultModelSettings,
+      ...settings
+    }
+    await this.save()
+  }
+
+  /**
    * 验证和规范化配置
    */
   private validateAndNormalizeConfig(config: any): UserConfig {
@@ -222,9 +237,12 @@ export class UserConfigManager {
         })
       : defaultConfig.mcpServers
 
+    const defaultModelSettings = config.defaultModelSettings || {}
+
     return {
       models,
       mcpServers,
+      defaultModelSettings,
       version: config.version || defaultConfig.version,
       lastUpdated: config.lastUpdated || new Date().toISOString()
     }
@@ -237,6 +255,7 @@ export class UserConfigManager {
     return {
       models: [],
       mcpServers: [],
+      defaultModelSettings: {},
       version: '1.0.0',
       lastUpdated: new Date().toISOString()
     }

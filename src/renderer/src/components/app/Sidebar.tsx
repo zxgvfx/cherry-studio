@@ -9,8 +9,7 @@ import { useMinapps } from '@renderer/hooks/useMinapps'
 import useNavBackgroundColor from '@renderer/hooks/useNavBackgroundColor'
 import { modelGenerating, useRuntime } from '@renderer/hooks/useRuntime'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { getSidebarIconLabel, getThemeModeLabel } from '@renderer/i18n/label'
-import { ThemeMode } from '@renderer/types'
+import { getSidebarIconLabel } from '@renderer/i18n/label'
 import { isEmoji } from '@renderer/utils'
 import { Avatar, Tooltip } from 'antd'
 import {
@@ -20,13 +19,10 @@ import {
   Languages,
   LayoutGrid,
   MessageSquare,
-  Monitor,
-  Moon,
   NotepadText,
   Palette,
   Settings,
-  Sparkle,
-  Sun
+  Sparkle
 } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -45,7 +41,8 @@ const Sidebar: FC = () => {
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
-  const { theme, settedTheme, toggleTheme } = useTheme()
+  const { theme } = useTheme()
+  // const { settedTheme, toggleTheme } = useTheme() // 已移除主题切换功能
   const avatar = useAvatar()
   const { t } = useTranslation()
 
@@ -89,7 +86,8 @@ const Sidebar: FC = () => {
         )}
       </MainMenusContainer>
       <Menus>
-        <Tooltip title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)} placement="right">
+        {/* 主题切换按钮已移除 - 页面嵌入到 Qt 窗口中 */}
+        {/* <Tooltip title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)} placement="right">
           <Icon theme={theme} onClick={toggleTheme}>
             {settedTheme === ThemeMode.dark ? (
               <Moon size={20} className="icon" />
@@ -99,7 +97,7 @@ const Sidebar: FC = () => {
               <Monitor size={20} className="icon" />
             )}
           </Icon>
-        </Tooltip>
+        </Tooltip> */}
         <Tooltip title={t('settings.title')} mouseEnterDelay={0.8} placement="right">
           <StyledLink
             onClick={async () => {

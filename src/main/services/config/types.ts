@@ -21,12 +21,22 @@ export interface ModelConfig {
 }
 
 /**
+ * 默认模型配置
+ */
+export interface DefaultModelSettings {
+  quickModel?: string // 快速模型ID
+  translateModel?: string // 翻译模型ID
+  defaultModel?: string // 默认助手模型ID
+}
+
+/**
  * 中心化配置
  * 只读，不可修改
  */
 export interface CentralizedConfig {
   models: ModelConfig[]
   mcpServers: MCPServer[]
+  defaultModelSettings?: DefaultModelSettings
   version: string
   lastUpdated: string
 }
@@ -38,6 +48,7 @@ export interface CentralizedConfig {
 export interface UserConfig {
   models: ModelConfig[]
   mcpServers: MCPServer[]
+  defaultModelSettings?: DefaultModelSettings
   version: string
   lastUpdated: string
 }
@@ -49,6 +60,7 @@ export interface UserConfig {
 export interface MergedConfig {
   models: ModelConfig[]
   mcpServers: MCPServer[]
+  defaultModelSettings: DefaultModelSettings
   centralizedModels: ModelConfig[] // 中心化模型（只读）
   centralizedMcpServers: MCPServer[] // 中心化MCP服务器（只读）
   userModels: ModelConfig[] // 用户模型（可修改）

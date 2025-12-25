@@ -70,6 +70,7 @@ export enum IpcChannel {
   Config_Reload = 'config:reload',
   Config_UpdateUserModels = 'config:update-user-models',
   Config_UpdateUserMcpServers = 'config:update-user-mcp-servers',
+  Config_UpdateDefaultModelSettings = 'config:update-default-model-settings',
 
   MiniWindow_Show = 'miniwindow:show',
   MiniWindow_Hide = 'miniwindow:hide',
