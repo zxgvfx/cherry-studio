@@ -58,6 +58,7 @@ const WindowControls: React.FC = () => {
   /*
   const [isMaximized, setIsMaximized] = useState(false)
   const { t } = useTranslation()
+  const { useSystemTitleBar } = useSettings()
 
   useEffect(() => {
     // Check initial maximized state
@@ -73,6 +74,11 @@ const WindowControls: React.FC = () => {
 
   // Only show on Windows and Linux
   if (!isWin && !isLinux) {
+    return null
+  }
+
+  // Hide on Linux if using system title bar
+  if (isLinux && useSystemTitleBar) {
     return null
   }
 
