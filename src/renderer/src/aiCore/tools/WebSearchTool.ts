@@ -77,35 +77,61 @@ You can use this tool as-is to search with the prepared queries, or provide addi
         summary = `Found ${results.results.length} relevant sources. Use [number] format to cite specific information.`
       }
 
-      const citationData = results.results.map((result, index) => ({
-        number: index + 1,
-        title: result.title,
-        content: result.content,
-        url: result.url
-      }))
+      const imageUrlPattern = /!\[.*?\]\((https?:\/\/[^)]+)\)/g
+      const allImageUrls: string[] = []
+      const citationData = results.results.map((result, index) => {
+        const imgs: string[] = []
+        let match: RegExpExecArray | null
+        imageUrlPattern.lastIndex = 0
+        while ((match = imageUrlPattern.exec(result.content || '')) !== null) {
+          imgs.push(match[1])
+        }
+        allImageUrls.push(...imgs)
+        return {
+          number: index + 1,
+          title: result.title,
+          content: result.content,
+          url: result.url,
+          ...(imgs.length > 0 ? { images: imgs } : {})
+        }
+      })
 
-      // 🔑 返回引用友好的格式，复用 REFERENCE_PROMPT 逻辑
+      const hasImages = allImageUrls.length > 0
+
       const referenceContent = `\`\`\`json\n${JSON.stringify(citationData, null, 2)}\n\`\`\``
       const fullInstructions = REFERENCE_PROMPT.replace(
         '{question}',
         "Based on the search results, please answer the user's question with proper citations."
       ).replace('{references}', referenceContent)
+
+      const value: Array<{ type: 'text'; text: string }> = [
+        {
+          type: 'text',
+          text: 'This tool searches for relevant information and formats results for easy citation. The returned sources should be cited using [1], [2], etc. format in your response.'
+        },
+        {
+          type: 'text',
+          text: summary
+        },
+        {
+          type: 'text',
+          text: fullInstructions
+        }
+      ]
+
+      if (hasImages) {
+        value.push({
+          type: 'text',
+          text:
+            'IMPORTANT: The search results contain real image URLs in the "images" field. ' +
+            'When the user asks for reference images/photos/pictures, you MUST display them using markdown image syntax: ![description](url). ' +
+            'Show the most relevant images directly in your response. Do NOT just provide text links — render images inline.'
+        })
+      }
+
       return {
         type: 'content',
-        value: [
-          {
-            type: 'text',
-            text: 'This tool searches for relevant information and formats results for easy citation. The returned sources should be cited using [1], [2], etc. format in your response.'
-          },
-          {
-            type: 'text',
-            text: summary
-          },
-          {
-            type: 'text',
-            text: fullInstructions
-          }
-        ]
+        value
       }
     }
   })
