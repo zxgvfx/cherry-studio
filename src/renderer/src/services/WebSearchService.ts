@@ -181,7 +181,10 @@ class WebSearchService {
       const response = await this.search(provider, 'test query')
       logger.debug('Search response:', response)
       // 优化的判断条件：检查结果是否有效且没有错误
-      return { valid: response.results !== undefined, error: undefined }
+      // 允许空结果，因为空结果也表示搜索功能正常运行，只是没有找到匹配项
+      // return { valid: response.results !== undefined, error: undefined }
+      // 现在放宽条件，只要没有抛出错误，都视为有效
+      return { valid: true, error: undefined }
     } catch (error) {
       return { valid: false, error }
     }
@@ -393,6 +396,79 @@ class WebSearchService {
   }
 
   /**
+   * 从内容中分离 "## Extracted Images" 等资源段落，
+   * 返回 [正文, 资源段落]。截断时只截正文，资源段落原样保留。
+   */
+  private splitAssetsSections(content: string): [string, string] {
+    const assetHeaders = ['## Extracted Images', '## Extracted Page Links']
+    let splitIdx = content.length
+    for (const header of assetHeaders) {
+      const idx = content.indexOf(header)
+      if (idx !== -1 && idx < splitIdx) {
+        splitIdx = idx
+      }
+    }
+    if (splitIdx === content.length) return [content, '']
+    return [content.slice(0, splitIdx).trimEnd(), content.slice(splitIdx)]
+  }
+
+  /**
+   * 限制资源段落中的图片数量，避免过多图片占用 token。
+   */
+  private limitImagesInAssets(assets: string, maxImages: number): string {
+    if (!assets) return assets
+    const lines = assets.split('\n')
+    let imageCount = 0
+    const kept: string[] = []
+    for (const line of lines) {
+      if (/^!\[.*\]\(.*\)$/.test(line.trim())) {
+        imageCount++
+        if (imageCount > maxImages) continue
+      }
+      kept.push(line)
+    }
+    return kept.join('\n')
+  }
+
+  /**
+   * Qt 环境下的搜索结果截断。
+   * 将所有结果的总字符数控制在预算内（约 8000 token ≈ 24000 字符），
+   * 每条结果平均分配配额。截断时保留图片资源段落，确保模型能引用图片。
+   */
+  private truncateForQt(results: WebSearchProviderResult[]): WebSearchProviderResult[] {
+    if (results.length === 0) return results
+
+    const totalCharBudget = 24000
+    const maxImagesPerResult = 5
+    const totalChars = results.reduce((sum, r) => sum + (r.content?.length || 0), 0)
+    if (totalChars <= totalCharBudget) return results
+
+    const parsed = results.map((r) => {
+      const [text, assets] = this.splitAssetsSections(r.content || '')
+      const limitedAssets = this.limitImagesInAssets(assets, maxImagesPerResult)
+      return { result: r, text, assets: limitedAssets }
+    })
+
+    const totalAssetsChars = parsed.reduce((sum, p) => sum + p.assets.length, 0)
+    const textBudget = Math.max(2000, totalCharBudget - totalAssetsChars)
+    const perResultTextLimit = Math.max(300, Math.floor(textBudget / results.length))
+
+    logger.info(
+      `[WebSearchService] Qt truncation: ${totalChars} chars → ~${totalCharBudget} chars ` +
+        `(text ${perResultTextLimit}/result, assets preserved)`
+    )
+
+    return parsed.map(({ result, text, assets }) => {
+      const truncatedText =
+        text.length > perResultTextLimit ? text.slice(0, perResultTextLimit) + '...' : text
+      return {
+        ...result,
+        content: assets ? `${truncatedText}\n\n${assets}` : truncatedText
+      }
+    })
+  }
+
+  /**
    * 处理网络搜索请求的核心方法，处理过程中会设置运行时状态供 UI 使用。
    *
    * 该方法执行以下步骤：
@@ -513,8 +589,13 @@ class WebSearchService {
 
     const { compressionConfig } = this.getWebSearchState()
 
-    // RAG压缩处理
-    if (compressionConfig?.method === 'rag' && requestId) {
+    // 检测 Qt 环境 - 在 Qt 环境中跳过 RAG 压缩以避免卡顿
+    const isQtEnvironment =
+      typeof window !== 'undefined' &&
+      (!!(window as any).qt?.api || !!(window as any).qt?.network || !(window as any).electron)
+
+    // RAG压缩处理 - 在 Qt 环境中跳过，因为嵌入服务可能不可用
+    if (compressionConfig?.method === 'rag' && requestId && !isQtEnvironment) {
       await this.setWebSearchStatus(requestId, { phase: 'rag' }, 500)
 
       const originalCount = finalResults.length
@@ -541,10 +622,20 @@ class WebSearchService {
         await this.setWebSearchStatus(requestId, { phase: 'rag_failed' }, 1000)
       }
     }
+    // 在 Qt 环境中使用简单截断替代 RAG
+    else if (isQtEnvironment && compressionConfig?.method === 'rag') {
+      logger.info('[WebSearchService] Qt environment detected, skipping RAG compression, using simple truncation instead')
+      finalResults = this.truncateForQt(finalResults)
+    }
     // 截断压缩处理
     else if (compressionConfig?.method === 'cutoff' && compressionConfig.cutoffLimit) {
       await this.setWebSearchStatus(requestId, { phase: 'cutoff' }, 500)
       finalResults = await this.compressWithCutoff(finalResults, compressionConfig)
+    }
+
+    // Qt 环境兜底：无论压缩配置如何，确保总内容不会过大
+    if (isQtEnvironment) {
+      finalResults = this.truncateForQt(finalResults)
     }
 
     // 重置状态
