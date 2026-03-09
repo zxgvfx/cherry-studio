@@ -1,5 +1,6 @@
 import Favicon from '@renderer/components/Icons/FallbackFavicon'
 import { useMetaDataParser } from '@renderer/hooks/useMetaDataParser'
+import { useProxiedImage } from '@renderer/hooks/useProxiedImage'
 import { Skeleton, Typography } from 'antd'
 import { useCallback, useEffect, useMemo } from 'react'
 import styled from 'styled-components'
@@ -16,6 +17,7 @@ export const OGCard = ({ link, show }: Props) => {
   const openGraph = ['og:title', 'og:description', 'og:image', 'og:imageAlt'] as const
   const { metadata, isLoading, parseMetadata } = useMetaDataParser(link, openGraph)
 
+  const { src: proxiedOgImage, loading: ogImageLoading } = useProxiedImage(metadata['og:image'] || '')
   const hasImage = !!metadata['og:image']
 
   const hostname = useMemo(() => {
@@ -49,7 +51,11 @@ export const OGCard = ({ link, show }: Props) => {
     <PreviewContainer hasImage={hasImage}>
       {hasImage && (
         <PreviewImageContainer>
-          <PreviewImage src={metadata['og:image']} alt={metadata['og:imageAlt'] || link} />
+          {ogImageLoading ? (
+            <Skeleton.Image active style={{ width: '100%', height: IMAGE_HEIGHT }} />
+          ) : (
+            <PreviewImage src={proxiedOgImage} alt={metadata['og:imageAlt'] || link} />
+          )}
         </PreviewImageContainer>
       )}
       {!hasImage && (

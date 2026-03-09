@@ -52,7 +52,15 @@ const FileList: React.FC<FileItemProps> = ({ id, list, files }) => {
                     }}
                   />
                   <ImageInfo>
-                    <div>{formatFileSize(file.size)}</div>
+                    <div>
+                      {formatFileSize(
+                        typeof file.size === 'object' && file.size !== null
+                          ? (file.size as any).size || 0
+                          : typeof file.size === 'number'
+                            ? file.size
+                            : 0
+                      )}
+                    </div>
                   </ImageInfo>
                   <DeleteButton
                     title={t('files.delete.title')}
@@ -93,17 +101,23 @@ const FileList: React.FC<FileItemProps> = ({ id, list, files }) => {
         height: '75px',
         paddingTop: '12px'
       }}>
-      {(item) => (
-        <FileItem
-          key={item.key}
-          fileInfo={{
-            name: item.file,
-            ext: item.ext,
-            extra: `${item.created_at} · ${item.count}${t('files.count')} · ${item.size}`,
-            actions: item.actions
-          }}
-        />
-      )}
+      {(item) => {
+        // 确保 count 和 size 都是可以安全渲染的
+        const safeCount = typeof item.count === 'number' ? item.count : 0
+        const safeSize = typeof item.size === 'string' ? item.size : '0 B'
+        
+        return (
+          <FileItem
+            key={item.key}
+            fileInfo={{
+              name: item.file,
+              ext: item.ext,
+              extra: `${item.created_at} · ${safeCount}${t('files.count')} · ${safeSize}`,
+              actions: item.actions
+            }}
+          />
+        )
+      }}
     </DynamicVirtualList>
   )
 }

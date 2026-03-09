@@ -50,6 +50,184 @@ const logger = loggerService.withContext('parameterBuilder')
 
 type ProviderDefinedTool = Extract<Tool<any, any>, { type: 'provider' }>
 
+const SEARCH_IMAGE_INTENT_KEYWORDS = [
+  '搜',
+  '搜索',
+  '查找',
+  '查询',
+  '找',
+  '返回',
+  '给我',
+  '提供',
+  '展示',
+  '看看',
+  '发我',
+  'search',
+  'find',
+  'look up',
+  'show',
+  'return',
+  'provide'
+]
+const REAL_IMAGE_TARGET_KEYWORDS = [
+  '图',
+  '图片',
+  '照片',
+  '相片',
+  '原图',
+  '原照片',
+  '真实照片',
+  '真实图片',
+  '历史照片',
+  'photo',
+  'image',
+  'picture',
+  'original photo',
+  'original image',
+  'original picture',
+  'real photo',
+  'real image',
+  'real picture',
+  'authentic photo',
+  'authentic image',
+  'authentic picture'
+]
+const GENERATION_INTENT_KEYWORDS = [
+  '生成',
+  '画',
+  '绘',
+  '绘制',
+  '创作',
+  '制作',
+  '做一张',
+  'design',
+  'generate',
+  'draw',
+  'paint',
+  'illustrate',
+  'create'
+]
+const DISABLE_GENERATION_HINT_KEYWORDS = [
+  '不要生成',
+  '别生成',
+  '不要画',
+  '别画',
+  '不要绘制',
+  'not generate',
+  "don't generate",
+  'do not generate',
+  'no generation',
+  '返回原图',
+  '返回真实照片',
+  '只要原图',
+  '只要真实照片'
+]
+const REAL_IMAGE_SEARCH_OVERRIDE_INSTRUCTION = `请不要生成、绘制、编辑或合成新的图片。请优先返回网络搜索结果中真实存在的照片/原图，并给出对应来源链接。如果有多张结果，优先返回最可信、最接近原始来源的图片。
+
+Do not generate, draw, edit, or synthesize a new image. Return real existing photos/images from web search results only, preferably the original image together with the source link.`
+type StreamMessages = NonNullable<StreamTextParams['messages']>
+
+function containsAnyKeyword(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => text.includes(keyword))
+}
+
+function getLatestUserText(messages: StreamMessages): string {
+  const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user')
+  if (!latestUserMessage) {
+    return ''
+  }
+
+  const content = latestUserMessage.content
+  if (typeof content === 'string') {
+    return content
+  }
+
+  if (!Array.isArray(content)) {
+    return ''
+  }
+
+  return content
+    .map((part: any) => {
+      if (!part || typeof part !== 'object') {
+        return ''
+      }
+      if (typeof part.text === 'string') {
+        return part.text
+      }
+      if (part.type === 'text' && typeof part.text === 'string') {
+        return part.text
+      }
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+function shouldTemporarilyDisableImageGeneration(
+  model: Model,
+  messages: StreamMessages,
+  assistant: Assistant
+): boolean {
+  if (!isGenerateImageModel(model) || !assistant.enableGenerateImage) {
+    return false
+  }
+
+  const latestUserText = getLatestUserText(messages).trim()
+  if (!latestUserText) {
+    return false
+  }
+
+  const normalizedText = latestUserText.toLowerCase()
+  const hasImageTarget = containsAnyKeyword(normalizedText, REAL_IMAGE_TARGET_KEYWORDS)
+  const hasSearchIntent = containsAnyKeyword(normalizedText, SEARCH_IMAGE_INTENT_KEYWORDS)
+  const hasDisableHint = containsAnyKeyword(normalizedText, DISABLE_GENERATION_HINT_KEYWORDS)
+  const hasGenerationIntent = containsAnyKeyword(normalizedText, GENERATION_INTENT_KEYWORDS) && !hasDisableHint
+
+  return hasImageTarget && (hasDisableHint || (hasSearchIntent && !hasGenerationIntent))
+}
+
+function enhanceMessagesForRealImageSearch(messages: StreamMessages): StreamMessages {
+  const nextMessages: StreamMessages = [...messages]
+
+  for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
+    const message = nextMessages[index]
+    if (message.role !== 'user') {
+      continue
+    }
+
+    if (typeof message.content === 'string') {
+      if (message.content.includes(REAL_IMAGE_SEARCH_OVERRIDE_INSTRUCTION)) {
+        return nextMessages
+      }
+      nextMessages[index] = {
+        ...message,
+        content: `${message.content}\n\n${REAL_IMAGE_SEARCH_OVERRIDE_INSTRUCTION}`
+      }
+      return nextMessages
+    }
+
+    if (Array.isArray(message.content)) {
+      const alreadyEnhanced = message.content.some(
+        (part: any) =>
+          part?.type === 'text' &&
+          typeof part.text === 'string' &&
+          part.text.includes(REAL_IMAGE_SEARCH_OVERRIDE_INSTRUCTION)
+      )
+      if (alreadyEnhanced) {
+        return nextMessages
+      }
+
+      nextMessages[index] = {
+        ...message,
+        content: [...message.content, { type: 'text', text: REAL_IMAGE_SEARCH_OVERRIDE_INSTRUCTION }] as any
+      }
+      return nextMessages
+    }
+  }
+
+  return nextMessages
+}
+
 function mapVertexAIGatewayModelToProviderId(model: Model): BaseProviderId | undefined {
   if (isAnthropicModel(model)) {
     return 'anthropic'
@@ -98,6 +276,7 @@ export async function buildStreamTextParams(
   webSearchPluginConfig?: WebSearchPluginConfig
 }> {
   const { mcpTools } = options
+  const baseSdkMessages: StreamMessages = sdkMessages || []
 
   const model = assistant.model || getDefaultModel()
   const aiSdkProviderId = getAiSdkProviderId(provider)
@@ -127,7 +306,21 @@ export async function buildStreamTextParams(
     (isGeminiModel(model) || isAnthropicModel(model))
   )
 
-  const enableGenerateImage = !!(isGenerateImageModel(model) && assistant.enableGenerateImage)
+  const disableGenerateImageForSearchIntent = shouldTemporarilyDisableImageGeneration(model, baseSdkMessages, assistant)
+  const effectiveSdkMessages = disableGenerateImageForSearchIntent
+    ? enhanceMessagesForRealImageSearch(baseSdkMessages)
+    : baseSdkMessages
+  const enableGenerateImage = !!(
+    isGenerateImageModel(model) &&
+    assistant.enableGenerateImage &&
+    !disableGenerateImageForSearchIntent
+  )
+
+  if (disableGenerateImageForSearchIntent) {
+    logger.info('[buildStreamTextParams] Temporarily disabled image generation for image-search intent', {
+      modelId: model.id
+    })
+  }
 
   let tools = setupToolsConfig(mcpTools, options.allowedTools)
 
@@ -221,7 +414,7 @@ export async function buildStreamTextParams(
   // are extracted from custom parameters and passed directly to streamText()
   // instead of being placed in providerOptions
   const params: StreamTextParams = {
-    messages: sdkMessages,
+    messages: effectiveSdkMessages,
     maxOutputTokens: getMaxTokens(assistant, model),
     temperature: getTemperature(assistant, model),
     topP: getTopP(assistant, model),
@@ -240,7 +433,7 @@ export async function buildStreamTextParams(
 
   let systemPrompt = assistant.prompt ? await replacePromptVariables(assistant.prompt, model.name) : ''
 
-  if (getEffectiveMcpMode(assistant) === 'auto') {
+  if (getEffectiveMcpMode(assistant) === 'auto' && (mcpTools?.length ?? 0) > 0) {
     const autoModePrompt = getHubModeSystemPrompt()
     if (autoModePrompt) {
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${autoModePrompt}` : autoModePrompt

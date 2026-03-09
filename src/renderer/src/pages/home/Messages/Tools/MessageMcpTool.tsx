@@ -9,12 +9,12 @@ import type { ToolMessageBlock } from '@renderer/types/newMessage'
 import { isToolAutoApproved } from '@renderer/utils/mcp-tools'
 import type { MCPProgressEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
-import { Collapse, ConfigProvider, Flex, Progress, Tooltip } from 'antd'
+import { Collapse, type CollapseProps, ConfigProvider, Flex, Progress, Tooltip } from 'antd'
 import { message } from 'antd'
 import { Check, ChevronRight, ShieldCheck } from 'lucide-react'
-import { parse as parsePartialJson } from 'partial-json'
+// import { parse as parsePartialJson } from 'partial-json'
 import type { FC } from 'react'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -269,6 +269,15 @@ const extractPreviewContent = (response: unknown): string => {
   return JSON.stringify(response, null, 2)
 }
 
+const escapeHtml = (value: string): string => {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // Unified tool response content component
 const ToolResponseContent: FC<{
   isExpanded: boolean
@@ -278,6 +287,7 @@ const ToolResponseContent: FC<{
 }> = ({ isExpanded, args, isStreaming, response }) => {
   const { highlightCode } = useCodeStyle()
   const [highlightedResponse, setHighlightedResponse] = useState<string>('')
+  const [isLinkified, setIsLinkified] = useState(false)
   const [isTruncated, setIsTruncated] = useState(false)
   const [originalLength, setOriginalLength] = useState(0)
 
@@ -286,7 +296,8 @@ const ToolResponseContent: FC<{
     if (!args) return null
     if (typeof args === 'string') {
       try {
-        return parsePartialJson(args)
+        // return parsePartialJson(args)
+        return JSON.parse(args)
       } catch {
         return null
       }
@@ -307,13 +318,31 @@ const ToolResponseContent: FC<{
       } = truncateOutput(previewContent)
       setIsTruncated(wasTruncated)
       setOriginalLength(origLen)
-      const result = await highlightCode(truncatedContent, 'json')
-      setHighlightedResponse(result)
+      const urlRegex = /(https?:\/\/[^\s)'"<>]+)/g
+      if (urlRegex.test(truncatedContent)) {
+        const escaped = escapeHtml(truncatedContent)
+        const linkified = escaped.replace(urlRegex, (url) => `<a href="${url}">${url}</a>`)
+        setIsLinkified(true)
+        setHighlightedResponse(`<pre>${linkified}</pre>`)
+      } else {
+        const result = await highlightCode(truncatedContent, 'json')
+        setIsLinkified(false)
+        setHighlightedResponse(result)
+      }
     }
 
     const timer = setTimeout(highlight, 0)
     return () => clearTimeout(timer)
   }, [isExpanded, response, highlightCode])
+
+  const handleLinkClick = useCallback((event: React.MouseEvent) => {
+    const target = event.target as HTMLElement | null
+    const anchor = target?.closest?.('a') as HTMLAnchorElement | null
+    if (anchor?.href) {
+      event.preventDefault()
+      window.api.openWebsite(anchor.href)
+    }
+  }, [])
 
   if (!isExpanded) return null
 
@@ -331,7 +360,6 @@ const ToolResponseContent: FC<{
     if (entries.length === 0) return null
     return (
       <ArgsSection>
-        <ArgsSectionTitle>Arguments</ArgsSectionTitle>
         <ArgsTable>
           <tbody>
             {entries.map(([key, value]) => (
@@ -356,20 +384,44 @@ const ToolResponseContent: FC<{
     )
   }
 
-  return (
-    <div>
-      {/* Arguments Table */}
-      {renderArgsTable()}
+  const collapseItems: CollapseProps['items'] = []
 
-      {/* Response */}
-      {response !== undefined && response !== null && highlightedResponse && (
-        <ResponseSection>
-          <ArgsSectionTitle>Response</ArgsSectionTitle>
-          <MarkdownContainer className="markdown" dangerouslySetInnerHTML={{ __html: highlightedResponse }} />
+  if (entries.length > 0) {
+    collapseItems.push({
+      key: 'args',
+      label: <ArgsSectionTitle style={{ marginBottom: 0 }}>Arguments</ArgsSectionTitle>,
+      children: renderArgsTable()
+    })
+  }
+
+  if (response !== undefined && response !== null && highlightedResponse) {
+    collapseItems.push({
+      key: 'response',
+      label: <ArgsSectionTitle style={{ marginBottom: 0 }}>Response</ArgsSectionTitle>,
+      children: (
+        <ResponseSection style={{ borderTop: 'none' }}>
+          <MarkdownContainer
+            className={`markdown ${isLinkified ? 'linkified' : ''}`}
+            onClick={handleLinkClick}
+            dangerouslySetInnerHTML={{ __html: highlightedResponse }}
+          />
           {isTruncated && <TruncatedIndicator originalLength={originalLength} />}
         </ResponseSection>
+      )
+    })
+  }
+
+  return (
+    <InnerCollapse
+      ghost
+      size="small"
+      defaultActiveKey={['args', 'response']}
+      items={collapseItems}
+      expandIconPosition="end"
+      expandIcon={({ isActive }) => (
+        <ExpandIcon $isActive={isActive} size={16} color="var(--color-text-3)" strokeWidth={1.5} />
       )}
-    </div>
+    />
   )
 }
 
@@ -448,6 +500,12 @@ const MarkdownContainer = styled.div`
     span {
       white-space: pre-wrap;
     }
+  }
+
+  &.linkified a {
+    color: var(--color-link);
+    text-decoration: underline;
+    cursor: pointer;
   }
 `
 
@@ -530,6 +588,25 @@ const ToolResponseContainer = styled.div`
   max-height: 300px;
   border-top: none;
   position: relative;
+`
+
+const InnerCollapse = styled(Collapse)`
+  background: transparent;
+  .ant-collapse-item {
+    border-bottom: 1px solid var(--color-border);
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+  .ant-collapse-header {
+    padding: 6px 12px !important;
+    min-height: 32px;
+    align-items: center !important;
+    background: var(--color-background-soft) !important;
+  }
+  .ant-collapse-content-box {
+    padding: 0 !important;
+  }
 `
 
 export default memo(MessageMcpTool)

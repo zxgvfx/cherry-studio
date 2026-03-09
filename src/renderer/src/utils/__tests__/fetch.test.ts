@@ -23,7 +23,11 @@ import { fetchRedirectUrl, fetchWebContent, fetchWebContents } from '../fetch'
 
 // 设置基础 mocks
 global.DOMParser = vi.fn().mockImplementation(() => ({
-  parseFromString: vi.fn(() => ({}))
+  parseFromString: vi.fn((html: string) => {
+    const doc = document.implementation.createHTMLDocument('test')
+    doc.documentElement.innerHTML = html
+    return doc
+  })
 })) as any
 
 global.window = {
@@ -68,6 +72,32 @@ describe('fetch', () => {
         content: '# Test content'
       })
       expect(global.fetch).toHaveBeenCalledWith('https://example.com', expect.any(Object))
+    })
+
+    it('should extract page links and image urls when requested', async () => {
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        createMockResponse({
+          text: vi.fn().mockResolvedValue(`
+            <html>
+              <body>
+                <a href="/docs">Docs</a>
+                <a href="https://external.example/page">External</a>
+                <img src="/images/test.png" />
+                <img data-src="https://cdn.example/image.jpg" />
+              </body>
+            </html>
+          `)
+        })
+      )
+
+      const result = await fetchWebContent('https://example.com/root', 'markdown', false, {}, true)
+
+      expect(result.links).toEqual(['https://example.com/docs', 'https://external.example/page'])
+      expect(result.images).toEqual(['https://example.com/images/test.png', 'https://cdn.example/image.jpg'])
+      expect(result.content).toContain('## Extracted Page Links')
+      expect(result.content).toContain('https://example.com/docs')
+      expect(result.content).toContain('## Extracted Image URLs')
+      expect(result.content).toContain('https://cdn.example/image.jpg')
     })
 
     it('should use browser mode when specified', async () => {

@@ -14,7 +14,7 @@ import { getEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import { normalizeGatewayModels, normalizeSdkModels } from '@renderer/services/models/ModelAdapter'
 import { addSpan, endSpan } from '@renderer/services/SpanManagerService'
 import type { StartSpanParams } from '@renderer/trace/types/ModelSpanEntity'
-import { type Assistant, type GenerateImageParams, type Model, type Provider, SystemProviderIds } from '@renderer/types'
+import { type Assistant, type GenerateImageParams, type GenerateImageResponse, type Model, type Provider, SystemProviderIds } from '@renderer/types'
 import type { StreamTextParams } from '@renderer/types/aiCoreTypes'
 import { SUPPORTED_IMAGE_ENDPOINT_LIST } from '@renderer/utils'
 import { buildClaudeCodeSystemModelMessage } from '@shared/anthropic'
@@ -42,6 +42,7 @@ export type ModernAiProviderConfig = AiSdkMiddlewareConfig & {
   // topicId for tracing
   topicId?: string
   callType: string
+  imageActionHandler?: (prompt: string) => Promise<GenerateImageResponse | null>
 }
 
 export default class ModernAiProvider {
@@ -88,17 +89,21 @@ export default class ModernAiProvider {
   constructor(provider: Provider)
   constructor(modelOrProvider: Model | Provider, provider?: Provider)
   constructor(modelOrProvider: Model | Provider, provider?: Provider) {
-    if (this.isModel(modelOrProvider)) {
+    if (provider || this.isModel(modelOrProvider)) {
       // 传入的是 Model
-      this.model = modelOrProvider
+      // When provider is present, modelOrProvider is treated as Model
+      // When isModel returns true, modelOrProvider is treated as Model
+      this.model = modelOrProvider as Model
       this.actualProvider = provider
-        ? adaptProvider({ provider, model: modelOrProvider })
-        : getActualProvider(modelOrProvider)
+        ? adaptProvider({ provider, model: this.model })
+        : getActualProvider(this.model)
       // 只保存配置，不预先创建executor
-      this.config = providerToAiSdkConfig(this.actualProvider, modelOrProvider)
+      this.config = providerToAiSdkConfig(this.actualProvider, this.model)
     } else {
       // 传入的是 Provider
-      this.actualProvider = adaptProvider({ provider: modelOrProvider })
+      // isModel returned false, so we treat it as Provider
+      const p = modelOrProvider as Provider
+      this.actualProvider = adaptProvider({ provider: p })
       // model为可选，某些操作（如fetchModels）不需要model
     }
 
@@ -109,7 +114,13 @@ export default class ModernAiProvider {
    * 类型守卫函数：通过 provider 属性区分 Model 和 Provider
    */
   private isModel(obj: Model | Provider): obj is Model {
-    return 'provider' in obj && typeof obj.provider === 'string'
+    // If it has 'models' array, it is likely a Provider
+    if ('models' in obj && Array.isArray(obj.models)) return false
+    // If it has 'provider' string, it is a Model
+    if ('provider' in obj && typeof obj.provider === 'string') return true
+
+    // Default to false if we can't determine, but looking for provider string is the strongest signal for Model
+    return false
   }
 
   public getActualProvider() {
@@ -320,7 +331,15 @@ export default class ModernAiProvider {
     // 创建带有中间件的执行器
     if (config.onChunk) {
       const accumulate = this.model!.supported_text_delta !== false // true and undefined
-      const adapter = new AiSdkToChunkAdapter(config.onChunk, config.mcpTools, accumulate, config.enableWebSearch)
+      const adapter = new AiSdkToChunkAdapter(
+        config.onChunk,
+        config.mcpTools,
+        accumulate,
+        config.enableWebSearch,
+        undefined,
+        undefined,
+        config.imageActionHandler
+      )
 
       const streamResult = await executor.streamText({
         ...params,
@@ -408,14 +427,17 @@ export default class ModernAiProvider {
         ...imageParams
       })
 
-      // 转换结果格式
+      // 转换结果格式：所有图片统一转为 base64 data URL（前端无外网）
       const images: string[] = []
-      const imageType: 'url' | 'base64' = 'base64'
 
       if (result.images) {
         for (const image of result.images) {
           if ('base64' in image && image.base64) {
-            images.push(`data:${image.mediaType};base64,${image.base64}`)
+            const mediaType = 'mediaType' in image && image.mediaType ? image.mediaType : 'image/png'
+            images.push(`data:${mediaType};base64,${image.base64}`)
+          } else if ('url' in image && image.url) {
+            const localUrl = await ensureLocalImageUrl(image.url.toString())
+            images.push(localUrl)
           }
         }
       }
@@ -424,7 +446,7 @@ export default class ModernAiProvider {
       if (onChunk && images.length > 0) {
         onChunk({
           type: ChunkType.IMAGE_COMPLETE,
-          image: { type: imageType, images }
+          image: { type: 'base64', images }
         })
       }
 
@@ -533,10 +555,23 @@ export default class ModernAiProvider {
       ...(signal && { abortSignal: signal })
     }
 
+    logger.info('[ModernGenerateImage] Start', {
+      providerId: this.config?.providerId,
+      model,
+      imageSize: aiSdkParams.size,
+      batchSize: aiSdkParams.n,
+      promptLength: prompt.length,
+      promptPreview: prompt.slice(0, 120),
+      hasSignal: !!signal
+    })
     const executor = createExecutor(this.config!.providerId, this.config!.options, [])
     const result = await executor.generateImage({
       model: model, // 直接使用 model ID 字符串，由 executor 内部解析
       ...aiSdkParams
+    })
+    logger.info('[ModernGenerateImage] Raw result received', {
+      hasImages: !!result.images,
+      rawImageCount: result.images?.length || 0
     })
 
     // 转换结果格式
@@ -544,9 +579,25 @@ export default class ModernAiProvider {
     if (result.images) {
       for (const image of result.images) {
         if ('base64' in image && image.base64) {
-          images.push(`data:image/png;base64,${image.base64}`)
+          const mediaType = 'mediaType' in image && image.mediaType ? image.mediaType : 'image/png'
+          images.push(`data:${mediaType};base64,${image.base64}`)
+          continue
+        }
+
+        if ('url' in image && image.url) {
+          images.push(image.url.toString())
         }
       }
+    }
+    logger.info('[ModernGenerateImage] Parsed result summary', {
+      parsedImageCount: images.length,
+      sample: images[0]?.slice(0, 80)
+    })
+
+    // 空结果时抛错，触发上层 fallback 到 legacy generateImage
+    if (images.length === 0) {
+      logger.warn('[ModernGenerateImage] Parsed image list empty, trigger fallback to legacy.')
+      throw new Error('Modern generateImage returned no usable images.')
     }
 
     return images

@@ -8,7 +8,8 @@ import {
   Cloud,
   Command,
   FileCode,
-  HardDrive,
+  // Hammer,
+  // HardDrive,
   Info,
   MonitorCog,
   Package,
@@ -25,7 +26,7 @@ import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import styled from 'styled-components'
 
 import AboutSettings from './AboutSettings'
-import DataSettings from './DataSettings/DataSettings'
+// import DataSettings from './DataSettings/DataSettings'
 import DisplaySettings from './DisplaySettings/DisplaySettings'
 import DocProcessSettings from './DocProcessSettings'
 import GeneralSettings from './GeneralSettings'
@@ -77,12 +78,13 @@ const SettingsPage: FC = () => {
               {t('settings.display.title')}
             </MenuItem>
           </MenuItemLink>
-          <MenuItemLink to="/settings/data">
+          {/* 暂时隐藏数据设置，避免渲染错误 */}
+          {/* <MenuItemLink to="/settings/data">
             <MenuItem className={isRoute('/settings/data')}>
               <HardDrive size={18} />
               {t('settings.data.title')}
             </MenuItem>
-          </MenuItemLink>
+          </MenuItemLink> */}
           <Divider />
           <MenuItemLink to="/settings/mcp">
             <MenuItem className={isRoute('/settings/mcp')}>
@@ -162,7 +164,9 @@ const SettingsPage: FC = () => {
             <Route path="shortcut" element={<ShortcutSettings />} />
             <Route path="quickAssistant" element={<QuickAssistantSettings />} />
             <Route path="selectionAssistant" element={<SelectionAssistantSettings />} />
-            <Route path="data" element={<DataSettings />} />
+            {/* 暂时隐藏数据设置路由，避免渲染错误 */}
+            {/* <Route path="data" element={<DataSettings />} /> */}
+            {/* <Route path="notes" element={<NotesSettings />} /> */}
             <Route path="about" element={<AboutSettings />} />
           </Routes>
         </SettingContent>

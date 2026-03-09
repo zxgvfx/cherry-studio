@@ -101,14 +101,16 @@ export function removeSpecialCharacters(str: string): string {
   return str.replace(/[\n"]/g, '').replace(/[\p{M}\p{P}]/gu, '')
 }
 
-/**
- * 检查 URL 是否是有效的代理 URL。
- * @param {string} url 代理 URL
- * @returns {boolean} 是否有效
- */
-export const isValidProxyUrl = (url: string): boolean => {
-  return url.includes('://')
-}
+  /**
+   * 检查 URL 是否是有效的代理 URL。
+   * @param {string} url 代理 URL
+   * @returns {boolean} 是否有效
+   */
+  export const isValidProxyUrl = (url: string): boolean => {
+    // 简单检查是否包含协议头（支持 http, https, socks4, socks5）
+    // 放宽限制，只检查是否包含 :// 
+    return url.includes('://')
+  }
 
 /**
  * 动态加载 JavaScript 脚本。

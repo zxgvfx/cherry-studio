@@ -16,7 +16,7 @@ import { useDefaultWebSearchProvider, useWebSearchProvider } from '@renderer/hoo
 import WebSearchService from '@renderer/services/WebSearchService'
 import type { WebSearchProviderId } from '@renderer/types'
 import { formatApiKeys, hasObjectKey } from '@renderer/utils'
-import { Button, Divider, Flex, Form, Input, Space, Tooltip } from 'antd'
+import { Button, Divider, Flex, Form, Input, Radio, Space, Tooltip } from 'antd'
 import Link from 'antd/es/typography/Link'
 import { Info, List } from 'lucide-react'
 import type { FC } from 'react'
@@ -42,6 +42,8 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
   const [basicAuthPassword, setBasicAuthPassword] = useState(provider.basicAuthPassword || '')
   const [apiValid, setApiValid] = useState(false)
   const { setTimeoutTimer } = useTimer()
+
+  const isCentralized = !!provider.isCentralized
 
   const webSearchProviderConfig = WEB_SEARCH_PROVIDER_CONFIG[provider.id]
   const apiKeyWebsite = webSearchProviderConfig?.websites?.apiKey
@@ -249,6 +251,7 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
               spellCheck={false}
               type="password"
               autoFocus={apiKey === ''}
+              disabled={isCentralized}
             />
             <Button
               ghost={apiValid}
@@ -287,6 +290,7 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
               placeholder={t('settings.provider.api_host')}
               onChange={(e) => setApiHost(e.target.value)}
               onBlur={onUpdateApiHost}
+              disabled={isCentralized}
             />
           </Flex>
         </>
@@ -322,6 +326,7 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
                 <Input
                   placeholder={t('settings.provider.basic_auth.user_name.tip')}
                   onBlur={onUpdateBasicAuthUsername}
+                  disabled={isCentralized}
                 />
               </Form.Item>
               <Form.Item
@@ -333,12 +338,35 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
                 <Input.Password
                   placeholder={t('settings.provider.basic_auth.password.tip')}
                   onBlur={onUpdateBasicAuthPassword}
-                  disabled={!basicAuthUsername}
+                  disabled={!basicAuthUsername || isCentralized}
                   visibilityToggle={true}
                 />
               </Form.Item>
             </Form>
           </Flex>
+        </>
+      )}
+      {/* Content fetch mode for SearxNG - useful for internal networks that can't access target websites */}
+      {provider.id === 'searxng' && (
+        <>
+          <SettingDivider style={{ marginTop: 12, marginBottom: 12 }} />
+          <SettingSubtitle
+            style={{ marginTop: 5, marginBottom: 10, display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+            {t('settings.tool.websearch.content_fetch_mode.label')}
+            <Tooltip title={t('settings.tool.websearch.content_fetch_mode.tip')} placement="right">
+              <Info size={16} color="var(--color-icon)" style={{ marginLeft: 5, cursor: 'pointer' }} />
+            </Tooltip>
+          </SettingSubtitle>
+          <Radio.Group
+            value={provider.contentFetchMode ?? 'snippet'}
+            onChange={(e) => updateProvider({ contentFetchMode: e.target.value })}
+            disabled={isCentralized}>
+            <Radio value="snippet">{t('settings.tool.websearch.content_fetch_mode.snippet')}</Radio>
+            <Radio value="full">{t('settings.tool.websearch.content_fetch_mode.full')}</Radio>
+          </Radio.Group>
+          <SettingHelpTextRow style={{ marginTop: 8 }}>
+            <SettingHelpText>{t('settings.tool.websearch.content_fetch_mode.help')}</SettingHelpText>
+          </SettingHelpTextRow>
         </>
       )}
     </>

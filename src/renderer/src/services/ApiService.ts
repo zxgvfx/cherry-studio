@@ -5,7 +5,7 @@ import { loggerService } from '@logger'
 import { buildStreamTextParams } from '@renderer/aiCore/prepareParams'
 import type { AiSdkMiddlewareConfig } from '@renderer/aiCore/types/middlewareConfig'
 import { buildProviderOptions } from '@renderer/aiCore/utils/options'
-import { isDedicatedImageGenerationModel, isEmbeddingModel, isFunctionCallingModel } from '@renderer/config/models'
+import { isDedicatedImageGenerationModel, isEmbeddingModel, isFunctionCallingModel, isTextChatModel } from '@renderer/config/models'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
@@ -39,6 +39,8 @@ import {
 } from './AssistantService'
 import { ConversationService } from './ConversationService'
 import { injectUserMessageWithKnowledgeSearchPrompt } from './KnowledgeService'
+import { generateUnifiedImage } from './ImageGenerationService'
+import { getRotatedApiKey } from './providerKey'
 import type { BlockManager } from './messageStreaming'
 import type { StreamProcessorCallbacks } from './StreamProcessingService'
 // import { processKnowledgeSearch } from './KnowledgeService'
@@ -129,6 +131,51 @@ export async function fetchMcpTools(assistant: Assistant) {
       logger.error('Error fetching MCP tools:', toolError as Error)
     }
   }
+
+  // Auto 模式下确保 Hub 的 search/exec 工具有定义（避免提示模式无法解析/执行）
+  const hasHub = enabledMCPs?.some((server) => server.id === hubMCPServer.id)
+  if (hasHub) {
+    const hasSearch = mcpTools.some((tool) => tool.id === 'search' || tool.name === 'search')
+    const hasExec = mcpTools.some((tool) => tool.id === 'exec' || tool.name === 'exec')
+
+    if (!hasSearch) {
+      mcpTools.push({
+        id: 'search',
+        name: 'search',
+        description: 'Search available MCP tools using keywords.',
+        serverId: hubMCPServer.id,
+        serverName: hubMCPServer.name,
+        type: 'mcp',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search keywords, comma-separated.' },
+            limit: { type: 'number', description: 'Max number of tools to return.' }
+          },
+          required: ['query']
+        }
+      })
+    }
+
+    if (!hasExec) {
+      mcpTools.push({
+        id: 'exec',
+        name: 'exec',
+        description: 'Execute code that calls MCP tools.',
+        serverId: hubMCPServer.id,
+        serverName: hubMCPServer.name,
+        type: 'mcp',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            code: { type: 'string', description: 'JavaScript code invoking MCP tools.' }
+          },
+          required: ['code']
+        }
+      })
+    }
+  }
+
   return mcpTools
 }
 
@@ -222,7 +269,9 @@ export async function fetchChatCompletion({
   const mcpTools: MCPTool[] = []
   onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
 
-  if (isPromptToolUse(assistant) || isSupportedToolUse(assistant)) {
+  // 仅在当前助手/模型支持工具使用时才拉取 MCP 工具。
+  // 图片模型等不支持工具使用的场景，不应触发 listTools。
+  if ((isPromptToolUse(assistant) || isSupportedToolUse(assistant)) && isTextChatModel(assistant.model)) {
     mcpTools.push(...(await fetchMcpTools(assistant)))
   }
   if (prompt) {
@@ -258,7 +307,8 @@ export async function fetchChatCompletion({
     enableReasoning: capabilities.enableReasoning,
     isPromptToolUse: usePromptToolUse,
     isSupportedToolUse: isSupportedToolUse(assistant),
-    isImageGenerationEndpoint: isDedicatedImageGenerationModel(assistant.model || getDefaultModel()),
+    isImageGenerationEndpoint: isDedicatedImageGenerationModel(assistant.model || getDefaultModel())
+      && (!assistant.model?.endpoint_type || assistant.model.endpoint_type === 'image-generation'),
     webSearchPluginConfig: webSearchPluginConfig,
     enableWebSearch: capabilities.enableWebSearch,
     enableGenerateImage: capabilities.enableGenerateImage,
@@ -270,13 +320,32 @@ export async function fetchChatCompletion({
   }
 
   // --- Call AI Completions ---
-  await AI.completions(modelId, aiSdkParams, {
-    ...middlewareConfig,
-    assistant,
-    topicId,
-    callType: 'chat',
-    uiMessages
-  })
+  // 设置全局变量，用于 Qt 环境下的 window.fetch 拦截器获取当前 assistant 配置
+  // 这样可以将 webSearchProviderId 注入到请求体中
+  ;(window as any).__CHERRY_CURRENT_ASSISTANT__ = {
+    id: assistant.id,
+    webSearchProviderId: assistant.webSearchProviderId,
+    enableWebSearch: assistant.enableWebSearch
+  }
+
+  const imageActionHandler = async (prompt: string) =>
+    generateUnifiedImage(prompt, {
+      modelId: assistant.model?.id
+    })
+
+  try {
+    await AI.completions(modelId, aiSdkParams, {
+      ...middlewareConfig,
+      assistant,
+      topicId,
+      callType: 'chat',
+      uiMessages,
+      imageActionHandler
+    })
+  } finally {
+    // 清理全局变量
+    ;(window as any).__CHERRY_CURRENT_ASSISTANT__ = undefined
+  }
 }
 
 export async function fetchMessagesSummary({
@@ -589,51 +658,6 @@ export function hasApiKey(provider: Provider) {
  * Get rotated API key for providers that support multiple keys
  * Returns empty string for providers that don't require API keys
  */
-function getRotatedApiKey(provider: Provider): string {
-  // Handle providers that don't require API keys
-  if (!provider.apiKey || provider.apiKey.trim() === '') {
-    return ''
-  }
-
-  const keys = provider.apiKey
-    .split(',')
-    .map((key) => key.trim())
-    .filter(Boolean)
-
-  if (keys.length === 0) {
-    return ''
-  }
-
-  const keyName = `provider:${provider.id}:last_used_key`
-
-  // If only one key, return it directly
-  if (keys.length === 1) {
-    return keys[0]
-  }
-
-  const lastUsedKey = window.keyv.get(keyName)
-  if (!lastUsedKey) {
-    window.keyv.set(keyName, keys[0])
-    return keys[0]
-  }
-
-  const currentIndex = keys.indexOf(lastUsedKey)
-
-  // Log when the last used key is no longer in the list
-  if (currentIndex === -1) {
-    logger.debug('Last used API key no longer found in provider keys, falling back to first key', {
-      providerId: provider.id,
-      lastUsedKey: lastUsedKey.substring(0, 8) + '...' // Only log first 8 chars for security
-    })
-  }
-
-  const nextIndex = (currentIndex + 1) % keys.length
-  const nextKey = keys[nextIndex]
-  window.keyv.set(keyName, nextKey)
-
-  return nextKey
-}
-
 export async function fetchModels(provider: Provider): Promise<Model[]> {
   // Apply API key rotation
   // NOTE: Shallow copy is intentional. Provider objects are not mutated by downstream code.

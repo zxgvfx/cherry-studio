@@ -64,6 +64,69 @@ export interface StreamProcessorCallbacks {
 
 // Function to create a stream processor instance
 export function createStreamProcessor(callbacks: StreamProcessorCallbacks = {}) {
+  const markerStart = '[MCP_TOOL_CHUNK]'
+  const markerEnd = '[/MCP_TOOL_CHUNK]'
+  let mcpToolMarkerBuffer = ''
+
+  const parseMcpToolChunk = (payload: string): Chunk | null => {
+    try {
+      const parsed = JSON.parse(payload) as { type?: string; responses?: unknown }
+      const normalizedType = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : ''
+      const allowedTypes = [
+        ChunkType.MCP_TOOL_PENDING,
+        ChunkType.MCP_TOOL_IN_PROGRESS,
+        ChunkType.MCP_TOOL_COMPLETE,
+        ChunkType.MCP_TOOL_STREAMING
+      ]
+      if (!allowedTypes.includes(normalizedType as ChunkType)) {
+        return null
+      }
+      if (!Array.isArray(parsed.responses)) {
+        return null
+      }
+      return {
+        type: normalizedType as ChunkType,
+        responses: parsed.responses
+      } as Chunk
+    } catch (error) {
+      logger.warn('Failed to parse MCP tool chunk marker.', { error })
+      return null
+    }
+  }
+
+  const extractMcpToolChunks = (text: string): { cleanText: string; toolChunks: Chunk[] } => {
+    let buffer = `${mcpToolMarkerBuffer}${text}`
+    mcpToolMarkerBuffer = ''
+    let cleanText = ''
+    const toolChunks: Chunk[] = []
+
+    while (buffer.length > 0) {
+      const startIdx = buffer.indexOf(markerStart)
+      if (startIdx === -1) {
+        cleanText += buffer
+        buffer = ''
+        break
+      }
+      if (startIdx > 0) {
+        cleanText += buffer.slice(0, startIdx)
+      }
+      const endIdx = buffer.indexOf(markerEnd, startIdx + markerStart.length)
+      if (endIdx === -1) {
+        mcpToolMarkerBuffer = buffer.slice(startIdx)
+        buffer = ''
+        break
+      }
+      const payload = buffer.slice(startIdx + markerStart.length, endIdx)
+      const toolChunk = parseMcpToolChunk(payload)
+      if (toolChunk) {
+        toolChunks.push(toolChunk)
+      }
+      buffer = buffer.slice(endIdx + markerEnd.length)
+    }
+
+    return { cleanText, toolChunks }
+  }
+
   // The returned function processes a single chunk or a final signal
   return (chunk: Chunk) => {
     try {
@@ -83,7 +146,19 @@ export function createStreamProcessor(callbacks: StreamProcessorCallbacks = {}) 
           break
         }
         case ChunkType.TEXT_DELTA: {
-          if (callbacks.onTextChunk) callbacks.onTextChunk(data.text, data.providerMetadata)
+          const { cleanText, toolChunks } = extractMcpToolChunks(data.text || '')
+          for (const toolChunk of toolChunks) {
+            if (toolChunk.type === ChunkType.MCP_TOOL_PENDING) {
+              toolChunk.responses.forEach((toolResp: any) => callbacks.onToolCallPending?.(toolResp))
+            } else if (toolChunk.type === ChunkType.MCP_TOOL_IN_PROGRESS) {
+              toolChunk.responses.forEach((toolResp: any) => callbacks.onToolCallInProgress?.(toolResp))
+            } else if (toolChunk.type === ChunkType.MCP_TOOL_COMPLETE) {
+              toolChunk.responses.forEach((toolResp: any) => callbacks.onToolCallComplete?.(toolResp))
+            } else if (toolChunk.type === ChunkType.MCP_TOOL_STREAMING) {
+              toolChunk.responses.forEach((toolResp: any) => callbacks.onToolArgumentStreaming?.(toolResp))
+            }
+          }
+          if (callbacks.onTextChunk && cleanText) callbacks.onTextChunk(cleanText, data.providerMetadata)
           break
         }
         case ChunkType.TEXT_COMPLETE: {

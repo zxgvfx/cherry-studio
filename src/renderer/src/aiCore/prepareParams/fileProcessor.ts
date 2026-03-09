@@ -67,10 +67,30 @@ export async function convertFileBlockToTextPart(fileBlock: FileMessageBlock): P
   // 处理文档文件（PDF、Word、Excel等）- 提取为文本内容
   if (file.type === FILE_TYPE.DOCUMENT) {
     try {
-      const fileContent = await window.api.file.read(file.id + file.ext, true) // true表示强制文本提取
-      return {
-        type: 'text',
-        text: `${file.origin_name}\n${fileContent.trim()}`
+      // PDF 走 pdfOcr 智能管线：后端按页均密度判断，不足则自动 OCR
+      if (file.ext === '.pdf') {
+        const fileApi = window.api.file as any
+        if (fileApi.pdfOcr) {
+          logger.info(`PDF ${file.origin_name}: routing through pdfOcr pipeline`)
+          const ocrResult = await fileApi.pdfOcr(file.id + file.ext)
+          if (ocrResult.content?.trim()) {
+            return {
+              type: 'text',
+              text: `${file.origin_name}\n${ocrResult.content}`
+            }
+          }
+        }
+        logger.warn(`PDF ${file.origin_name}: pdfOcr returned no content, falling back to text read`)
+      }
+
+      // 非 PDF 文档或 pdfOcr 不可用：直接读取
+      const fileContent = await window.api.file.read(file.id + file.ext, true)
+      const trimmed = fileContent.trim()
+      if (trimmed.length > 0) {
+        return {
+          type: 'text',
+          text: `${file.origin_name}\n${trimmed}`
+        }
       }
     } catch (error) {
       logger.warn(`Failed to extract text from document ${file.origin_name}:`, error as Error)

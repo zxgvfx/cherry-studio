@@ -44,6 +44,7 @@ vi.mock('@renderer/components/Icons', () => ({
 
 vi.mock('lucide-react', () => ({
   Check: ({ size }: { size: number }) => <div data-testid="check-icon" style={{ width: size, height: size }} />,
+  Download: ({ size }: { size: number }) => <div data-testid="download-icon" style={{ width: size, height: size }} />,
   FileSpreadsheet: ({ size }: { size: number }) => (
     <div data-testid="excel-icon" style={{ width: size, height: size }} />
   )

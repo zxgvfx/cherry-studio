@@ -58,6 +58,24 @@ const WebviewContainer = memo(
         }
       }
 
+      // Handle load errors (e.g. network error in intranet)
+      const handleLoadError = (event: any) => {
+        if (event.isMainFrame) {
+          logger.debug(`WebView did-fail-load for app: ${appid}, error: ${event.errorDescription}`)
+          
+          const errorDesc = event.errorDescription
+          // Ignore ERR_ABORTED (user cancelled or navigated away)
+          if (errorDesc && errorDesc !== 'ERR_ABORTED') {
+            window.toast?.error?.(`Load failed: ${errorDesc}. Please check Network or Proxy settings.`)
+          }
+
+          if (!loadCallbackFired) {
+            loadCallbackFired = true
+            onLoadedCallback(appid)
+          }
+        }
+      }
+
       // Additional callback for when page is ready to show
       const handleReadyToShow = () => {
         logger.debug(`WebView ready-to-show for app: ${appid}`)
@@ -89,6 +107,7 @@ const WebviewContainer = memo(
       webviewRef.current.addEventListener('did-start-loading', handleStartLoading)
       webviewRef.current.addEventListener('dom-ready', handleDomReady)
       webviewRef.current.addEventListener('did-finish-load', handleLoaded)
+      webviewRef.current.addEventListener('did-fail-load', handleLoadError)
       webviewRef.current.addEventListener('ready-to-show', handleReadyToShow)
       webviewRef.current.addEventListener('did-navigate-in-page', handleNavigate)
 
@@ -99,6 +118,7 @@ const WebviewContainer = memo(
         webviewRef.current?.removeEventListener('did-start-loading', handleStartLoading)
         webviewRef.current?.removeEventListener('dom-ready', handleDomReady)
         webviewRef.current?.removeEventListener('did-finish-load', handleLoaded)
+        webviewRef.current?.removeEventListener('did-fail-load', handleLoadError)
         webviewRef.current?.removeEventListener('ready-to-show', handleReadyToShow)
         webviewRef.current?.removeEventListener('did-navigate-in-page', handleNavigate)
       }

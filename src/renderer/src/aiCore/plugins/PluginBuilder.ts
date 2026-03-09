@@ -121,7 +121,8 @@ export function buildPlugins({ provider, model, config }: BuildPluginsContext): 
   // }
 
   // 4. 启用Prompt工具调用时添加工具插件
-  if (config.isPromptToolUse) {
+  // Auto 模式也需要这个插件来解析 XML 格式的 search/exec 工具调用
+  if (config.isPromptToolUse || config.mcpMode === 'auto') {
     plugins.push(
       createPromptToolUsePlugin({
         enabled: true,

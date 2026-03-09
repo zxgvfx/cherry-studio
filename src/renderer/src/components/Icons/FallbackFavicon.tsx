@@ -41,6 +41,15 @@ interface FallbackFaviconProps {
   alt: string
 }
 
+// Check if running in Qt environment (Python PySide6)
+const isQtEnvironment = (): boolean => {
+  if (typeof window === 'undefined') return false
+  const hasQtApi = !!(window as any).qt?.api
+  const hasQtNetwork = !!(window as any).qt?.network
+  const isNotElectron = !(window as any).electron && !(window as any).require
+  return hasQtApi || hasQtNetwork || isNotElectron
+}
+
 const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
   type FaviconState =
     | { status: 'idle' }
@@ -51,6 +60,12 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
   const [faviconState, setFaviconState] = useState<FaviconState>({ status: 'idle' })
 
   useEffect(() => {
+    // In Qt environment, skip favicon fetching to avoid network issues
+    if (isQtEnvironment()) {
+      setFaviconState({ status: 'failed' })
+      return
+    }
+
     // Reset state when hostname changes
     setFaviconState({ status: 'loading' })
 

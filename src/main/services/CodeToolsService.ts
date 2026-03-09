@@ -638,7 +638,7 @@ class CodeToolsService {
   /**
    * Get version information for a CLI tool
    */
-  public async getVersionInfo(cliTool: string): Promise<VersionInfo> {
+  public async getVersionInfo(cliTool: string, customRegistryUrl?: string): Promise<VersionInfo> {
     logger.info(`Starting version check for ${cliTool}`)
     const packageName = await this.getPackageName(cliTool)
     const isInstalled = await this.isPackageInstalled(cliTool)
@@ -680,7 +680,7 @@ class CodeToolsService {
       logger.info(`Fetching latest version for ${packageName} from npm`)
       try {
         // Get registry URL
-        const registryUrl = await this.getNpmRegistryUrl()
+        const registryUrl = customRegistryUrl || (await this.getNpmRegistryUrl())
 
         // Fetch package info directly from npm registry API
         const packageUrl = `${registryUrl}/${packageName}/latest`
@@ -757,13 +757,16 @@ class CodeToolsService {
   /**
    * Update a CLI tool to the latest version
    */
-  public async updatePackage(cliTool: string): Promise<{ success: boolean; message: string }> {
+  public async updatePackage(
+    cliTool: string,
+    customRegistryUrl?: string
+  ): Promise<{ success: boolean; message: string }> {
     logger.info(`Starting update process for ${cliTool}`)
     try {
       const packageName = await this.getPackageName(cliTool)
       const bunPath = await this.getBunPath()
       const bunInstallPath = path.join(os.homedir(), HOME_CHERRY_DIR)
-      const registryUrl = await this.getNpmRegistryUrl()
+      const registryUrl = customRegistryUrl || (await this.getNpmRegistryUrl())
 
       const installEnvPrefix = isWin
         ? `set "BUN_INSTALL=${bunInstallPath}" && set "NPM_CONFIG_REGISTRY=${registryUrl}" &&`
@@ -834,17 +837,23 @@ class CodeToolsService {
     // Check if package is already installed
     const isInstalled = await this.isPackageInstalled(cliTool)
 
+    // Check for custom registry in env
+    const customRegistryUrl = env['NPM_CONFIG_REGISTRY'] || env['npm_config_registry']
+    if (customRegistryUrl) {
+      logger.info(`Using custom npm registry from env: ${customRegistryUrl}`)
+    }
+
     // Check for updates and auto-update if requested
     let updateMessage = ''
     if (isInstalled && options.autoUpdateToLatest) {
       logger.info(`Auto update to latest enabled for ${cliTool}`)
       try {
-        const versionInfo = await this.getVersionInfo(cliTool)
+        const versionInfo = await this.getVersionInfo(cliTool, customRegistryUrl)
         if (versionInfo.needsUpdate) {
           logger.info(`Update available for ${cliTool}: ${versionInfo.installed} -> ${versionInfo.latest}`)
           logger.info(`Auto-updating ${cliTool} to latest version`)
           updateMessage = ` && echo "Updating ${cliTool} from ${versionInfo.installed} to ${versionInfo.latest}..."`
-          const updateResult = await this.updatePackage(cliTool)
+          const updateResult = await this.updatePackage(cliTool, customRegistryUrl)
           if (updateResult.success) {
             logger.info(`Update completed successfully for ${cliTool}`)
             updateMessage += ` && echo "Update completed successfully"`
@@ -971,7 +980,7 @@ class CodeToolsService {
       }
     } else {
       // If not installed, install first then run
-      const registryUrl = await this.getNpmRegistryUrl()
+      const registryUrl = customRegistryUrl || (await this.getNpmRegistryUrl())
       const installEnvPrefix =
         platform === 'win32'
           ? `set "BUN_INSTALL=${bunInstallPath}" && set "NPM_CONFIG_REGISTRY=${registryUrl}" &&`

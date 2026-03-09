@@ -68,9 +68,19 @@ export abstract class OpenAIBaseClient<
     promptEnhancement
   }: GenerateImageParams): Promise<string[]> {
     const sdk = await this.getSdkInstance()
+    const baseURL = this.getBaseURL()
+    const normalizedBaseURL = withoutTrailingSlash(baseURL || '')
+    const path = /\/v1$/i.test(normalizedBaseURL) ? '/images/generations' : '/v1/images/generations'
+    logger.info('[generateImage] Requesting image generation', {
+      providerId: this.provider.id,
+      providerType: this.provider.type,
+      model,
+      baseURL: normalizedBaseURL,
+      path
+    })
     const response = (await sdk.request({
       method: 'post',
-      path: '/v1/images/generations',
+      path,
       signal,
       body: {
         model,
@@ -83,9 +93,55 @@ export abstract class OpenAIBaseClient<
         guidance_scale: guidanceScale,
         prompt_enhancement: promptEnhancement
       }
-    })) as { data: Array<{ url: string }> }
+    })) as Record<string, any>
 
-    return response.data.map((item) => item.url)
+    const extractImageUrls = (payload: Record<string, any>): string[] => {
+      const results: string[] = []
+      const appendImage = (value: unknown, mimeType = 'image/png') => {
+        if (typeof value !== 'string') return
+        const trimmed = value.trim()
+        if (!trimmed) return
+        if (trimmed.startsWith('data:') || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('blob:')) {
+          results.push(trimmed)
+          return
+        }
+        const cleaned = trimmed.replace(/\s+/g, '')
+        const looksLikeBase64 = cleaned.length > 64 && /^[A-Za-z0-9+/]+={0,2}$/.test(cleaned)
+        if (looksLikeBase64) {
+          results.push(`data:${mimeType};base64,${cleaned}`)
+        }
+      }
+
+      const dataList = Array.isArray(payload.data) ? payload.data : []
+      dataList.forEach((item: any) => {
+        appendImage(item?.url)
+        appendImage(item?.b64_json)
+        appendImage(item?.base64, item?.mime_type || item?.mimeType || 'image/png')
+      })
+
+      const imageList = Array.isArray(payload.images) ? payload.images : []
+      imageList.forEach((item: any) => {
+        appendImage(item?.url || item?.image_url?.url)
+        appendImage(item?.b64_json || item?.base64, item?.mime_type || item?.mimeType || 'image/png')
+      })
+
+      appendImage(payload.url)
+      appendImage(payload.b64_json)
+      appendImage(payload.base64, payload.mime_type || payload.mimeType || 'image/png')
+
+      return results
+    }
+
+    const images = extractImageUrls(response)
+
+    logger.info('[generateImage] Image generation response received', {
+      providerId: this.provider.id,
+      model,
+      responseKeys: Object.keys(response || {}),
+      imageCount: images.length,
+      sample: images[0]?.slice(0, 120)
+    })
+    return images
   }
 
   override async getEmbeddingDimensions(model: Model): Promise<number> {

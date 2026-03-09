@@ -92,6 +92,71 @@ type DirectoryListOptions = {
   searchPattern?: string
 }
 
+type NetworkFetchConfig = {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: any
+  timeout?: number
+  stream?: boolean
+  requestId?: string
+}
+
+type LocalSearchRequest = {
+  provider: 'local-google' | 'local-bing' | 'local-baidu'
+  url: string
+  headers?: Record<string, string>
+  timeout?: number
+}
+
+type HttpProxyConfig = {
+  url: string
+  headers?: Record<string, string>
+  timeout?: number
+  auth?: { username: string; password?: string }
+  data?: any
+  body?: any
+}
+
+async function getApiServerConnection() {
+  let status = (await ipcRenderer.invoke(IpcChannel.ApiServer_GetStatus)) as GetApiServerStatusResult
+
+  if (!status.running) {
+    const startResult = (await ipcRenderer.invoke(IpcChannel.ApiServer_Start)) as StartApiServerStatusResult
+    if (!startResult.success) {
+      throw new Error(startResult.error)
+    }
+    status = (await ipcRenderer.invoke(IpcChannel.ApiServer_GetStatus)) as GetApiServerStatusResult
+  }
+
+  if (!status.config) {
+    throw new Error('API server config unavailable')
+  }
+
+  const host = status.config.host
+  const normalizedHost = /^https?:\/\//.test(host) ? host : `http://${host}:${status.config.port}`
+  const baseUrl = normalizedHost.replace(/\/$/, '')
+
+  return {
+    baseUrl,
+    apiKey: status.config.apiKey
+  }
+}
+
+async function callApiServer(path: string, payload: unknown) {
+  const { baseUrl, apiKey } = await getApiServerConnection()
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey
+    },
+    body: JSON.stringify(payload ?? {})
+  })
+
+  return await response.json()
+}
+
 export function tracedInvoke(channel: string, spanContext: SpanContext | undefined, ...args: any[]) {
   if (spanContext) {
     const data = { type: 'trace', context: spanContext }
@@ -485,6 +550,18 @@ const api = {
     decryptToken: (token: string) => ipcRenderer.invoke(IpcChannel.Nutstore_DecryptToken, token),
     getDirectoryContents: (token: string, path: string) =>
       ipcRenderer.invoke(IpcChannel.Nutstore_GetDirectoryContents, token, path)
+  },
+  network: {
+    fetchProxy: (config: NetworkFetchConfig) => callApiServer('/api/v1/network/fetch', config),
+    search: (config: LocalSearchRequest) => callApiServer('/api/v1/network/search', config)
+  },
+  httpProxy: {
+    get: (config: HttpProxyConfig) => callApiServer('/api/v1/network/http-get', config),
+    post: (config: HttpProxyConfig) =>
+      callApiServer('/api/v1/network/http-post', {
+        ...config,
+        body: config.body ?? config.data
+      })
   },
   searchService: {
     openSearchWindow: (uid: string, show?: boolean) => ipcRenderer.invoke(IpcChannel.SearchWindow_Open, uid, show),

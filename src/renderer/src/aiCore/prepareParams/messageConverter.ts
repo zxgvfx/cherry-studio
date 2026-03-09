@@ -5,8 +5,9 @@
 
 import type { ReasoningPart } from '@ai-sdk/provider-utils'
 import { loggerService } from '@logger'
-import { isImageEnhancementModel, isVisionModel } from '@renderer/config/models'
+import { getModelPrimaryModality, isImageEnhancementModel, isVisionModel } from '@renderer/config/models'
 import type { Message, Model } from '@renderer/types'
+import { FileTypes } from '@renderer/types'
 import type {
   FileMessageBlock,
   ImageMessageBlock,
@@ -149,7 +150,54 @@ async function convertMessageToUserModelMessage(
       }
     }
 
-    // 如果原生处理失败，回退到文本提取
+    // 原生文件支持失败 → 对 PDF 做特殊处理
+    // 注意：AI SDK 的 OpenAI provider 校验 mediaType，拒绝 application/pdf，
+    // 因此视觉模型需要将 PDF 渲染为 PNG 图片再发送（image/png 通过校验）。
+    // Legacy 路径（OpenAIApiClient.ts）可以直接发送 data:application/pdf;base64,...
+    if (!processed && file.type === FileTypes.DOCUMENT && file.ext === '.pdf') {
+      try {
+        if (isVisionModel) {
+          // 视觉/多模态模型：渲染 PDF 页面为图片，以 image/png 格式发送
+          const fileApi = window.api.file as any
+          if (fileApi.pdfToImages) {
+            logger.info(`PDF ${file.origin_name}: rendering pages as images for vision model`)
+            const result = await fileApi.pdfToImages(file.id + file.ext)
+            if (result.images?.length > 0) {
+              parts.push({ type: 'text', text: `[PDF: ${file.origin_name}, ${result.images.length} pages]` })
+              for (const img of result.images) {
+                parts.push({ type: 'image', image: img.data, mediaType: img.mime })
+              }
+              processed = true
+            }
+          }
+        } else {
+          // 纯文本模型：通过 pdfOcr 智能管线处理
+          // 后端先提取文本，如果页均字符密度 < 200，自动调用视觉模型 OCR
+          const fileApi = window.api.file as any
+          if (fileApi.pdfOcr) {
+            logger.info(`PDF ${file.origin_name}: routing through pdfOcr pipeline for text model`)
+            const result = await fileApi.pdfOcr(file.id + file.ext)
+            if (result.content?.trim()) {
+              parts.push({ type: 'text', text: `${file.origin_name}\n${result.content}` })
+              logger.debug(`PDF ${file.origin_name} processed via ${result.method} (${result.pages} pages)`)
+              processed = true
+            }
+          }
+          if (!processed) {
+            const fileContent = await window.api.file.read(file.id + file.ext, true)
+            const trimmed = fileContent.trim()
+            if (trimmed.length > 0) {
+              parts.push({ type: 'text', text: `${file.origin_name}\n${trimmed}` })
+              processed = true
+            }
+          }
+        }
+      } catch (error) {
+        logger.warn(`PDF ${file.origin_name} special processing failed:`, error as Error)
+      }
+    }
+
+    // 非 PDF 文件，或 PDF 特殊处理未成功 → 通用文本提取（含 OCR 回退）
     if (!processed) {
       const textPart = await convertFileBlockToTextPart(fileBlock)
       if (textPart) {
@@ -266,13 +314,14 @@ async function convertMessageToAssistantModelMessage(
  */
 export async function convertMessagesToSdkMessages(messages: Message[], model: Model): Promise<ModelMessage[]> {
   const sdkMessages: ModelMessage[] = []
-  const isVision = isVisionModel(model)
+  const modality = getModelPrimaryModality(model)
+  const isVision = isVisionModel(model) || modality === 'image'
 
   for (const message of messages) {
     const sdkMessage = await convertMessageToSdkParam(message, isVision, model)
     sdkMessages.push(...(Array.isArray(sdkMessage) ? sdkMessage : [sdkMessage]))
   }
-  // Special handling for image enhancement models
+  // Special handling for image enhancement / image-generation models
   // These models support multi-turn conversations but need images from previous assistant messages
   // to be merged into the current user message for editing/enhancement operations.
   //
@@ -280,7 +329,7 @@ export async function convertMessagesToSdkMessages(messages: Message[], model: M
   // 1. Preserve all conversation history for context
   // 2. Find images from the previous assistant message and merge them into the last user message
   // 3. This allows users to switch from LLM conversations and use that context for image generation
-  if (isImageEnhancementModel(model)) {
+  if (isImageEnhancementModel(model) || modality === 'image') {
     // Find the last user SDK message index
     const lastUserSdkIndex = (() => {
       for (let i = sdkMessages.length - 1; i >= 0; i--) {

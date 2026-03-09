@@ -188,7 +188,12 @@ function defaultBuildSystemPrompt(userSystemPrompt: string, tools: ToolSet, mcpM
   if (availableTools === null) return userSystemPrompt
 
   if (mcpMode == 'auto') {
-    return DEFAULT_SYSTEM_PROMPT.replace('{{ TOOLS_INFO }}', '').replace(
+    // Auto 模式保留简短的工具说明，避免模型误以为无工具或提前结束回复
+    const autoModeToolsInfo = `
+## Tool Use (Auto / Hub Mode)
+
+You MUST use the <tool_use> XML format above when calling tools. The exact tool names, workflow, and discoverable tools are defined in the "User Instructions" section below. After each tool result, continue the conversation: call more tools if needed, or reply to the user with the final answer. Do not stop mid-turn after outputting a tool call.`
+    return DEFAULT_SYSTEM_PROMPT.replace('{{ TOOLS_INFO }}', autoModeToolsInfo).replace(
       '{{ USER_SYSTEM_PROMPT }}',
       userSystemPrompt || ''
     )
@@ -292,8 +297,10 @@ export const createPromptToolUsePlugin = (
 
   return definePlugin<StreamTextParams, StreamTextResult>({
     name: 'built-in:prompt-tool-use',
-    transformParams: (params, context) => {
+    transformParams: (params: any, context: AiRequestContext) => {
+      console.log('[PromptToolUse] transformParams called, enabled:', enabled, 'params.tools:', params.tools ? Object.keys(params.tools) : 'undefined')
       if (!enabled || !params.tools || typeof params.tools !== 'object') {
+        console.log('[PromptToolUse] Early return - enabled:', enabled, 'tools:', !!params.tools)
         return params
       }
 
@@ -312,8 +319,10 @@ export const createPromptToolUsePlugin = (
       }
 
       // 只有当有非 provider 工具时才保存到 context
+      console.log('[PromptToolUse] promptTools count:', Object.keys(promptTools).length, 'keys:', Object.keys(promptTools))
       if (Object.keys(promptTools).length > 0) {
         context.mcpTools = promptTools
+        console.log('[PromptToolUse] Set context.mcpTools with', Object.keys(promptTools).length, 'tools')
       }
 
       // 递归调用时，不重新构建 system prompt，避免重复追加工具定义
@@ -344,7 +353,9 @@ export const createPromptToolUsePlugin = (
       // let stepId = ''
 
       // 如果没有需要 prompt 模式处理的工具，直接返回原始流
+      console.log('[PromptToolUse] transformStream called, context.mcpTools:', context.mcpTools ? Object.keys(context.mcpTools) : 'undefined')
       if (!context.mcpTools) {
+        console.log('[PromptToolUse] No mcpTools in context, returning empty TransformStream')
         return new TransformStream()
       }
 
@@ -424,9 +435,12 @@ export const createPromptToolUsePlugin = (
           if (chunk.type === 'finish-step') {
             // 统一在finish-step阶段检查并执行工具调用
             const tools = context.mcpTools
+            console.log('[PromptToolUse] finish-step, tools count:', tools ? Object.keys(tools).length : 0, 'textBuffer length:', textBuffer.length)
+            console.log('[PromptToolUse] textBuffer preview:', textBuffer.substring(0, 500))
             if (tools && Object.keys(tools).length > 0 && !context.hasExecutedToolsInCurrentStep) {
               // 解析完整的textBuffer来检测工具调用
               const { results: parsedTools } = parseToolUse(textBuffer, tools)
+              console.log('[PromptToolUse] Parsed tools:', parsedTools.length, parsedTools.map(t => t.toolName))
               const validToolUses = parsedTools.filter((t) => t.status === 'pending')
 
               if (validToolUses.length > 0) {

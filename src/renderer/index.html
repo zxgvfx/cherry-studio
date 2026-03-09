@@ -5,7 +5,7 @@
     <meta name="viewport" content="initial-scale=1, width=device-width" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; connect-src blob: *; script-src 'self' 'unsafe-eval' 'unsafe-inline' *; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' *; font-src 'self' data: *; img-src 'self' data: file: * blob:; media-src 'self' file:; frame-src * file:" />
+      content="default-src 'self'; connect-src data: blob: *; script-src 'self' 'unsafe-eval' 'unsafe-inline' *; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' *; font-src 'self' data: *; img-src 'self' data: file: * blob:; media-src 'self' file: blob: data:; frame-src * file:" />
     <title>Cherry Studio</title>
 
     <style>
@@ -22,11 +22,13 @@
         justify-content: center;
         align-items: center;
         display: flex;
+        background-color: #1a1a1a; /* 使用暗色主题背景 */
       }
 
       #spinner img {
         width: 100px;
         border-radius: 50px;
+        display: none; /* 隐藏logo */
       }
     </style>
   </head>

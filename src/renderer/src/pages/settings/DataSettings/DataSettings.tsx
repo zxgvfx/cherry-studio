@@ -7,14 +7,14 @@ import BackupPopup from '@renderer/components/Popups/BackupPopup'
 import LanTransferPopup from '@renderer/components/Popups/LanTransferPopup'
 import RestorePopup from '@renderer/components/Popups/RestorePopup'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useKnowledgeFiles } from '@renderer/hooks/useKnowledgeFiles'
+// import { useKnowledgeFiles } from '@renderer/hooks/useKnowledgeFiles'
 import { useTimer } from '@renderer/hooks/useTimer'
 import ImportMenuOptions from '@renderer/pages/settings/DataSettings/ImportMenuSettings'
 import { reset } from '@renderer/services/BackupService'
 import store, { useAppDispatch } from '@renderer/store'
 import { setSkipBackupFile as _setSkipBackupFile } from '@renderer/store/settings'
 import type { AppInfo } from '@renderer/types'
-import { formatFileSize } from '@renderer/utils'
+// import { formatFileSize } from '@renderer/utils'
 import { occupiedDirs } from '@shared/config/constant'
 import { Button, Progress, Switch, Tooltip, Typography } from 'antd'
 import { FileText, FolderCog, FolderInput, FolderOpen, FolderOutput, SaveIcon } from 'lucide-react'
@@ -48,7 +48,8 @@ const DataSettings: FC = () => {
   const { t } = useTranslation()
   const [appInfo, setAppInfo] = useState<AppInfo>()
   const [cacheSize, setCacheSize] = useState<string>('')
-  const { size, removeAllFiles } = useKnowledgeFiles()
+  // 暂时注释掉知识库文件管理，避免渲染错误
+  // const { size, removeAllFiles } = useKnowledgeFiles()
   const { theme } = useTheme()
   const [menu, setMenu] = useState<string>('data')
   const { setTimeoutTimer } = useTimer()
@@ -136,6 +137,14 @@ const DataSettings: FC = () => {
     window.api.getCacheSize().then(setCacheSize)
   }, [])
 
+  // 暂时注释掉调试代码
+  // useEffect(() => {
+  //   console.log('[DataSettings] size type:', typeof size, 'value:', size)
+  //   if (typeof size === 'object') {
+  //     console.error('[DataSettings] ERROR: size is an object!', size)
+  //   }
+  // }, [size])
+
   const handleOpenPath = (path?: string) => {
     if (!path) return
     if (path?.endsWith('log')) {
@@ -168,21 +177,31 @@ const DataSettings: FC = () => {
     })
   }
 
-  const handleRemoveAllFiles = () => {
-    window.modal.confirm({
-      centered: true,
-      title: t('settings.data.app_knowledge.remove_all') + ` (${formatFileSize(size)}) `,
-      content: t('settings.data.app_knowledge.remove_all_confirm'),
-      onOk: async () => {
-        await removeAllFiles()
-        window.toast.success(t('settings.data.app_knowledge.remove_all_success'))
-      },
-      okText: t('common.delete'),
-      okButtonProps: {
-        danger: true
-      }
-    })
-  }
+  // 暂时注释掉，避免渲染错误
+  // const handleRemoveAllFiles = () => {
+  //   // 防御性处理 size 可能是对象的情况
+  //   const normalizedSize = typeof size === 'object' && size !== null
+  //     ? ((size as any).size || 0)
+  //     : typeof size === 'number'
+  //       ? size
+  //       : 0
+  //   
+  //   console.log('[DataSettings] size value:', size, 'normalized:', normalizedSize)
+  //   
+  //   window.modal.confirm({
+  //     centered: true,
+  //     title: t('settings.data.app_knowledge.remove_all') + ` (${formatFileSize(normalizedSize)}) `,
+  //     content: t('settings.data.app_knowledge.remove_all_confirm'),
+  //     onOk: async () => {
+  //       await removeAllFiles()
+  //       window.toast.success(t('settings.data.app_knowledge.remove_all_success'))
+  //     },
+  //     okText: t('common.delete'),
+  //     okButtonProps: {
+  //       danger: true
+  //     }
+  //   })
+  // }
 
   const handleSelectAppDataPath = async () => {
     if (!appInfo || !appInfo.appDataPath) {
@@ -663,12 +682,13 @@ const DataSettings: FC = () => {
                 </PathRow>
               </SettingRow>
               <SettingDivider />
-              <SettingRow>
+              {/* 暂时隐藏知识库文件管理选项，避免渲染错误 */}
+              {/* <SettingRow>
                 <SettingRowTitle>{t('settings.data.app_knowledge.label')}</SettingRowTitle>
                 <HStack alignItems="center" gap="5px">
                   <Button onClick={handleRemoveAllFiles}>{t('settings.data.app_knowledge.button.delete')}</Button>
                 </HStack>
-              </SettingRow>
+              </SettingRow> */}
               <SettingDivider />
               <SettingRow>
                 <SettingRowTitle>

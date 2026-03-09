@@ -343,6 +343,12 @@ export const SYSTEM_MODELS: Record<SystemProviderId | 'defaultModel', Model[]> =
   ],
   gemini: [
     {
+      id: 'gemini-nano-blanan',
+      provider: 'gemini',
+      name: 'Gemini Nano Blanan',
+      group: 'Gemini Nano'
+    },
+    {
       id: 'gemini-2.5-flash',
       provider: 'gemini',
       name: 'Gemini 2.5 Flash',

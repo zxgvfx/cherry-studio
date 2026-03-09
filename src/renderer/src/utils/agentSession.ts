@@ -17,9 +17,7 @@ export const extractAgentSessionIdFromTopicId = (topicId: string): string => {
 export const getModelFilterByAgentType = (type: AgentType): ApiModelsFilter => {
   switch (type) {
     case 'claude-code':
-      return {
-        providerType: 'anthropic'
-      }
+      return {}
     default:
       return {}
   }

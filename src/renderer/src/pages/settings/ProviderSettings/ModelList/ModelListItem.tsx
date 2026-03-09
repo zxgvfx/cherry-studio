@@ -91,14 +91,14 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, modelStatus, 
             onErrorClick={handleErrorClick}
           />
           <HStack alignItems="center" gap={0}>
-            <Tooltip title={model.isCentralized ? t('settings.centralized_config_readonly', 'Managed by Administrator') : t('models.edit')} mouseLeaveDelay={0}>
-              <Button type="text" onClick={() => onEdit(model)} disabled={disabled} icon={<Bolt size={14} />} />
+          <Tooltip title={model.isCentralized ? t('settings.centralized_config_readonly', 'Managed by Administrator') : t('models.edit')} mouseLeaveDelay={0}>
+            <Button type="text" onClick={handleEdit} disabled={disabled} icon={<Bolt size={14} />} />
+          </Tooltip>
+          {!model.isCentralized && (
+            <Tooltip title={t('settings.models.manage.remove_model')} mouseLeaveDelay={0}>
+              <Button type="text" onClick={handleRemove} disabled={disabled} icon={<Minus size={14} />} />
             </Tooltip>
-            {!model.isCentralized && (
-              <Tooltip title={t('settings.models.manage.remove_model')} mouseLeaveDelay={0}>
-                <Button type="text" onClick={() => onRemove(model)} disabled={disabled} icon={<Minus size={14} />} />
-              </Tooltip>
-            )}
+          )}
           </HStack>
         </HStack>
       </ListItem>

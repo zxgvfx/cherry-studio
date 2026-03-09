@@ -1,7 +1,9 @@
 import { loggerService } from '@logger'
 import type { LocalTransferPeer, LocalTransferState } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
+// @ts-ignore
 import type { Browser, Service } from 'bonjour-service'
+// @ts-ignore
 import Bonjour from 'bonjour-service'
 
 import { windowService } from './WindowService'

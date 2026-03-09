@@ -55,23 +55,44 @@ export default class ZhipuProvider extends BaseWebSearchProvider {
         search_intent: false
       }
 
-      const response = await fetch(`${this.apiHost}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          ...this.defaultHeaders()
-        },
-        body: JSON.stringify(requestBody)
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        logger.error('Zhipu search failed:', { status: response.status, error: errorText })
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
+      const headers = {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+        ...this.defaultHeaders()
       }
 
-      const data: ZhipuWebSearchResponse = await response.json()
+      let data: ZhipuWebSearchResponse
+
+      if (this.isQt()) {
+        // Use HTTP proxy in Qt environment
+        const response = await this.proxyFetch(`${this.apiHost}`, {
+          method: 'POST',
+          headers,
+          body: requestBody,
+          timeout: 30000
+        })
+
+        if (!response.success) {
+          logger.error('Zhipu search failed:', { error: response.error })
+          throw new Error(`Zhipu search failed: ${response.error}`)
+        }
+        data = response.data
+      } else {
+        // Use native fetch in non-Qt environment
+        const response = await fetch(`${this.apiHost}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody)
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          logger.error('Zhipu search failed:', { status: response.status, error: errorText })
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        }
+
+        data = await response.json()
+      }
 
       return {
         query: query,

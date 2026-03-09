@@ -92,6 +92,34 @@ import { OpenAIBaseClient } from './OpenAIBaseClient'
 
 const logger = loggerService.withContext('OpenAIApiClient')
 
+function normalizeOpenAIImageSource(rawSource: unknown): string {
+  if (typeof rawSource !== 'string') {
+    return ''
+  }
+
+  const trimmed = rawSource.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  if (
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('file://') ||
+    /^https?:\/\//i.test(trimmed)
+  ) {
+    return trimmed
+  }
+
+  const cleaned = trimmed.replace(/^['"]|['"]$/g, '').replace(/\s+/g, '')
+  const looksLikeBase64 = cleaned.length > 64 && /^[A-Za-z0-9+/]+={0,2}$/.test(cleaned)
+  if (looksLikeBase64) {
+    return `data:image/png;base64,${cleaned}`
+  }
+
+  return trimmed
+}
+
 export class OpenAIAPIClient extends OpenAIBaseClient<
   OpenAI | AzureOpenAI,
   OpenAISdkParams,
@@ -447,11 +475,37 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
       }
 
       if ([FILE_TYPE.TEXT, FILE_TYPE.DOCUMENT].some((type) => type === file.type)) {
+        const fileApi = window.api.file as any
+
+        // PDF 特殊处理：视觉模型直接发送原始 PDF（Higress 原生支持 PDF 文件分析）
+        if (file.ext === '.pdf' && isVision && fileApi.base64File) {
+          const rawPdf = await fileApi.base64File(file.id + file.ext)
+          if (rawPdf?.data) {
+            parts.push({
+              type: 'image_url',
+              image_url: { url: `data:${rawPdf.mime || 'application/pdf'};base64,${rawPdf.data}` }
+            })
+            continue
+          }
+        }
+
+        // 非视觉模型 或 PDF 原始发送失败：通过 pdfOcr 智能管线处理
+        // 后端先提取文本，如果页均字符密度 < 200，自动调用视觉模型 OCR
+        if (file.ext === '.pdf' && fileApi.pdfOcr) {
+          const ocrResult = await fileApi.pdfOcr(file.id + file.ext)
+          if (ocrResult.content && ocrResult.content.trim().length > 0) {
+            parts.push({ type: 'text', text: file.origin_name + '\n' + ocrResult.content })
+            continue
+          }
+        }
+
+        // 非 PDF 或 pdfOcr 不可用：直接读取文本
         const fileContent = await (await window.api.file.read(file.id + file.ext, true)).trim()
-        parts.push({
-          type: 'text',
-          text: file.origin_name + '\n' + fileContent
-        })
+        if (fileContent.length > 0) {
+          parts.push({ type: 'text', text: file.origin_name + '\n' + fileContent })
+        } else {
+          parts.push({ type: 'text', text: file.origin_name + '\n(content could not be extracted)' })
+        }
       }
     }
 
@@ -1019,14 +1073,31 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
 
             // 处理图片内容 (e.g. from OpenRouter Gemini image generation models)
             if (contentSource.images && Array.isArray(contentSource.images)) {
+              const normalizedImages = contentSource.images
+                .map((image: any) =>
+                  normalizeOpenAIImageSource(image?.image_url?.url || image?.b64_json || image?.url || '')
+                )
+                .filter(Boolean)
+
+              const imageType: 'url' | 'base64' = normalizedImages.every((src) => src.startsWith('data:'))
+                ? 'base64'
+                : 'url'
+              logger.info('[OpenAIChatStream] Parsed image payload from chat stream', {
+                providerId: context.provider.id,
+                modelId: (context as any).model?.id,
+                imageCount: normalizedImages.length,
+                imageType,
+                sample: normalizedImages[0]?.slice(0, 100)
+              })
+
               controller.enqueue({
                 type: ChunkType.IMAGE_CREATED
               })
               controller.enqueue({
                 type: ChunkType.IMAGE_COMPLETE,
                 image: {
-                  type: 'base64',
-                  images: contentSource.images.map((image) => image.image_url?.url || '')
+                  type: imageType,
+                  images: normalizedImages
                 }
               })
             }

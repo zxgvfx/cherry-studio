@@ -78,47 +78,69 @@ export default class ExaMcpProvider extends BaseWebSearchProvider {
         }
       }
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      const headers = {
+        ...this.defaultHeaders(),
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json'
+      }
 
-      try {
-        const response = await fetch(this.apiHost!, {
+      let responseText: string
+
+      if (this.isQt()) {
+        // Use HTTP proxy in Qt environment
+        const response = await this.proxyFetch(this.apiHost!, {
           method: 'POST',
-          headers: {
-            ...this.defaultHeaders(),
-            accept: 'application/json, text/event-stream',
-            'content-type': 'application/json'
-          },
-          body: JSON.stringify(searchRequest),
-          signal: httpOptions?.signal ? AbortSignal.any([controller.signal, httpOptions.signal]) : controller.signal
+          headers,
+          body: searchRequest,
+          timeout: REQUEST_TIMEOUT_MS
         })
 
-        clearTimeout(timeoutId)
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(`Search error (${response.status}): ${errorText}`)
+        if (!response.success) {
+          throw new Error(`Search error: ${response.error}`)
         }
 
-        const responseText = await response.text()
-        const searchResults = this.parseResponse(responseText)
+        responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+      } else {
+        // Use native fetch in non-Qt environment
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
-        return {
-          query: searchResults.autopromptString || query,
-          results: (searchResults.results || []).slice(0, websearch.maxResults).map((result) => ({
-            title: result.title || 'No title',
-            content: result.text || '',
-            url: result.url || ''
-          }))
+        try {
+          const response = await fetch(this.apiHost!, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(searchRequest),
+            signal: httpOptions?.signal ? AbortSignal.any([controller.signal, httpOptions.signal]) : controller.signal
+          })
+
+          clearTimeout(timeoutId)
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Search error (${response.status}): ${errorText}`)
+          }
+
+          responseText = await response.text()
+        } catch (error) {
+          clearTimeout(timeoutId)
+
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error('Search request timed out')
+          }
+
+          throw error
         }
-      } catch (error) {
-        clearTimeout(timeoutId)
+      }
 
-        if (error instanceof Error && error.name === 'AbortError') {
-          throw new Error('Search request timed out')
-        }
+      const searchResults = this.parseResponse(responseText)
 
-        throw error
+      return {
+        query: searchResults.autopromptString || query,
+        results: (searchResults.results || []).slice(0, websearch.maxResults).map((result) => ({
+          title: result.title || 'No title',
+          content: result.text || '',
+          url: result.url || ''
+        }))
       }
     } catch (error) {
       logger.error('Exa MCP search failed:', error as Error)

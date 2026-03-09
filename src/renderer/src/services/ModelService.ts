@@ -14,7 +14,7 @@ export const hasModel = (m?: Model) => {
     .map((p) => p.models)
     .flat()
 
-  return allModels.find((model) => model.id === m?.id)
+  return allModels.find((model) => model.id === m?.id && model.provider === m?.provider)
 }
 
 export function getModelName(model?: Model) {

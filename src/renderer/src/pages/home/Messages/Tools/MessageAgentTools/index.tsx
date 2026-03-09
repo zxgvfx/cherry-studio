@@ -3,7 +3,7 @@ import { selectPendingPermission } from '@renderer/store/toolPermissions'
 import type { NormalToolResponse } from '@renderer/types'
 import type { CollapseProps } from 'antd'
 import { Collapse } from 'antd'
-import { parse as parsePartialJson } from 'partial-json'
+// import { parse as parsePartialJson } from 'partial-json'
 import { useMemo } from 'react'
 
 // 导出所有类型
@@ -138,7 +138,8 @@ export function MessageAgentTools({ toolResponse }: { toolResponse: NormalToolRe
   const parsedPartialArgs = useMemo(() => {
     if (!partialArguments) return undefined
     try {
-      return parsePartialJson(partialArguments)
+      // return parsePartialJson(partialArguments)
+      return JSON.parse(partialArguments)
     } catch {
       return undefined
     }

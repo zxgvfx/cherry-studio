@@ -168,6 +168,9 @@ export abstract class BaseApiClient<
   }
 
   public getApiKey() {
+    if (!this.provider?.apiKey) {
+      return ''
+    }
     const keys = this.provider.apiKey.split(',').map((key) => key.trim())
     const keyName = `provider:${this.provider.id}:last_used_key`
 

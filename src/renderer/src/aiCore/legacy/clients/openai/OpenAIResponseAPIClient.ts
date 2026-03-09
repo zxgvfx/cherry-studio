@@ -52,6 +52,19 @@ import { OpenAIAPIClient } from './OpenAIApiClient'
 import { OpenAIBaseClient } from './OpenAIBaseClient'
 
 const logger = loggerService.withContext('OpenAIResponseAPIClient')
+
+function inferImageMimeFromBase64(base64: string): string {
+  const h = (base64 || '').trim().slice(0, 64)
+  if (!h) return 'image/png'
+  if (h.startsWith('/9j/')) return 'image/jpeg'
+  if (h.startsWith('iVBORw0KGgo')) return 'image/png'
+  if (h.startsWith('R0lGOD')) return 'image/gif'
+  if (h.startsWith('UklGR')) return 'image/webp'
+  if (h.startsWith('Qk')) return 'image/bmp'
+  if (h.startsWith('PD94') || h.startsWith('PHN2Zy')) return 'image/svg+xml'
+  return 'image/png'
+}
+
 export class OpenAIResponseAPIClient extends OpenAIBaseClient<
   OpenAI,
   OpenAIResponseSdkParams,
@@ -599,16 +612,22 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
                 toolCalls.push(output)
                 break
               case 'image_generation_call':
-                controller.enqueue({
-                  type: ChunkType.IMAGE_CREATED
-                })
-                controller.enqueue({
-                  type: ChunkType.IMAGE_COMPLETE,
-                  image: {
-                    type: 'base64',
-                    images: [`data:image/png;base64,${output.result}`]
-                  }
-                })
+                {
+                  const mimeType = inferImageMimeFromBase64(output.result || '')
+                  const imageUrl = output.result ? `data:${mimeType};base64,${output.result}` : ''
+                  if (!imageUrl) break
+                  controller.enqueue({
+                    type: ChunkType.IMAGE_CREATED
+                  })
+                  controller.enqueue({
+                    type: ChunkType.IMAGE_COMPLETE,
+                    image: {
+                      type: 'base64',
+                      images: [imageUrl]
+                    }
+                  })
+                }
+                break
             }
           }
           if (toolCalls.length > 0) {
@@ -666,13 +685,18 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
               })
               break
             case 'response.image_generation_call.partial_image':
-              controller.enqueue({
-                type: ChunkType.IMAGE_DELTA,
-                image: {
-                  type: 'base64',
-                  images: [`data:image/png;base64,${chunk.partial_image_b64}`]
-                }
-              })
+              {
+                const mimeType = inferImageMimeFromBase64(chunk.partial_image_b64 || '')
+                const imageUrl = chunk.partial_image_b64 ? `data:${mimeType};base64,${chunk.partial_image_b64}` : ''
+                if (!imageUrl) break
+                controller.enqueue({
+                  type: ChunkType.IMAGE_DELTA,
+                  image: {
+                    type: 'base64',
+                    images: [imageUrl]
+                  }
+                })
+              }
               break
             case 'response.image_generation_call.completed':
               controller.enqueue({

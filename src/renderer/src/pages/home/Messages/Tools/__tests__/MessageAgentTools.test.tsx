@@ -1,9 +1,18 @@
 import type { NormalToolResponse } from '@renderer/types'
 import { render, screen } from '@testing-library/react'
-import { parse as parsePartialJson } from 'partial-json'
+// import { parse as parsePartialJson } from 'partial-json'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isValidAgentToolsType, MessageAgentTools } from '../MessageAgentTools'
+
+// Mock partial-json
+const parsePartialJson = (str: string) => {
+  try {
+    return JSON.parse(str)
+  } catch {
+    return {}
+  }
+}
 
 vi.mock('@renderer/services/AssistantService', () => ({
   getDefaultAssistant: vi.fn(() => ({

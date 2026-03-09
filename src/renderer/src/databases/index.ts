@@ -135,4 +135,38 @@ db.version(10).stores({
   message_blocks: 'id, messageId, file.id'
 })
 
+// 在数据库打开后立即修复文件数据
+db.on('ready', async () => {
+  try {
+    let fixed = 0
+    const files = await db.files.toArray()
+    
+    for (const file of files) {
+      let needsUpdate = false
+      const updates: Partial<FileMetadata> = {}
+
+      if (typeof file.size === 'object' && file.size !== null) {
+        updates.size = (file.size as any).size || 0
+        needsUpdate = true
+      }
+
+      if (typeof file.count === 'object' && file.count !== null) {
+        updates.count = (file.count as any).count || 0
+        needsUpdate = true
+      }
+
+      if (needsUpdate) {
+        await db.files.update(file.id, updates)
+        fixed++
+      }
+    }
+
+    if (fixed > 0) {
+      console.log(`[Database] Fixed ${fixed} files with object size/count`)
+    }
+  } catch (error) {
+    console.error('[Database] Error fixing file data:', error)
+  }
+})
+
 export default db

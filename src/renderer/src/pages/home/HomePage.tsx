@@ -1,13 +1,16 @@
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
+import { isTextChatModel } from '@renderer/config/models'
 import { useAgentSessionInitializer } from '@renderer/hooks/agents/useAgentSessionInitializer'
 import { useAssistants } from '@renderer/hooks/useAssistant'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useActiveTopic } from '@renderer/hooks/useTopic'
 import NavigationService from '@renderer/services/NavigationService'
+import { fetchMcpTools } from '@renderer/services/ApiService'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import { setActiveAgentId, setActiveTopicOrSessionAction } from '@renderer/store/runtime'
 import type { Assistant, Topic } from '@renderer/types'
+import { isPromptToolUse, isSupportedToolUse } from '@renderer/utils/mcp-tools'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { AnimatePresence, motion } from 'motion/react'
 import type { FC } from 'react'
@@ -90,6 +93,20 @@ const HomePage: FC = () => {
       window.api.window.resetMinimumSize()
     }
   }, [showAssistants, showTopics, topicPosition])
+
+  // 预加载当前助手的 MCP 工具列表，确保工具在发送消息前已加载
+  useEffect(() => {
+    if (!activeAssistant) return
+    if (!isTextChatModel(activeAssistant.model)) return
+    if (!isPromptToolUse(activeAssistant) && !isSupportedToolUse(activeAssistant)) return
+
+    // 异步预加载工具列表，不阻塞 UI
+    fetchMcpTools(activeAssistant).catch((error) => {
+      // 静默处理错误，避免影响用户体验
+      // 工具列表会在发送消息时再次尝试加载
+      console.debug('[HomePage] Failed to preload MCP tools:', error)
+    })
+  }, [activeAssistant?.id])
 
   return (
     <Container id="home-page">

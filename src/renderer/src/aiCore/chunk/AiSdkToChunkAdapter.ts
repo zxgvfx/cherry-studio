@@ -4,7 +4,7 @@
  */
 
 import { loggerService } from '@logger'
-import type { AISDKWebSearchResult, MCPTool, WebSearchResults, WebSearchSource } from '@renderer/types'
+import type { AISDKWebSearchResult, GenerateImageResponse, MCPTool, WebSearchResults, WebSearchSource } from '@renderer/types'
 import { WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { Chunk, ProviderMetadata } from '@renderer/types/chunk'
 import { ChunkType } from '@renderer/types/chunk'
@@ -32,6 +32,13 @@ export class AiSdkToChunkAdapter {
   private firstTokenTimestamp: number | null = null
   private hasTextContent = false
   private getSessionWasCleared?: () => boolean
+  private mcpToolMarkerBuffer = ''
+  private responseTagBuffer = ''
+  private pendingTextStart = false
+  private actionBuffer: string | null = null
+
+  private static readonly MCP_TOOL_MARKER_START = '[MCP_TOOL_CHUNK]'
+  private static readonly MCP_TOOL_MARKER_END = '[/MCP_TOOL_CHUNK]'
 
   constructor(
     private onChunk: (chunk: Chunk) => void,
@@ -39,7 +46,8 @@ export class AiSdkToChunkAdapter {
     accumulate?: boolean,
     enableWebSearch?: boolean,
     onSessionUpdate?: (sessionId: string) => void,
-    getSessionWasCleared?: () => boolean
+    getSessionWasCleared?: () => boolean,
+    private onImageAction?: (prompt: string) => Promise<GenerateImageResponse | null>
   ) {
     this.toolCallHandler = new ToolCallChunkHandler(onChunk, mcpTools)
     this.accumulate = accumulate
@@ -57,6 +65,203 @@ export class AiSdkToChunkAdapter {
   private resetTimingState() {
     this.responseStartTimestamp = null
     this.firstTokenTimestamp = null
+  }
+
+  private emitTextStartIfNeeded() {
+    if (!this.pendingTextStart) {
+      return
+    }
+    this.pendingTextStart = false
+    this.onChunk({
+      type: ChunkType.TEXT_START
+    })
+  }
+
+  private parseImageActionPayload(payloadText: string): { prompt: string } | null {
+    const trimmed = payloadText.trim()
+    if (!trimmed.startsWith('{')) {
+      return null
+    }
+
+    let parsed: any
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch {
+      return null
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+
+    const action = parsed.action || parsed.action_name || parsed.actionName
+    if (action !== 'dalle.text2im') {
+      return null
+    }
+
+    let actionInput = parsed.action_input ?? parsed.actionInput ?? parsed.input
+    if (typeof actionInput === 'string') {
+      try {
+        actionInput = JSON.parse(actionInput)
+      } catch {
+        return null
+      }
+    }
+
+    const prompt = actionInput?.prompt || parsed.prompt
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      return null
+    }
+
+    return { prompt: prompt.trim() }
+  }
+
+  private async handleImageAction(buffer: string): Promise<boolean> {
+    if (!this.onImageAction) {
+      return false
+    }
+
+    const action = this.parseImageActionPayload(buffer)
+    if (!action) {
+      return false
+    }
+
+    logger.info('[ImageAction] Parsed dalle.text2im action', {
+      promptLength: action.prompt.length,
+      promptPreview: action.prompt.slice(0, 120),
+      rawPayloadLength: buffer.length
+    })
+    this.onChunk({ type: ChunkType.IMAGE_CREATED })
+    try {
+      const imageResponse = await this.onImageAction(action.prompt)
+      logger.info('[ImageAction] Image handler returned', {
+        hasResponse: !!imageResponse,
+        responseType: imageResponse?.type,
+        imageCount: imageResponse?.images?.length || 0,
+        sample: imageResponse?.images?.[0]?.slice(0, 80)
+      })
+      if (!imageResponse || !imageResponse.images?.length) {
+        throw new Error('Image generation returned empty result.')
+      }
+      this.onChunk({
+        type: ChunkType.IMAGE_COMPLETE,
+        image: imageResponse
+      })
+    } catch (error) {
+      logger.error('[ImageAction] Image generation failed', {
+        errorMessage: formatErrorMessage(error),
+        error
+      })
+      this.onChunk({
+        type: ChunkType.ERROR,
+        error: AISDKError.isInstance(error)
+          ? error
+          : new ProviderSpecificError({
+              message: formatErrorMessage(error),
+              provider: 'unknown',
+              cause: error
+            })
+      })
+    }
+    return true
+  }
+
+  private stripResponseTags(text: string): string {
+    const startTag = '<response>'
+    const endTag = '</response>'
+    let buffer = `${this.responseTagBuffer}${text}`
+    this.responseTagBuffer = ''
+    let output = ''
+
+    while (buffer.length > 0) {
+      const startIdx = buffer.indexOf(startTag)
+      if (startIdx === -1) {
+        output += buffer
+        buffer = ''
+        break
+      }
+
+      if (startIdx > 0) {
+        output += buffer.slice(0, startIdx)
+      }
+
+      buffer = buffer.slice(startIdx + startTag.length)
+      const endIdx = buffer.indexOf(endTag)
+      if (endIdx === -1) {
+        this.responseTagBuffer = `${startTag}${buffer}`
+        buffer = ''
+        break
+      }
+
+      output += buffer.slice(0, endIdx)
+      buffer = buffer.slice(endIdx + endTag.length)
+    }
+
+    return output
+  }
+
+  private extractMcpToolChunks(text: string): { cleanText: string; toolChunks: Chunk[] } {
+    const start = AiSdkToChunkAdapter.MCP_TOOL_MARKER_START
+    const end = AiSdkToChunkAdapter.MCP_TOOL_MARKER_END
+    let buffer = `${this.mcpToolMarkerBuffer}${text}`
+    this.mcpToolMarkerBuffer = ''
+    let cleanText = ''
+    const toolChunks: Chunk[] = []
+
+    while (buffer.length > 0) {
+      const startIdx = buffer.indexOf(start)
+      if (startIdx === -1) {
+        cleanText += buffer
+        buffer = ''
+        break
+      }
+
+      if (startIdx > 0) {
+        cleanText += buffer.slice(0, startIdx)
+      }
+
+      const endIdx = buffer.indexOf(end, startIdx + start.length)
+      if (endIdx === -1) {
+        this.mcpToolMarkerBuffer = buffer.slice(startIdx)
+        buffer = ''
+        break
+      }
+
+      const payload = buffer.slice(startIdx + start.length, endIdx)
+      const toolChunk = this.parseMcpToolChunk(payload)
+      if (toolChunk) {
+        toolChunks.push(toolChunk)
+      }
+      buffer = buffer.slice(endIdx + end.length)
+    }
+
+    return { cleanText, toolChunks }
+  }
+
+  private parseMcpToolChunk(payload: string): Chunk | null {
+    try {
+      const parsed = JSON.parse(payload) as { type?: string; responses?: unknown }
+      const normalizedType = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : ''
+      const allowedTypes = [
+        ChunkType.MCP_TOOL_PENDING,
+        ChunkType.MCP_TOOL_IN_PROGRESS,
+        ChunkType.MCP_TOOL_COMPLETE,
+        ChunkType.MCP_TOOL_STREAMING
+      ]
+      if (!allowedTypes.includes(normalizedType as ChunkType)) {
+        return null
+      }
+      if (!Array.isArray(parsed.responses)) {
+        return null
+      }
+      return {
+        type: normalizedType as ChunkType,
+        responses: parsed.responses
+      } as Chunk
+    } catch (error) {
+      logger.warn('Failed to parse MCP tool chunk marker.', { error })
+      return null
+    }
   }
 
   /**
@@ -123,7 +328,7 @@ export class AiSdkToChunkAdapter {
         }
 
         // 转换并发送 chunk
-        this.convertAndEmitChunk(value, final)
+        await this.convertAndEmitChunk(value, final)
       }
     } finally {
       reader.releaseLock()
@@ -150,7 +355,7 @@ export class AiSdkToChunkAdapter {
    * 转换 AI SDK chunk 为 Cherry Studio chunk 并调用回调
    * @param chunk AI SDK 的 chunk 数据
    */
-  private convertAndEmitChunk(
+  private async convertAndEmitChunk(
     chunk: TextStreamPart<any>,
     final: {
       text: string
@@ -180,13 +385,25 @@ export class AiSdkToChunkAdapter {
         // 如果有未完成的思考内容，先生成 THINKING_COMPLETE
         // 这处理了某些提供商不发送 reasoning-end 事件的情况
         this.emitThinkingCompleteIfNeeded(final)
-        this.onChunk({
-          type: ChunkType.TEXT_START
-        })
+        this.pendingTextStart = true
         break
       case 'text-delta': {
-        this.hasTextContent = true
-        const processedText = chunk.text || ''
+        const rawText = chunk.text || ''
+        const strippedText = this.stripResponseTags(rawText)
+        if (this.actionBuffer !== null) {
+          this.actionBuffer += strippedText
+          break
+        }
+        if (this.pendingTextStart && strippedText.trimStart().startsWith('{')) {
+          this.actionBuffer = strippedText
+          break
+        }
+        const { cleanText, toolChunks } = this.extractMcpToolChunks(strippedText)
+        if (cleanText || toolChunks.length > 0) {
+          this.hasTextContent = true
+        }
+        toolChunks.forEach((toolChunk) => this.onChunk(toolChunk))
+        const processedText = cleanText
         let finalText: string
 
         // Only apply link conversion if web search is enabled
@@ -228,6 +445,7 @@ export class AiSdkToChunkAdapter {
 
         // Only emit chunk if there's text to send
         if (finalText) {
+          this.emitTextStartIfNeeded()
           this.markFirstTokenIfNeeded()
           this.onChunk({
             type: ChunkType.TEXT_DELTA,
@@ -237,7 +455,33 @@ export class AiSdkToChunkAdapter {
         }
         break
       }
-      case 'text-end':
+      case 'text-end': {
+        if (this.actionBuffer !== null) {
+          const bufferedText = this.actionBuffer
+          this.actionBuffer = null
+          const handled = await this.handleImageAction(bufferedText)
+          if (handled) {
+            this.pendingTextStart = false
+            final.text = ''
+            break
+          }
+          if (bufferedText) {
+            this.emitTextStartIfNeeded()
+            this.hasTextContent = true
+            this.onChunk({
+              type: ChunkType.TEXT_DELTA,
+              text: bufferedText
+            })
+            this.onChunk({
+              type: ChunkType.TEXT_COMPLETE,
+              text: bufferedText
+            })
+            final.text = bufferedText
+            break
+          }
+        }
+
+        this.emitTextStartIfNeeded()
         this.onChunk({
           type: ChunkType.TEXT_COMPLETE,
           text: (chunk.providerMetadata?.text?.value as string) ?? final.text ?? '',
@@ -247,6 +491,7 @@ export class AiSdkToChunkAdapter {
         // Clear providerMetadata for next text block
         final.providerMetadata = undefined
         break
+      }
       case 'reasoning-start':
         // if (final.reasoningId !== chunk.id) {
         final.reasoningId = chunk.id

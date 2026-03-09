@@ -282,6 +282,7 @@ export type User = {
 export type ModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
 
 export type ModelTag = Exclude<ModelType, 'text'> | 'free'
+export type ModelPrimaryModality = 'text' | 'multimodal' | 'image' | 'embedding' | 'rerank'
 
 // "image-generation" is also openai endpoint, but specifically for image generation.
 export const EndPointTypeSchema = z.enum([
@@ -321,6 +322,14 @@ export type Model = {
    * @deprecated
    */
   type?: ModelType[]
+  /**
+   * Centralized primary modality classification for routing decisions.
+   * - text: text/chat models
+   * - multimodal: text + image input models
+   * - image: dedicated image generation/edit models
+   * - embedding/rerank: retrieval models
+   */
+  primaryModality?: ModelPrimaryModality
   pricing?: ModelPricing
   endpoint_type?: EndpointType
   supported_endpoint_types?: EndpointType[]
@@ -713,12 +722,25 @@ export type WebSearchProvider = {
   allowedTools?: string[]
   parentSpanId?: string
   modelName?: string
+  /**
+   * Content fetch mode for search results:
+   * - 'snippet': Use search engine's returned snippets directly (faster, no external network required)
+   * - 'full': Fetch full webpage content from URLs (slower, requires network access to target sites)
+   * Default is 'full' for backward compatibility, but 'snippet' is recommended for internal networks
+   */
+  contentFetchMode?: 'snippet' | 'full'
+  /**
+   * 是否为中心化配置的搜索提供商（只读）
+   */
+  isCentralized?: boolean
 }
 
 export type WebSearchProviderResult = {
   title: string
   content: string
   url: string
+  links?: string[]
+  images?: string[]
 }
 
 export type WebSearchProviderResponse = {
@@ -976,6 +998,7 @@ export interface Citation {
   title?: string
   hostname?: string
   content?: string
+  images?: string[]
   showFavicon?: boolean
   type?: string
   metadata?: Record<string, any>

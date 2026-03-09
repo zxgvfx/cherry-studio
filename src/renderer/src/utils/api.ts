@@ -52,7 +52,8 @@ export function hasAPIVersion(host?: string): boolean {
  * withoutTrailingSlash('https://example.com')  // 'https://example.com'
  * ```
  */
-export function withoutTrailingSlash<T extends string>(url: T): T {
+export function withoutTrailingSlash<T extends string>(url: T | undefined | null): T {
+  if (!url) return url as T
   return url.replace(/\/$/, '') as T
 }
 
@@ -69,7 +70,8 @@ export function withoutTrailingSlash<T extends string>(url: T): T {
  * isWithTrailingSharp('https://example.com')  // false
  * ```
  */
-export function isWithTrailingSharp<T extends string>(url: T): boolean {
+export function isWithTrailingSharp<T extends string>(url: T | undefined | null): boolean {
+  if (!url) return false
   return url.endsWith('#')
 }
 
@@ -86,7 +88,8 @@ export function isWithTrailingSharp<T extends string>(url: T): boolean {
  * withoutTrailingSharp('https://example.com')  // 'https://example.com'
  * ```
  */
-export function withoutTrailingSharp<T extends string>(url: T): T {
+export function withoutTrailingSharp<T extends string>(url: T | undefined | null): T {
+  if (!url) return url as T
   return url.replace(/#$/, '') as T
 }
 
@@ -107,6 +110,7 @@ export function withoutTrailingSharp<T extends string>(url: T): T {
  * formatApiHost('https://api.example.com/v2', true, 'v1') // Returns 'https://api.example.com/v2'
  */
 export function formatApiHost(host?: string, supportApiVersion: boolean = true, apiVersion: string = 'v1'): string {
+  if (!host) return ''
   const normalizedHost = withoutTrailingSlash(trim(host))
   if (!normalizedHost) {
     return ''
@@ -125,22 +129,24 @@ export function formatApiHost(host?: string, supportApiVersion: boolean = true, 
  * 格式化 Ollama 的 API 主机地址。
  */
 export function formatOllamaApiHost(host: string): string {
+  if (!host) return ''
   const normalizedHost = withoutTrailingSlash(host)
     ?.replace(/\/v1$/, '')
     ?.replace(/\/api$/, '')
     ?.replace(/\/chat$/, '')
-  return formatApiHost(normalizedHost + '/api', false)
+  return formatApiHost((normalizedHost || '') + '/api', false)
 }
 
 /**
  * 格式化 Azure OpenAI 的 API 主机地址。
  */
 export function formatAzureOpenAIApiHost(host: string): string {
+  if (!host) return ''
   const normalizedHost = withoutTrailingSlash(host)
     ?.replace(/\/v1$/, '')
-    .replace(/\/openai$/, '')
+    ?.replace(/\/openai$/, '')
   // NOTE: AISDK会添加上`v1`
-  return formatApiHost(normalizedHost + '/openai', false)
+  return formatApiHost((normalizedHost || '') + '/openai', false)
 }
 
 export function formatVertexApiHost(provider: VertexProvider): string {
@@ -188,6 +194,7 @@ export const SUPPORTED_ENDPOINT_LIST = [
  * // Returns: { baseURL: 'https://api.example.com/v1', endpoint: '' }
  */
 export function routeToEndpoint(apiHost: string): { baseURL: string; endpoint: string } {
+  if (!apiHost) return { baseURL: '', endpoint: '' }
   const trimmedHost = trim(apiHost)
   // 前面已经确保apiHost合法
   if (!trimmedHost.endsWith('#')) {

@@ -188,8 +188,12 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, o
         if (success) {
           // 3. Set the new topic as active
           setActiveTopic(newTopic)
-          // 4. Trigger auto-rename for the new topic
-          autoRenameTopic(assistant, newTopic.id)
+          // 4. Trigger auto-rename for the new topic（延迟到下一个事件循环，完全不阻塞UI）
+          setTimeout(() => {
+            autoRenameTopic(assistant, newTopic.id).catch((error) => {
+              console.error('[autoRenameTopic] Failed to rename topic:', error)
+            })
+          }, 0)
         } else {
           // Optional: Handle cloning failure (e.g., show an error message)
           // You might want to remove the added topic if cloning fails

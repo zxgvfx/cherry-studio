@@ -31,6 +31,13 @@ const Link: React.FC<LinkProps> = (props) => {
     return false
   })
 
+  const handleOpenLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!props.href) return
+    e.preventDefault()
+    e.stopPropagation()
+    window.api?.openWebsite?.(props.href)
+  }
+
   // 如果是引用链接并且有引用数据，则使用CitationTooltip
   if (isCitation && citationData) {
     return (
@@ -40,7 +47,7 @@ const Link: React.FC<LinkProps> = (props) => {
           href={isEmpty(props.href) ? undefined : props.href}
           target="_blank"
           rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
+          onClick={handleOpenLink}
         />
       </CitationTooltip>
     )
@@ -53,7 +60,7 @@ const Link: React.FC<LinkProps> = (props) => {
         {...omit(props, ['node', 'citationData'])}
         target="_blank"
         rel="noreferrer"
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleOpenLink}
       />
     </Hyperlink>
   )

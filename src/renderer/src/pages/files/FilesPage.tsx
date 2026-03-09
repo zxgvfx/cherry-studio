@@ -96,7 +96,30 @@ const FilesPage: FC = () => {
   }
 
   const dataSource = sortedFiles?.map((file) => {
-    logger.debug('FileItem', file)
+    // 处理 size 和 count 可能是对象的情况
+    const normalizedSize = typeof file.size === 'object' && file.size !== null 
+      ? (file.size as any).size || 0
+      : typeof file.size === 'number' 
+        ? file.size 
+        : 0
+    
+    const normalizedCount = typeof file.count === 'object' && file.count !== null
+      ? (file.count as any).count || 0
+      : typeof file.count === 'number'
+        ? file.count
+        : 0
+    
+    if (typeof file.size === 'object' || typeof file.count === 'object') {
+      logger.error(`[FilesPage] CRITICAL: File has object size/count!`, {
+        fileId: file.id,
+        sizeType: typeof file.size,
+        sizeValue: file.size,
+        countType: typeof file.count,
+        countValue: file.count
+      })
+      console.error('[FilesPage] File with object:', file)
+    }
+    
     return {
       key: file.id,
       file: (
@@ -104,9 +127,9 @@ const FilesPage: FC = () => {
           {FileManager.formatFileName(file)}
         </span>
       ),
-      size: formatFileSize(file.size),
-      size_bytes: file.size,
-      count: file.count,
+      size: formatFileSize(normalizedSize),
+      size_bytes: normalizedSize,
+      count: normalizedCount,
       path: FileManager.getFilePath(file),
       ext: file.ext,
       created_at: dayjs(file.created_at).format('MM-DD HH:mm'),

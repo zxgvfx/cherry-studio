@@ -8,7 +8,8 @@ import * as z from 'zod'
 export const CitationSchema = z.object({
   url: z.url(),
   title: z.string().optional(),
-  content: z.string().optional()
+  content: z.string().optional(),
+  images: z.array(z.string()).optional()
 })
 
 interface CitationTooltipProps {

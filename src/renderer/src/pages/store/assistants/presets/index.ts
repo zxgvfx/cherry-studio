@@ -59,7 +59,14 @@ export function useSystemAssistantPresets() {
           try {
             const fileName = currentLanguage === 'zh-CN' ? 'agents-zh.json' : 'agents-en.json'
             const localAgentsData = await window.api.fs.read(`${resourcesPath}/data/${fileName}`, 'utf-8')
-            _agents = JSON.parse(localAgentsData) as AssistantPreset[]
+            const raw = JSON.parse(localAgentsData) as AssistantPreset[]
+            // 确保每个 preset 都有知识库/MCP 字段，便于助手设置对话框显示并配置
+            _agents = raw.map((a) => ({
+              ...a,
+              knowledge_bases: a.knowledge_bases ?? [],
+              mcpMode: a.mcpMode ?? 'disabled',
+              mcpServers: a.mcpServers ?? []
+            }))
           } catch (error) {
             logger.error('Failed to load local agents:', error as Error)
           }

@@ -1,10 +1,12 @@
 import type OpenAI from '@cherrystudio/openai'
 import { toFile } from '@cherrystudio/openai/uploads'
-import { isDedicatedImageGenerationModel } from '@renderer/config/models'
+import { isDedicatedImageGenerationModel, isImageEnhancementModel } from '@renderer/config/models'
 import FileManager from '@renderer/services/FileManager'
 import { ChunkType } from '@renderer/types/chunk'
 import { findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { defaultTimeout } from '@shared/config/constant'
+
+import { ensureLocalImageUrl } from '@renderer/utils/proxyImage'
 
 import type { BaseApiClient } from '../../clients/BaseApiClient'
 import type { CompletionsParams, CompletionsResult, GenericChunk } from '../schemas'
@@ -79,10 +81,11 @@ export const ImageGenerationMiddleware: CompletionsMiddleware =
           let response: OpenAI.Images.ImagesResponse
           const options = { signal, timeout: defaultTimeout }
 
-          if (imageFiles.length > 0) {
+          const canEdit = isImageEnhancementModel(assistant.model)
+
+          if (imageFiles.length > 0 && canEdit) {
             const model = assistant.model
             const provider = context.apiClientInstance.provider
-            // https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/dall-e?tabs=gpt-image-1#call-the-image-edit-api
             if (model.id.toLowerCase().includes('gpt-image-1-mini') && provider.type === 'azure-openai') {
               throw new Error('Azure OpenAI GPT-Image-1-Mini model does not support image editing.')
             }
@@ -105,21 +108,19 @@ export const ImageGenerationMiddleware: CompletionsMiddleware =
             )
           }
 
-          let imageType: 'url' | 'base64' = 'base64'
-          const imageList =
-            response.data?.reduce((acc: string[], image) => {
-              if (image.url) {
-                acc.push(image.url)
-                imageType = 'url'
-              } else if (image.b64_json) {
-                acc.push(`data:image/png;base64,${image.b64_json}`)
-              }
-              return acc
-            }, []) || []
+          const imageList: string[] = []
+          for (const image of response.data || []) {
+            if (image.b64_json) {
+              imageList.push(`data:image/png;base64,${image.b64_json}`)
+            } else if (image.url) {
+              const localUrl = await ensureLocalImageUrl(image.url)
+              imageList.push(localUrl)
+            }
+          }
 
           enqueue({
             type: ChunkType.IMAGE_COMPLETE,
-            image: { type: imageType, images: imageList }
+            image: { type: 'base64', images: imageList }
           })
 
           const usage = (response as any).usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }

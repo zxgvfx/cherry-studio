@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
-import { setApiServerEnabled as setApiServerEnabledAction } from '@renderer/store/settings'
+import { setApiServerEnabled as setApiServerEnabledAction, setApiServerPort } from '@renderer/store/settings'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -66,19 +66,31 @@ export const useApiServer = () => {
     setApiServerLoading(true)
     try {
       const result = await window.api.apiServer.start()
+      logger.info('API server start result:', result)
       if (result.success) {
         setApiServerRunning(true)
         setApiServerEnabled(true)
+        
+        // Houdini环境：从启动结果中获取实际的端口号并更新到Redux
+        // @ts-ignore - result可能包含port属性（Houdini返回格式）
+        if (result.port) {
+          // @ts-ignore
+          const actualPort = result.port
+          logger.info(`API server started on port ${actualPort}, updating Redux store`)
+          dispatch(setApiServerPort(actualPort))
+        }
+        
         window.toast.success(t('apiServer.messages.startSuccess'))
       } else {
         window.toast.error(t('apiServer.messages.startError') + result.error)
       }
     } catch (error: any) {
+      logger.error('Failed to start API server:', error)
       window.toast.error(t('apiServer.messages.startError') + (error.message || error))
     } finally {
       setApiServerLoading(false)
     }
-  }, [apiServerLoading, setApiServerEnabled, t])
+  }, [apiServerLoading, setApiServerEnabled, t, dispatch])
 
   const stopApiServer = useCallback(async () => {
     if (apiServerLoading) return

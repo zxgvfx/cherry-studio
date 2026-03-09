@@ -9,11 +9,12 @@ import {
   ZoomOutOutlined
 } from '@ant-design/icons'
 import { loggerService } from '@logger'
+import { useProxiedImage } from '@renderer/hooks/useProxiedImage'
 import { download } from '@renderer/utils/download'
 import { convertImageToPng } from '@renderer/utils/image'
 import { parseDataUrl } from '@shared/utils'
 import type { ImageProps as AntImageProps } from 'antd'
-import { Dropdown, Image as AntImage, Space } from 'antd'
+import { Dropdown, Image as AntImage, Skeleton, Space } from 'antd'
 import { Base64 } from 'js-base64'
 import { DownloadIcon } from 'lucide-react'
 import mime from 'mime'
@@ -29,8 +30,9 @@ interface ImageViewerProps extends AntImageProps {
 
 const logger = loggerService.withContext('ImageViewer')
 
-const ImageViewer: React.FC<ImageViewerProps> = ({ src, style, ...props }) => {
+const ImageViewer: React.FC<ImageViewerProps> = ({ src: rawSrc, style, ...props }) => {
   const { t } = useTranslation()
+  const { src, loading } = useProxiedImage(rawSrc)
 
   // 复制图片到剪贴板
   const handleCopyImage = async (src: string) => {
@@ -96,6 +98,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ src, style, ...props }) => {
         onClick: () => download(src)
       }
     ]
+  }
+
+  if (loading) {
+    return <Skeleton.Image active style={style ?? { width: 200, height: 200 }} />
   }
 
   return (

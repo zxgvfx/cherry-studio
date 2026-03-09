@@ -63,6 +63,11 @@ export function isFunctionCallingModel(model?: Model): boolean {
     return false
   }
 
+  // 纯图片模型不支持函数调用 / MCP
+  if (model.primaryModality === 'image') return false
+  // 多模态模型支持函数调用 / MCP（跳过 regex 排除列表）
+  if (model.primaryModality === 'multimodal') return true
+
   const modelId = getLowerBaseModelName(model.id)
 
   if (isUserSelectedModelType(model, 'function_calling') !== undefined) {

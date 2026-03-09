@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
 import {
-  isAutoEnableImageGenerationModel,
+  isDedicatedImageModel,
   isGenerateImageModel,
   isGenerateImageModels,
   isMandatoryWebSearchModel,
@@ -447,12 +447,10 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       updateAssistant({ ...assistant, webSearchProviderId: undefined })
     }
 
-    // Auto-enable/disable image generation based on model capabilities
-    if (isGenerateImageModel(model)) {
-      if (isAutoEnableImageGenerationModel(model) && !assistant.enableGenerateImage) {
-        updateAssistant({ ...assistant, enableGenerateImage: true })
-      }
-    } else if (assistant.enableGenerateImage) {
+    // Keep dedicated image models always-on, but allow multimodal image-capable models to be toggled by user.
+    if (isDedicatedImageModel(model) && !assistant.enableGenerateImage) {
+      updateAssistant({ ...assistant, enableGenerateImage: true })
+    } else if (!isGenerateImageModel(model) && assistant.enableGenerateImage) {
       updateAssistant({ ...assistant, enableGenerateImage: false })
     }
   }, [assistant, model, updateAssistant])

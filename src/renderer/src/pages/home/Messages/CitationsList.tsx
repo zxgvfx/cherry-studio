@@ -1,15 +1,17 @@
 import ContextMenu from '@renderer/components/ContextMenu'
 import Favicon from '@renderer/components/Icons/FallbackFavicon'
+import ImageViewer from '@renderer/components/ImageViewer'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import type { Citation } from '@renderer/types'
 import { fetchWebContent } from '@renderer/utils/fetch'
-import { cleanMarkdownContent } from '@renderer/utils/formats'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Button, message, Popover, Skeleton } from 'antd'
 import { Check, Copy, FileSearch } from 'lucide-react'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import ReactMarkdown, { type Components, defaultUrlTransform } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import styled from 'styled-components'
 
 interface CitationsListProps {
@@ -26,16 +28,6 @@ const queryClient = new QueryClient({
     }
   }
 })
-
-/**
- * 限制文本长度
- * @param text
- * @param maxLength
- */
-const truncateText = (text: string, maxLength = 100) => {
-  if (!text) return ''
-  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
-}
 
 const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
   const { t } = useTranslation()
@@ -138,15 +130,49 @@ const CopyButton: React.FC<{ content: string }> = ({ content }) => {
 
 const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
   const { data: fetchedContent, isLoading } = useQuery({
-    queryKey: ['webContent', citation.url],
+    queryKey: ['webContent', citation.url, citation.content],
     queryFn: async () => {
+      if (citation.content?.trim()) {
+        return citation.content
+      }
       if (!citation.url) return ''
       const res = await fetchWebContent(citation.url, 'markdown')
-      return cleanMarkdownContent(res.content)
+      return res.content
     },
-    enabled: Boolean(citation.url),
-    select: (content) => truncateText(content, 100)
+    enabled: Boolean(citation.url || citation.content)
   })
+
+  const markdownComponents: Partial<Components> = {
+    a: (props) => (
+      <CitationBodyLink
+        href={props.href || ''}
+        onClick={(e) => {
+          if (!props.href) return
+          handleLinkClick(props.href, e)
+        }}>
+        {props.children}
+      </CitationBodyLink>
+    ),
+    img: (props) => (
+      <InlineImageWrapper>
+        <ImageViewer
+          src={props.src || ''}
+          alt={props.alt || citation.title || 'citation-image'}
+          style={{ width: '100%', maxHeight: 280, objectFit: 'contain' }}
+        />
+      </InlineImageWrapper>
+    ),
+    p: (props) => {
+      const hasImage = props?.node?.children?.some((child: any) => child.tagName === 'img')
+      if (hasImage) return <div {...props} />
+      return <p {...props} />
+    }
+  }
+
+  const urlTransform = (value: string) => {
+    if (value.startsWith('data:image/')) return value
+    return defaultUrlTransform(value)
+  }
 
   return (
     <ContextMenu>
@@ -165,7 +191,13 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
         {isLoading ? (
           <Skeleton active paragraph={{ rows: 1 }} title={false} />
         ) : (
-          <WebSearchCardContent className="selectable-text">{fetchedContent}</WebSearchCardContent>
+          fetchedContent && (
+            <WebSearchCardContent className="selectable-text">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents} urlTransform={urlTransform}>
+                {fetchedContent}
+              </ReactMarkdown>
+            </WebSearchCardContent>
+          )
         )}
       </WebSearchCard>
     </ContextMenu>
@@ -314,6 +346,37 @@ const WebSearchCardContent = styled.div`
     -ms-user-select: text;
     user-select: text;
   }
+
+  p {
+    margin: 0 0 8px;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  ul,
+  ol {
+    padding-left: 18px;
+    margin: 0 0 8px;
+  }
+`
+
+const CitationBodyLink = styled.a`
+  color: var(--color-link);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`
+
+const InlineImageWrapper = styled.div`
+  margin: 10px 0;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
 `
 
 const PopoverContentContainer = styled(Scrollbar)`

@@ -8,12 +8,11 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { getModelUniqId, hasModel } from '@renderer/services/ModelService'
+import { getModelUniqId } from '@renderer/services/ModelService'
 import { useAppDispatch } from '@renderer/store'
 import { setTranslateModelPrompt } from '@renderer/store/settings'
 import type { Model } from '@renderer/types'
 import { Button, Tooltip } from 'antd'
-import { find } from 'lodash'
 import { Languages, MessageSquareMore, Rocket, Settings2 } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useMemo } from 'react'
@@ -28,7 +27,7 @@ const ModelSettings: FC = () => {
   const { defaultModel, quickModel, translateModel, setDefaultModel, setQuickModel, setTranslateModel } =
     useDefaultModel()
   const { providers } = useProviders()
-  const allModels = providers.map((p) => p.models).flat()
+  const allModels = useMemo(() => providers.map((p) => p.models).flat(), [providers])
   const { theme } = useTheme()
   const { t } = useTranslation()
   const { translateModelPrompt } = useSettings()
@@ -40,17 +39,22 @@ const ModelSettings: FC = () => {
     []
   )
 
-  const defaultModelValue = useMemo(
-    () => (hasModel(defaultModel) ? getModelUniqId(defaultModel) : undefined),
-    [defaultModel]
-  )
+  const defaultModelValue = useMemo(() => {
+    const found =
+      defaultModel && allModels.find((m) => m.id === defaultModel.id && m.provider === defaultModel.provider)
+    return found ? getModelUniqId(found) : undefined
+  }, [defaultModel, allModels])
 
-  const defaultQuickModel = useMemo(() => (hasModel(quickModel) ? getModelUniqId(quickModel) : undefined), [quickModel])
+  const defaultQuickModel = useMemo(() => {
+    const found = quickModel && allModels.find((m) => m.id === quickModel.id && m.provider === quickModel.provider)
+    return found ? getModelUniqId(found) : undefined
+  }, [quickModel, allModels])
 
-  const defaultTranslateModel = useMemo(
-    () => (hasModel(translateModel) ? getModelUniqId(translateModel) : undefined),
-    [translateModel]
-  )
+  const defaultTranslateModel = useMemo(() => {
+    const found =
+      translateModel && allModels.find((m) => m.id === translateModel.id && m.provider === translateModel.provider)
+    return found ? getModelUniqId(found) : undefined
+  }, [translateModel, allModels])
 
   const onResetTranslatePrompt = () => {
     dispatch(setTranslateModelPrompt(TRANSLATE_PROMPT))
@@ -72,7 +76,11 @@ const ModelSettings: FC = () => {
             value={defaultModelValue}
             defaultValue={defaultModelValue}
             style={{ width: 360 }}
-            onChange={(value) => setDefaultModel(find(allModels, JSON.parse(value)) as Model)}
+            onChange={(value) => {
+              const target = JSON.parse(value)
+              const model = allModels.find((m) => m.id === target.id && m.provider === target.provider)
+              if (model) setDefaultModel(model)
+            }}
             placeholder={t('settings.models.empty')}
           />
           <Button icon={<Settings2 size={16} />} style={{ marginLeft: 8 }} onClick={DefaultAssistantSettings.show} />
@@ -94,7 +102,11 @@ const ModelSettings: FC = () => {
             value={defaultQuickModel}
             defaultValue={defaultQuickModel}
             style={{ width: 360 }}
-            onChange={(value) => setQuickModel(find(allModels, JSON.parse(value)) as Model)}
+            onChange={(value) => {
+              const target = JSON.parse(value)
+              const model = allModels.find((m) => m.id === target.id && m.provider === target.provider)
+              if (model) setQuickModel(model)
+            }}
             placeholder={t('settings.models.empty')}
           />
           <Button icon={<Settings2 size={16} />} style={{ marginLeft: 8 }} onClick={TopicNamingModalPopup.show} />
@@ -115,7 +127,11 @@ const ModelSettings: FC = () => {
             value={defaultTranslateModel}
             defaultValue={defaultTranslateModel}
             style={{ width: 360 }}
-            onChange={(value) => setTranslateModel(find(allModels, JSON.parse(value)) as Model)}
+            onChange={(value) => {
+              const target = JSON.parse(value)
+              const model = allModels.find((m) => m.id === target.id && m.provider === target.provider)
+              if (model) setTranslateModel(model)
+            }}
             placeholder={t('settings.models.empty')}
           />
           <Button

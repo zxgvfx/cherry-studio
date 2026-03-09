@@ -248,6 +248,7 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
             url: result.url,
             title: result.title,
             content: result.content,
+            images: result.images,
             showFavicon: true,
             type: 'websearch'
           })) || []

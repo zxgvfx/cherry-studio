@@ -1,5 +1,5 @@
 import { ActionIconButton } from '@renderer/components/Buttons'
-import { isGenerateImageModel } from '@renderer/config/models'
+import { isDedicatedImageModel, isGenerateImageModel } from '@renderer/config/models'
 import type { Assistant, Model } from '@renderer/types'
 import { Tooltip } from 'antd'
 import { Image } from 'lucide-react'
@@ -15,18 +15,19 @@ interface Props {
 const GenerateImageButton: FC<Props> = ({ model, assistant, onEnableGenerateImage }) => {
   const { t } = useTranslation()
 
-  const ariaLabel = isGenerateImageModel(model)
-    ? t('chat.input.generate_image')
-    : t('chat.input.generate_image_not_supported')
+  const dedicated = isDedicatedImageModel(model)
+  const supported = isGenerateImageModel(model)
+
+  const ariaLabel = supported ? t('chat.input.generate_image') : t('chat.input.generate_image_not_supported')
 
   return (
     <Tooltip placement="top" title={ariaLabel} mouseLeaveDelay={0} arrow>
       <ActionIconButton
-        onClick={onEnableGenerateImage}
-        active={assistant.enableGenerateImage}
-        disabled={!isGenerateImageModel(model)}
+        onClick={dedicated ? undefined : onEnableGenerateImage}
+        active={dedicated || assistant.enableGenerateImage}
+        disabled={!supported}
         aria-label={ariaLabel}
-        aria-pressed={assistant.enableGenerateImage}>
+        aria-pressed={dedicated || assistant.enableGenerateImage}>
         <Image size={18} />
       </ActionIconButton>
     </Tooltip>

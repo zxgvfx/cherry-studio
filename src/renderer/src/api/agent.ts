@@ -254,10 +254,63 @@ export class AgentApiClient {
       const data = ApiModelsResponseSchema.parse(response.data)
       return data
     } catch (error) {
-      // Houdini environment fix: suppress error when agent server is not available
+      // Houdini environment fix: get models from local Redux store when agent server is not available
       // @ts-ignore
       if (window.api) {
-        logger.warn('AgentApiClient getModels failed (Houdini environment). Error details:', [JSON.stringify(error, Object.getOwnPropertyNames(error))])
+        logger.warn('AgentApiClient getModels failed (Houdini environment). Falling back to local providers. Error details:', [JSON.stringify(error, Object.getOwnPropertyNames(error))])
+        
+        try {
+          // Access Redux store from window (exposed in store/index.ts)
+          // @ts-ignore
+          const store = window.store
+          if (store) {
+            const state = store.getState()
+            const providers = state?.llm?.providers || []
+            
+            // Filter out centralized providers and only use active providers with valid API keys
+            const activeProviders = providers.filter((provider: any) => {
+              // Check if provider has API key (for providers that need it)
+              const needsApiKey = !['ollama', 'openrouter', 'copilot'].includes(provider.id)
+              if (needsApiKey && !provider.apiKey) return false
+              
+              // Check if provider has models
+              return provider.models && provider.models.length > 0
+            })
+            
+            // Convert local providers/models to API format, avoiding duplicates
+            const seenModelIds = new Set<string>()
+            const apiModels = activeProviders.flatMap((provider: any) => {
+              return (provider.models || [])
+                .filter((model: any) => {
+                  // Skip if we've already seen this model ID
+                  if (seenModelIds.has(model.id)) return false
+                  seenModelIds.add(model.id)
+                  return true
+                })
+                .map((model: any) => ({
+                  id: model.id,
+                  name: model.name || model.id,
+                  provider: provider.id,
+                  provider_name: provider.name,
+                  object: 'model' as const,
+                  created: Math.floor(Date.now() / 1000),
+                  owned_by: 'system'
+                }))
+            })
+            
+            logger.info(`[Houdini] Returning ${apiModels.length} models from ${activeProviders.length} active providers`)
+            return { 
+              object: 'list', 
+              data: apiModels, 
+              total: apiModels.length 
+            }
+          } else {
+            logger.error('[Houdini] Redux store not found on window object')
+          }
+        } catch (localError) {
+          logger.error('[Houdini] Failed to get models from local providers:', localError as Error)
+        }
+        
         return { object: 'list', data: [], total: 0 }
       }
       throw processError(error, 'Failed to get models.')

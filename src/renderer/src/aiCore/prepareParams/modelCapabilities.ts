@@ -51,7 +51,13 @@ function modelSupportValidator(
  * 检查模型是否支持原生PDF输入
  */
 export function supportsPdfInput(model: Model): boolean {
-  // 基于AI SDK文档，以下模型或提供商支持PDF输入
+  // 中心化模型走 Higress 代理，不支持原生 file content part
+  if ((model as any).isCentralized) return false
+
+  // 通过 centralized- provider 的模型也不支持原生 PDF
+  const provider = getProviderByModel(model)
+  if (provider?.id?.startsWith('centralized-')) return false
+
   return modelSupportValidator(model, {
     supportedModels: ['qwen-long', 'qwen-doc'],
     supportedProviders: [

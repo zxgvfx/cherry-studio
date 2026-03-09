@@ -13,7 +13,7 @@ const visionAllowedModels = [
   'gemini-1\\.5',
   'gemini-2\\.0',
   'gemini-2\\.5',
-  'gemini-3(?:\\.\\d)?-(?:flash|pro)(?:-preview)?',
+  'gemini-3(?:\\.\\d+)?-(?:flash|pro)(?:-preview)?(?:-[\\w-]+)?',
   'gemini-(flash|pro|flash-lite)-latest',
   'gemini-exp',
   'claude-3',
@@ -108,7 +108,9 @@ const DEDICATED_IMAGE_MODELS = [
   'longcat-image(?:-[\\w-]+)?',
   'hunyuanimage(?:-[\\w-]+)?',
   'seedream(?:-[\\w-]+)?',
-  'kandinsky(?:-[\\w-]+)?'
+  'kandinsky(?:-[\\w-]+)?',
+  'gemini-nano-blanan',
+  'nano-banana(?:-[\\w-]+)?'
 ]
 
 const IMAGE_ENHANCEMENT_MODELS = [
@@ -117,7 +119,8 @@ const IMAGE_ENHANCEMENT_MODELS = [
   'gpt-image-1',
   'gemini-2.5-flash-image(?:-[\\w-]+)?',
   'gemini-2.0-flash-preview-image-generation',
-  'gemini-3(?:\\.\\d+)?-pro-image(?:-[\\w-]+)?'
+  'gemini-3(?:\\.\\d+)?-(?:flash|pro)-image(?:-[\\w-]+)?',
+  'nano-banana(?:-[\\w-]+)?'
 ]
 
 const IMAGE_ENHANCEMENT_MODELS_REGEX = new RegExp(IMAGE_ENHANCEMENT_MODELS.join('|'), 'i')
@@ -127,7 +130,7 @@ const DEDICATED_IMAGE_MODEL_REGEX = new RegExp(DEDICATED_IMAGE_MODELS.join('|'),
 // Models that should auto-enable image generation button when selected
 const AUTO_ENABLE_IMAGE_MODELS = [
   'gemini-2.5-flash-image(?:-[\\w-]+)?',
-  'gemini-3(?:\\.\\d+)?-pro-image(?:-[\\w-]+)?',
+  'gemini-3(?:\\.\\d+)?-(?:flash|pro)-image(?:-[\\w-]+)?',
   ...DEDICATED_IMAGE_MODELS
 ]
 
@@ -145,12 +148,13 @@ const OPENAI_TOOL_USE_IMAGE_GENERATION_MODELS = [
 
 const OPENAI_IMAGE_GENERATION_MODELS = [...OPENAI_TOOL_USE_IMAGE_GENERATION_MODELS, 'gpt-image-1']
 
-const MODERN_IMAGE_MODELS = ['gemini-3(?:\\.\\d+)?-pro-image(?:-[\\w-]+)?']
+const MODERN_IMAGE_MODELS = ['gemini-3(?:\\.\\d+)?-(?:flash|pro)-image(?:-[\\w-]+)?']
 
 const GENERATE_IMAGE_MODELS = [
   'gemini-2.0-flash-exp(?:-[\\w-]+)?',
   'gemini-2.5-flash-image(?:-[\\w-]+)?',
   'gemini-2.0-flash-preview-image-generation',
+  'gemini-3(?:\\.\\d+)?-flash(?:-[\\w-]+)?',
   ...MODERN_IMAGE_MODELS,
   ...DEDICATED_IMAGE_MODELS
 ]
@@ -171,6 +175,9 @@ const MODERN_GENERATE_IMAGE_MODELS_REGEX = new RegExp(MODERN_IMAGE_MODELS.join('
  */
 export function isDedicatedImageModel(model: Model): boolean {
   if (!model) return false
+  // primaryModality 优先判断
+  if (model.primaryModality === 'image') return true
+  if (model.primaryModality === 'text' || model.primaryModality === 'multimodal') return false
   const modelId = getLowerBaseModelName(model.id)
   return DEDICATED_IMAGE_MODEL_REGEX.test(modelId)
 }
@@ -180,6 +187,11 @@ export const isDedicatedImageGenerationModel = isDedicatedImageModel
 
 export const isAutoEnableImageGenerationModel = (model: Model): boolean => {
   if (!model) return false
+  // 纯图片模型：始终自动启用图片生成
+  if (model.primaryModality === 'image') return true
+  // 纯文本模型：不自动启用
+  if (model.primaryModality === 'text') return false
+  // multimodal：由 regex 决定是否自动启用
 
   const modelId = getLowerBaseModelName(model.id)
   return AUTO_ENABLE_IMAGE_MODELS_REGEX.test(modelId)
@@ -194,6 +206,12 @@ export function isGenerateImageModel(model: Model): boolean {
   if (!model || isEmbeddingModel(model) || isRerankModel(model)) {
     return false
   }
+
+  // primaryModality: "image" → 纯图片模型，一定支持图片生成
+  if (model.primaryModality === 'image') return true
+  // primaryModality: "text" → 纯文本模型，不支持图片生成
+  if (model.primaryModality === 'text') return false
+  // primaryModality: "multimodal" → 由 regex 判断是否支持图片生成（如 gemini-*-image-*）
 
   const provider = getProviderByModel(model)
 
@@ -249,10 +267,11 @@ export function isVisionModel(model: Model): boolean {
   if (!model || isEmbeddingModel(model) || isRerankModel(model)) {
     return false
   }
-  // 新添字段 copilot-vision-request 后可使用 vision
-  // if (model.provider === 'copilot') {
-  //   return false
-  // }
+
+  // primaryModality 显式标注为 multimodal 或 image 的模型一定支持视觉输入
+  if (model.primaryModality === 'multimodal' || model.primaryModality === 'image') return true
+  if (model.primaryModality === 'text') return false
+
   if (isUserSelectedModelType(model, 'vision') !== undefined) {
     return isUserSelectedModelType(model, 'vision')!
   }

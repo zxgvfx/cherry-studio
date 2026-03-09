@@ -217,10 +217,14 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
           })
         }
 
-        // 更新topic的name
-        autoRenameTopic(assistant, topicId)
+        // 更新topic的name（延迟到下一个事件循环，完全不阻塞UI）
+        setTimeout(() => {
+          autoRenameTopic(assistant, topicId).catch((error) => {
+            console.error('[autoRenameTopic] Failed to rename topic:', error)
+          })
+        }, 0)
 
-        // 处理usage估算
+        // 处理usage估算（异步执行，不阻塞UI）
         // For OpenRouter, always use the accurate usage data from API, don't estimate
         const isOpenRouter = assistant.model?.provider === 'openrouter'
         if (
@@ -230,8 +234,27 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
             response?.usage?.prompt_tokens === 0 ||
             response?.usage?.completion_tokens === 0)
         ) {
-          const usage = await estimateMessagesUsage({ assistant, messages: finalContextWithAssistant })
-          response.usage = usage
+          estimateMessagesUsage({ assistant, messages: finalContextWithAssistant })
+            .then((usage) => {
+              if (response) {
+                response.usage = usage
+                // 更新 Redux 和数据库中的 usage
+                const updatedMessageUpdates = { usage }
+                dispatch(
+                  newMessagesActions.updateMessage({
+                    topicId,
+                    messageId: assistantMsgId,
+                    updates: updatedMessageUpdates
+                  })
+                )
+                saveUpdatesToDB(assistantMsgId, topicId, updatedMessageUpdates, []).catch((error) => {
+                  console.error('[saveUpdatesToDB] Failed to save usage updates:', error)
+                })
+              }
+            })
+            .catch((error) => {
+              console.error('[estimateMessagesUsage] Failed to estimate usage:', error)
+            })
         }
       }
 
@@ -255,12 +278,17 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
           updates: messageUpdates
         })
       )
-      await saveUpdatesToDB(assistantMsgId, topicId, messageUpdates, [])
+
+      // 异步保存到数据库，不阻塞UI
+      saveUpdatesToDB(assistantMsgId, topicId, messageUpdates, []).catch((error) => {
+        console.error('[saveUpdatesToDB] Failed to save updates:', error)
+      })
 
       // Track token usage analytics
       if (status === 'success') {
         trackTokenUsage({ usage: response?.usage, model: assistant?.model })
       }
+
 
       EventEmitter.emit(EVENT_NAMES.MESSAGE_COMPLETE, { id: assistantMsgId, topicId, status })
       logger.debug('onComplete finished')

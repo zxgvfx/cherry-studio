@@ -4,9 +4,7 @@ import { defineConfig } from 'electron-vite'
 import { resolve } from 'path'
 import { visualizer } from 'rollup-plugin-visualizer'
 
-// assert not supported by biome
-// import pkg from './package.json' assert { type: 'json' }
-import pkg from './package.json'
+// import pkg from './package.json'
 
 const visualizerPlugin = (type: 'renderer' | 'main') => {
   return process.env[`VISUALIZER_${type.toUpperCase()}`] ? [visualizer({ open: true })] : []
@@ -16,53 +14,53 @@ const isDev = process.env.NODE_ENV === 'development'
 const isProd = process.env.NODE_ENV === 'production'
 
 export default defineConfig({
-  main: {
-    plugins: [...visualizerPlugin('main')],
-    resolve: {
-      alias: {
-        '@main': resolve('src/main'),
-        '@types': resolve('src/renderer/src/types'),
-        '@shared': resolve('packages/shared'),
-        '@logger': resolve('src/main/services/LoggerService'),
-        '@mcp-trace/trace-core': resolve('packages/mcp-trace/trace-core'),
-        '@mcp-trace/trace-node': resolve('packages/mcp-trace/trace-node')
-      }
-    },
-    build: {
-      rollupOptions: {
-        external: ['bufferutil', 'utf-8-validate', 'electron', ...Object.keys(pkg.dependencies)],
-        output: {
-          manualChunks: undefined, // 彻底禁用代码分割 - 返回 null 强制单文件打包
-          inlineDynamicImports: true // 内联所有动态导入，这是关键配置
-        },
-        onwarn(warning, warn) {
-          if (warning.code === 'COMMONJS_VARIABLE_IN_ESM') return
-          warn(warning)
-        }
-      },
-      sourcemap: isDev
-    },
-    esbuild: isProd ? { legalComments: 'none' } : {},
-    optimizeDeps: {
-      noDiscovery: isDev
-    }
-  },
-  preload: {
-    plugins: [
-      react({
-        tsDecorators: true
-      })
-    ],
-    resolve: {
-      alias: {
-        '@shared': resolve('packages/shared'),
-        '@mcp-trace/trace-core': resolve('packages/mcp-trace/trace-core')
-      }
-    },
-    build: {
-      sourcemap: isDev
-    }
-  },
+  // main: {
+  //   plugins: [...visualizerPlugin('main')],
+  //   resolve: {
+  //     alias: {
+  //       '@main': resolve('src/main'),
+  //       '@types': resolve('src/renderer/src/types'),
+  //       '@shared': resolve('packages/shared'),
+  //       '@logger': resolve('src/main/services/LoggerService'),
+  //       '@mcp-trace/trace-core': resolve('packages/mcp-trace/trace-core'),
+  //       '@mcp-trace/trace-node': resolve('packages/mcp-trace/trace-node')
+  //     }
+  //   },
+  //   build: {
+  //     rollupOptions: {
+  //       external: ['bufferutil', 'utf-8-validate', 'electron', ...Object.keys(pkg.dependencies)],
+  //       output: {
+  //         manualChunks: undefined, // 彻底禁用代码分割 - 返回 null 强制单文件打包
+  //         inlineDynamicImports: true // 内联所有动态导入，这是关键配置
+  //       },
+  //       onwarn(warning, warn) {
+  //         if (warning.code === 'COMMONJS_VARIABLE_IN_ESM') return
+  //         warn(warning)
+  //       }
+  //     },
+  //     sourcemap: isDev
+  //   },
+  //   esbuild: isProd ? { legalComments: 'none' } : {},
+  //   optimizeDeps: {
+  //     noDiscovery: isDev
+  //   }
+  // },
+  // preload: {
+  //   plugins: [
+  //     react({
+  //       tsDecorators: true
+  //     })
+  //   ],
+  //   resolve: {
+  //     alias: {
+  //       '@shared': resolve('packages/shared'),
+  //       '@mcp-trace/trace-core': resolve('packages/mcp-trace/trace-core')
+  //     }
+  //   },
+  //   build: {
+  //     sourcemap: isDev
+  //   }
+  // },
   renderer: {
     plugins: [
       (async () => (await import('@tailwindcss/vite')).default())(),

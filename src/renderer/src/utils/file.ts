@@ -45,20 +45,30 @@ export function removeFileExtension(filePath: string): string {
  * @param {number} size 文件大小（字节）
  * @returns {string} 格式化后的文件大小字符串
  */
-export function formatFileSize(size: number): string {
-  if (size >= GB) {
-    return (size / GB).toFixed(1) + ' GB'
+export function formatFileSize(size: number | any): string {
+  // 防御性处理：确保 size 是数字
+  let normalizedSize: number
+  
+  if (typeof size === 'object' && size !== null) {
+    // 如果是对象，尝试提取 size 属性
+    normalizedSize = typeof size.size === 'number' ? size.size : 0
+    console.warn('[formatFileSize] Received object instead of number:', size)
+  } else if (typeof size === 'number') {
+    normalizedSize = size
+  } else {
+    normalizedSize = 0
+    console.warn('[formatFileSize] Received invalid type:', typeof size, size)
   }
 
-  if (size >= MB) {
-    return (size / MB).toFixed(1) + ' MB'
+  if (normalizedSize >= MB) {
+    return (normalizedSize / MB).toFixed(1) + ' MB'
   }
 
-  if (size >= KB) {
-    return (size / KB).toFixed(0) + ' KB'
+  if (normalizedSize >= KB) {
+    return (normalizedSize / KB).toFixed(0) + ' KB'
   }
 
-  return (size / KB).toFixed(2) + ' KB'
+  return (normalizedSize / KB).toFixed(2) + ' KB'
 }
 
 /**

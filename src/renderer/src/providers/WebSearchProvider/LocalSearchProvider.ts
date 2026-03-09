@@ -1,9 +1,7 @@
 import { loggerService } from '@logger'
-import { nanoid } from '@reduxjs/toolkit'
 import store from '@renderer/store'
 import type { WebSearchState } from '@renderer/store/websearch'
 import type { WebSearchProvider, WebSearchProviderResponse, WebSearchProviderResult } from '@renderer/types'
-import { createAbortPromise } from '@renderer/utils/abortController'
 import { isAbortError } from '@renderer/utils/error'
 import { fetchWebContent, noContent } from '@renderer/utils/fetch'
 
@@ -29,7 +27,6 @@ export default class LocalSearchProvider extends BaseWebSearchProvider {
     websearch: WebSearchState,
     httpOptions?: RequestInit
   ): Promise<WebSearchProviderResponse> {
-    const uid = nanoid()
     const language = store.getState().settings.language
     try {
       if (!query.trim()) {
@@ -40,31 +37,34 @@ export default class LocalSearchProvider extends BaseWebSearchProvider {
       }
 
       const cleanedQuery = query.split('\r\n')[1] ?? query
-      const queryWithLanguage = language ? this.applyLanguageFilter(cleanedQuery, language) : cleanedQuery
-      const url = this.provider.url.replace('%s', encodeURIComponent(queryWithLanguage))
-      let content: string = ''
-      const promisesToRace: [Promise<string>] = [window.api.searchService.openUrlInSearchWindow(uid, url)]
-      if (httpOptions?.signal) {
-        const abortPromise = createAbortPromise(httpOptions.signal, promisesToRace[0])
-        promisesToRace.push(abortPromise)
-      }
-      content = await Promise.race(promisesToRace)
+      const url = this.provider.url.replace('%s', encodeURIComponent(cleanedQuery))
 
-      // Parse the content to extract URLs and metadata
-      const searchItems = this.parseValidUrls(content).slice(0, websearch.maxResults)
+      logger.info(`[LocalSearchProvider] Using backend search for URL: ${url}`)
+      const response = await (window as any).api?.network?.search?.({
+        provider: this.provider.id as 'local-google' | 'local-bing' | 'local-baidu',
+        url,
+        language: language ? language.split('-')[0] : undefined,
+        timeout: 30000
+      })
+
+      if (!response?.success) {
+        throw new Error(`Failed to fetch search page: ${response?.error || 'Unknown error'}`)
+      }
+
+      const searchItems = (response.results || []).slice(0, websearch.maxResults)
 
       const validItems = searchItems
         .filter((item) => item.url.startsWith('http') || item.url.startsWith('https'))
         .slice(0, websearch.maxResults)
-      // Logger.log('Valid search items:', validItems)
+
+      logger.info(`[LocalSearchProvider] Found ${validItems.length} valid search items`)
 
       // Fetch content for each URL concurrently
+      // fetchWebContent supports Qt environment via httpProxy.get
       const fetchPromises = validItems.map(async (item) => {
-        // Logger.log(`Fetching content for ${item.url}...`)
-        return await fetchWebContent(item.url, 'markdown', this.provider.usingBrowser, httpOptions)
+        return await fetchWebContent(item.url, 'markdown', this.provider.usingBrowser, httpOptions, true)
       })
 
-      // Wait for all fetches to complete
       const results: WebSearchProviderResult[] = await Promise.all(fetchPromises)
 
       return {
@@ -77,21 +77,10 @@ export default class LocalSearchProvider extends BaseWebSearchProvider {
       }
       logger.error('Local search failed:', error as Error)
       throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    } finally {
-      await window.api.searchService.closeSearchWindow(uid)
     }
   }
 
-  /**
-   * 根据提供的语言为查询添加语言过滤器
-   * @param query 原始查询
-   * @param language 语言代码 (例如: 'zh-CN', 'en-US')
-   * @returns 带有语言过滤的查询
-   */
-  protected applyLanguageFilter(query: string, language: string): string {
-    if (this.provider.id.includes('local-google') || this.provider.id.includes('local-bing')) {
-      return `${query} lang:${language.split('-')[0]}`
-    }
+  protected applyLanguageFilter(query: string, _language: string): string {
     return query
   }
 

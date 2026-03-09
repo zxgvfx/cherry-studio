@@ -2,7 +2,6 @@ import { HStack } from '@renderer/components/Layout'
 import { TopView } from '@renderer/components/TopView'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useAssistantPreset } from '@renderer/hooks/useAssistantPresets'
-import { useSidebarIconShow } from '@renderer/hooks/useSidebarIcon'
 import type { Assistant } from '@renderer/types'
 import { Menu, Modal } from 'antd'
 import { useState } from 'react'
@@ -49,8 +48,6 @@ const AssistantSettingPopupContainer: React.FC<Props> = ({ resolve, tab, ...prop
     ? _useAgent.updateAssistantPresetSettings
     : _useAssistant.updateAssistantSettings
 
-  const showKnowledgeIcon = useSidebarIconShow('knowledge')
-
   const onOk = () => {
     setOpen(false)
   }
@@ -72,7 +69,7 @@ const AssistantSettingPopupContainer: React.FC<Props> = ({ resolve, tab, ...prop
       key: 'prompt',
       label: t('assistants.settings.prompt')
     },
-    showKnowledgeIcon && {
+    {
       key: 'knowledge_base',
       label: t('assistants.settings.knowledge_base.label')
     },
@@ -137,7 +134,7 @@ const AssistantSettingPopupContainer: React.FC<Props> = ({ resolve, tab, ...prop
               updateAssistantSettings={updateAssistantSettings}
             />
           )}
-          {menu === 'knowledge_base' && showKnowledgeIcon && (
+          {menu === 'knowledge_base' && (
             <AssistantKnowledgeBaseSettings
               assistant={assistant}
               updateAssistant={updateAssistant}

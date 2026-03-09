@@ -69,8 +69,10 @@ export default class AiProvider {
 
     // 2. 构建中间件链
     const builder = CompletionsMiddlewareBuilder.withDefaults()
-    // images api
-    if (isDedicatedImageGenerationModel(model)) {
+    // images api — only when model explicitly uses the images endpoint (not chat/completions)
+    const useImagesApi = isDedicatedImageGenerationModel(model)
+      && (!model.endpoint_type || model.endpoint_type === 'image-generation')
+    if (useImagesApi) {
       builder.clear()
       builder
         .add(MiddlewareRegistry[FinalChunkConsumerMiddlewareName])

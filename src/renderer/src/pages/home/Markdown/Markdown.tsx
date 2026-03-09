@@ -149,7 +149,7 @@ const Markdown: FC<Props> = ({ block, postProcess }) => {
   }
 
   const urlTransform = useCallback((value: string) => {
-    if (value.startsWith('data:image/png') || value.startsWith('data:image/jpeg')) return value
+    if (value.startsWith('data:image/')) return value
     return defaultUrlTransform(value)
   }, [])
 

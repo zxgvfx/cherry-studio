@@ -11,6 +11,7 @@ import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
 import { addModel, updateModel, addProvider, initialState } from '@renderer/store/llm'
 import { addMCPServer, updateMCPServer } from '@renderer/store/mcp'
+import { addWebSearchProvider, updateWebSearchProvider } from '@renderer/store/websearch'
 import {
   type ToolPermissionRequestPayload,
   type ToolPermissionResultPayload,
@@ -108,7 +109,7 @@ export function useAppInit() {
                 // Add models for this provider
                 if (cProvider.models && Array.isArray(cProvider.models)) {
                     cProvider.models.forEach((model: any) => {
-                        const modelWithFlag = { ...model, isCentralized: true, group: cProvider.name || 'Centralized' }
+                        const modelWithFlag = { ...model, provider: providerId, isCentralized: true, group: cProvider.name || 'Centralized' }
                         dispatch(updateModel({ providerId: providerId, model: modelWithFlag }))
                         dispatch(addModel({ providerId: providerId, model: modelWithFlag }))
                     })
@@ -163,6 +164,22 @@ export function useAppInit() {
             })
         }
 
+        // Handle centralized web search providers
+        const centralizedWebSearchProviders = config.centralizedWebSearchProviders || []
+        if (centralizedWebSearchProviders.length > 0) {
+            logger.info('Loading centralized web search providers:', centralizedWebSearchProviders)
+            centralizedWebSearchProviders.forEach((provider: any) => {
+                // Ensure provider has an ID
+                if (provider.id) {
+                    const providerWithFlag = { ...provider, isCentralized: true }
+                    dispatch(updateWebSearchProvider(providerWithFlag))
+                    dispatch(addWebSearchProvider(providerWithFlag))
+                } else {
+                    logger.warn('Skipping centralized web search provider without ID:', provider)
+                }
+            })
+        }
+
         // 等待模型加载完成后，处理默认模型配置
         await delay(0.2) // 给 Redux 更多时间更新
         
@@ -186,9 +203,16 @@ export function useAppInit() {
           }
           
           // 辅助函数：根据 model ID 在所有 providers 中查找模型
-          const findModelById = (modelId: string, providers: any[]) => {
+          const findModelById = (modelConfig: string | { id: string; provider?: string }, providers: any[]) => {
+            const targetId = typeof modelConfig === 'string' ? modelConfig : modelConfig.id
+            const targetProvider = typeof modelConfig === 'string' ? undefined : modelConfig.provider
+
             for (const provider of providers) {
-              const model = provider.models?.find((m: any) => m.id === modelId)
+              // 如果指定了 provider，先检查 provider id 是否匹配
+              if (targetProvider && provider.id !== targetProvider) {
+                continue
+              }
+              const model = provider.models?.find((m: any) => m.id === targetId)
               if (model) return model
             }
             return null

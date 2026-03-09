@@ -1,6 +1,7 @@
 export * from './default'
 export * from './embedding'
 export * from './logo'
+export * from './modality'
 export * from './openai'
 export * from './qwen'
 export * from './reasoning'

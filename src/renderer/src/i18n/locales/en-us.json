@@ -5265,6 +5265,13 @@
           },
           "title": "Search Result Compression"
         },
+        "content_fetch_mode": {
+          "full": "Fetch Full Content",
+          "help": "Use 'Snippet Only' mode for internal networks that cannot access external websites to avoid freezing",
+          "label": "Content Fetch Mode",
+          "snippet": "Snippet Only (Recommended for Intranet)",
+          "tip": "Choose how to fetch search result content. 'Snippet Only' uses short summaries returned by the search engine without accessing target websites; 'Fetch Full Content' visits each search result page to get complete content"
+        },
         "content_limit": "Content length limit",
         "content_limit_tooltip": "Limit the content length of the search results; content that exceeds the limit will be truncated.",
         "default_provider": "Default Provider",
