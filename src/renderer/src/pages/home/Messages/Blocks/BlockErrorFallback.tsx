@@ -1,9 +1,9 @@
 import { isProd } from '@renderer/config/constant'
-import type { ComponentType } from 'react'
+import type { FC } from 'react'
 import type { FallbackProps } from 'react-error-boundary'
 import { useTranslation } from 'react-i18next'
 
-const BlockErrorFallback: ComponentType<FallbackProps> = ({ error }) => {
+const BlockErrorFallback: FC<FallbackProps> = ({ error }) => {
   const { t } = useTranslation()
 
   return (

@@ -55,7 +55,7 @@ const AnimatedBlockWrapper: React.FC<AnimatedBlockWrapperProps> = ({ children, e
       variants={blockWrapperVariants}
       initial={enableAnimation ? 'hidden' : 'static'}
       animate={enableAnimation ? 'visible' : 'static'}>
-      <ErrorBoundary fallbackComponent={BlockErrorFallback}>{children}</ErrorBoundary>
+      <ErrorBoundary FallbackComponent={BlockErrorFallback}>{children}</ErrorBoundary>
     </motion.div>
   )
 }

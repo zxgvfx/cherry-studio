@@ -6,7 +6,7 @@
 import type { TextStreamPart, ToolSet } from 'ai'
 
 import { definePlugin } from '../../index'
-import type { AiPlugin, StreamTextParams, StreamTextResult } from '../../types'
+import type { AiPlugin, AiRequestContext, StreamTextParams, StreamTextResult } from '../../types'
 import { StreamEventManager } from './StreamEventManager'
 import { type TagConfig, TagExtractor } from './tagExtraction'
 import { ToolExecutor } from './ToolExecutor'

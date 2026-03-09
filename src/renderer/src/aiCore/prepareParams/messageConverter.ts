@@ -7,7 +7,7 @@ import type { ReasoningPart } from '@ai-sdk/provider-utils'
 import { loggerService } from '@logger'
 import { getModelPrimaryModality, isImageEnhancementModel, isVisionModel } from '@renderer/config/models'
 import type { Message, Model } from '@renderer/types'
-import { FileTypes } from '@renderer/types'
+import { FILE_TYPE } from '@renderer/types'
 import type {
   FileMessageBlock,
   ImageMessageBlock,
@@ -154,7 +154,7 @@ async function convertMessageToUserModelMessage(
     // 注意：AI SDK 的 OpenAI provider 校验 mediaType，拒绝 application/pdf，
     // 因此视觉模型需要将 PDF 渲染为 PNG 图片再发送（image/png 通过校验）。
     // Legacy 路径（OpenAIApiClient.ts）可以直接发送 data:application/pdf;base64,...
-    if (!processed && file.type === FileTypes.DOCUMENT && file.ext === '.pdf') {
+    if (!processed && file.type === FILE_TYPE.DOCUMENT && file.ext === '.pdf') {
       try {
         if (isVisionModel) {
           // 视觉/多模态模型：渲染 PDF 页面为图片，以 image/png 格式发送

@@ -251,7 +251,7 @@ const ToolListContent = React.memo(({ blocks, scrollRef }: ToolListContentProps)
       const isCompleted = isCompletedStatus(status)
       return (
         <ToolItem key={block.id} data-block-id={block.id} $isCompleted={isCompleted}>
-          <ErrorBoundary fallbackComponent={BlockErrorFallback}>
+          <ErrorBoundary FallbackComponent={BlockErrorFallback}>
             <MessageTools block={block} />
           </ErrorBoundary>
         </ToolItem>
