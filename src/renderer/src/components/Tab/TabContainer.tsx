@@ -10,6 +10,7 @@ import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 // import { useSettings } from '@renderer/hooks/useSettings'
 import { getThemeModeLabel, getTitleLabel } from '@renderer/i18n/label'
+import UpdateAppButton from '@renderer/pages/home/components/UpdateAppButton'
 import tabsService from '@renderer/services/TabsService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import type { Tab } from '@renderer/store/tabs'
@@ -35,6 +36,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
 import MinAppIcon from '../Icons/MinAppIcon'
+import { OpenClawIcon } from '../Icons/SVGIcon'
 import MinAppTabsPool from '../MinApp/MinAppTabsPool'
 
 interface TabsContainerProps {
@@ -98,6 +100,8 @@ const getTabIcon = (
       return <Settings size={14} />
     case 'code':
       return <Terminal size={14} />
+    case 'openclaw':
+      return <OpenClawIcon style={{ width: 14, height: 14 }} />
     default:
       return null
   }
@@ -264,20 +268,6 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
         </HorizontalScrollContainer>
         <RightButtonsContainer>
           {/* 主题切换按钮已移除 - 页面嵌入到 Qt 窗口中 */}
-          {/* <Tooltip
-            title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
-            mouseEnterDelay={0.8}
-            placement="bottom">
-            <ThemeButton onClick={toggleTheme}>
-              {settedTheme === ThemeMode.dark ? (
-                <Moon size={16} />
-              ) : settedTheme === ThemeMode.light ? (
-                <Sun size={16} />
-              ) : (
-                <Monitor size={16} />
-              )}
-            </ThemeButton>
-          </Tooltip> */}
           <SettingsButton onClick={handleSettingsClick} $active={activeTabId === 'settings'}>
             <Settings size={16} />
           </SettingsButton>
