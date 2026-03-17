@@ -4,7 +4,7 @@ import { isDedicatedImageGenerationModel, isImageEnhancementModel } from '@rende
 import FileManager from '@renderer/services/FileManager'
 import { ChunkType } from '@renderer/types/chunk'
 import { findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
-import { defaultTimeout } from '@shared/config/constant'
+import { DEFAULT_TIMEOUT } from '@shared/config/constant'
 
 import { ensureLocalImageUrl } from '@renderer/utils/proxyImage'
 
@@ -79,7 +79,7 @@ export const ImageGenerationMiddleware: CompletionsMiddleware =
 
           const startTime = Date.now()
           let response: OpenAI.Images.ImagesResponse
-          const options = { signal, timeout: defaultTimeout }
+          const options = { signal, timeout: DEFAULT_TIMEOUT }
 
           const canEdit = isImageEnhancementModel(assistant.model)
 

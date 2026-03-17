@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
+import { setApiServerRunningAction } from '@renderer/store/runtime'
 import { setApiServerEnabled as setApiServerEnabledAction, setApiServerPort } from '@renderer/store/settings'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -34,9 +35,16 @@ export const useApiServer = () => {
   const apiServerConfig = useAppSelector((state) => state.settings.apiServer)
   const dispatch = useAppDispatch()
 
-  // Initial state - no longer optimistic, wait for actual status
-  const [apiServerRunning, setApiServerRunning] = useState(false)
+  const apiServerRunning = useAppSelector((state) => state.runtime.apiServerRunning)
+  // Is checking the API server status
   const [apiServerLoading, setApiServerLoading] = useState(true)
+
+  const setApiServerRunning = useCallback(
+    (running: boolean) => {
+      dispatch(setApiServerRunningAction(running))
+    },
+    [dispatch]
+  )
 
   const setApiServerEnabled = useCallback(
     (enabled: boolean) => {
@@ -59,7 +67,7 @@ export const useApiServer = () => {
     } finally {
       setApiServerLoading(false)
     }
-  }, [apiServerConfig.enabled, setApiServerEnabled])
+  }, [apiServerConfig.enabled, setApiServerEnabled, setApiServerLoading, setApiServerRunning])
 
   const startApiServer = useCallback(async () => {
     if (apiServerLoading) return
@@ -90,7 +98,7 @@ export const useApiServer = () => {
     } finally {
       setApiServerLoading(false)
     }
-  }, [apiServerLoading, setApiServerEnabled, t, dispatch])
+  }, [apiServerLoading, setApiServerEnabled, setApiServerLoading, setApiServerRunning, t, dispatch])
 
   const stopApiServer = useCallback(async () => {
     if (apiServerLoading) return
@@ -109,7 +117,7 @@ export const useApiServer = () => {
     } finally {
       setApiServerLoading(false)
     }
-  }, [apiServerLoading, setApiServerEnabled, t])
+  }, [apiServerLoading, setApiServerEnabled, setApiServerLoading, setApiServerRunning, t])
 
   const restartApiServer = useCallback(async () => {
     if (apiServerLoading) return
@@ -128,7 +136,7 @@ export const useApiServer = () => {
     } finally {
       setApiServerLoading(false)
     }
-  }, [apiServerLoading, checkApiServerStatus, setApiServerEnabled, t])
+  }, [apiServerLoading, checkApiServerStatus, setApiServerEnabled, setApiServerLoading, t])
 
   useEffect(() => {
     checkApiServerStatus()

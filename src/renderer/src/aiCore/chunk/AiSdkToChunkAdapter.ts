@@ -10,6 +10,7 @@ import type { Chunk, ProviderMetadata } from '@renderer/types/chunk'
 import { ChunkType } from '@renderer/types/chunk'
 import { ProviderSpecificError } from '@renderer/types/provider-specific-error'
 import { formatErrorMessage, isAbortError } from '@renderer/utils/error'
+import type { IdleTimeoutHandle } from '@renderer/utils/IdleTimeoutController'
 import { convertLinks, flushLinkConverterBuffer } from '@renderer/utils/linkConverter'
 import type { ClaudeCodeRawValue } from '@shared/agents/claudecode/types'
 import { AISDKError, type TextStreamPart, type ToolSet } from 'ai'
@@ -36,6 +37,8 @@ export class AiSdkToChunkAdapter {
   private responseTagBuffer = ''
   private pendingTextStart = false
   private actionBuffer: string | null = null
+  private providerId?: string
+  private idleTimeout?: IdleTimeoutHandle
 
   private static readonly MCP_TOOL_MARKER_START = '[MCP_TOOL_CHUNK]'
   private static readonly MCP_TOOL_MARKER_END = '[/MCP_TOOL_CHUNK]'
@@ -47,13 +50,17 @@ export class AiSdkToChunkAdapter {
     enableWebSearch?: boolean,
     onSessionUpdate?: (sessionId: string) => void,
     getSessionWasCleared?: () => boolean,
-    private onImageAction?: (prompt: string) => Promise<GenerateImageResponse | null>
+    private onImageAction?: (prompt: string) => Promise<GenerateImageResponse | null>,
+    providerId?: string,
+    idleTimeout?: IdleTimeoutHandle
   ) {
     this.toolCallHandler = new ToolCallChunkHandler(onChunk, mcpTools)
     this.accumulate = accumulate
     this.enableWebSearch = enableWebSearch || false
     this.onSessionUpdate = onSessionUpdate
     this.getSessionWasCleared = getSessionWasCleared
+    this.providerId = providerId
+    this.idleTimeout = idleTimeout
   }
 
   private markFirstTokenIfNeeded() {
@@ -312,6 +319,9 @@ export class AiSdkToChunkAdapter {
       while (true) {
         const { done, value } = await reader.read()
 
+        // Reset idle timeout on every chunk received from the stream
+        this.idleTimeout?.reset()
+
         if (done) {
           // Flush any remaining content from link converter buffer if web search is enabled
           if (this.enableWebSearch) {
@@ -333,6 +343,8 @@ export class AiSdkToChunkAdapter {
     } finally {
       reader.releaseLock()
       this.resetTimingState()
+      // Clean up the idle timeout timer when the stream ends
+      this.idleTimeout?.cleanup()
     }
   }
 
@@ -569,7 +581,7 @@ export class AiSdkToChunkAdapter {
             }
           })
         } else if (final.webSearchResults.length) {
-          const providerName = Object.keys(providerMetadata || {})[0]
+          const providerName: string | undefined = Object.keys(providerMetadata || {})[0] || this.providerId
           const sourceMap: Record<string, WebSearchSource> = {
             [WEB_SEARCH_SOURCE.OPENAI]: WEB_SEARCH_SOURCE.OPENAI_RESPONSE,
             [WEB_SEARCH_SOURCE.ANTHROPIC]: WEB_SEARCH_SOURCE.ANTHROPIC,
@@ -580,9 +592,10 @@ export class AiSdkToChunkAdapter {
             [WEB_SEARCH_SOURCE.HUNYUAN]: WEB_SEARCH_SOURCE.HUNYUAN,
             [WEB_SEARCH_SOURCE.ZHIPU]: WEB_SEARCH_SOURCE.ZHIPU,
             [WEB_SEARCH_SOURCE.GROK]: WEB_SEARCH_SOURCE.GROK,
+            xai: WEB_SEARCH_SOURCE.GROK,
             [WEB_SEARCH_SOURCE.WEBSEARCH]: WEB_SEARCH_SOURCE.WEBSEARCH
           }
-          const source = sourceMap[providerName] || WEB_SEARCH_SOURCE.AISDK
+          const source = (providerName && sourceMap[providerName]) || WEB_SEARCH_SOURCE.AISDK
 
           this.onChunk({
             type: ChunkType.LLM_WEB_SEARCH_COMPLETE,

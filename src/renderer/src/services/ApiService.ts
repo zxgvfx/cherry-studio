@@ -247,6 +247,10 @@ export async function transformMessagesAndFetch(
   }
 }
 
+/**
+ * Note: This path always uses AI SDK streaming under the hood via `streamText`.
+ * There is no `generateText` (non-stream) branch inside this function.
+ */
 export async function fetchChatCompletion({
   messages,
   prompt,
@@ -306,7 +310,8 @@ export async function fetchChatCompletion({
     params: aiSdkParams,
     modelId,
     capabilities,
-    webSearchPluginConfig
+    webSearchPluginConfig,
+    idleTimeout
   } = await buildStreamTextParams(messages, assistant, provider, {
     mcpTools: mcpTools,
     allowedTools,
@@ -358,7 +363,8 @@ export async function fetchChatCompletion({
       topicId,
       callType: 'chat',
       uiMessages,
-      imageActionHandler
+      imageActionHandler,
+      idleTimeout
     })
   } finally {
     // 清理全局变量
@@ -367,14 +373,12 @@ export async function fetchChatCompletion({
 }
 
 export async function fetchMessagesSummary({
-  messages,
-  assistant
+  messages
 }: {
   messages: Message[]
-  assistant: Assistant
 }): Promise<{ text: string | null; error?: string }> {
   let prompt = (getStoreSetting('topicNamingPrompt') as string) || i18n.t('prompts.title')
-  const model = getQuickModel() || assistant?.model || getDefaultModel()
+  const model = getQuickModel()
 
   if (prompt && containsSupportedVariables(prompt)) {
     prompt = await replacePromptVariables(prompt, model.name)
@@ -428,25 +432,17 @@ export async function fetchMessagesSummary({
   })
   const conversation = JSON.stringify(structredMessages)
 
-  // // 复制 assistant 对象，并强制关闭思考预算
-  // const summaryAssistant = {
-  //   ...assistant,
-  //   settings: {
-  //     ...assistant.settings,
-  //     reasoning_effort: undefined,
-  //     qwenThinkMode: false
-  //   }
-  // }
+  const defaultAssistant = getDefaultAssistant()
   const summaryAssistant = {
-    ...assistant,
+    ...defaultAssistant,
     settings: {
-      ...assistant.settings,
-      reasoning_effort: undefined,
+      ...defaultAssistant.settings,
+      reasoning_effort: 'none',
       qwenThinkMode: false
     },
     prompt,
     model
-  }
+  } satisfies Assistant
 
   const { providerOptions, standardParams } = buildProviderOptions(summaryAssistant, model, actualProvider, {
     enableReasoning: false,
