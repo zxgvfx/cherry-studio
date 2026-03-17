@@ -18,6 +18,7 @@ import './newContextTool'
 import './createSessionTool'
 import './slashCommandsTool'
 import './resourceTool'
+import './pluginsTool'
 
 // Export registry functions
 export { getAllTools, getTool, getToolsForScope, registerTool } from '../types'

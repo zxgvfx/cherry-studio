@@ -7,12 +7,11 @@ import { useProviders } from '@renderer/hooks/useProvider'
 import type { ToolQuickPanelApi, ToolQuickPanelController } from '@renderer/pages/home/Inputbar/types'
 import { getModelUniqId } from '@renderer/services/ModelService'
 import type { FileMetadata, Model } from '@renderer/types'
-import { FILE_TYPE } from '@renderer/types'
 import { getFancyProviderName } from '@renderer/utils'
 import { Avatar } from 'antd'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { first, sortBy } from 'lodash'
-import { AtSign, CircleX, Plus } from 'lucide-react'
+import { AtSign, Plus } from 'lucide-react'
 import type React from 'react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -35,8 +34,6 @@ export const useMentionModelsPanel = (params: Params, role: 'button' | 'manager'
   const {
     quickPanel,
     quickPanelController,
-    mentionedModels,
-    setMentionedModels,
     couldMentionNotVisionModel,
     files,
     setText
@@ -100,22 +97,43 @@ export const useMentionModelsPanel = (params: Params, role: 'button' | 'manager'
 
   const onMentionModel = useCallback(
     (model: Model) => {
-      const allowNonVision = !files.some((file) => file.type === FILE_TYPE.IMAGE)
-      if (isVisionModel(model) || allowNonVision) {
-        setMentionedModels((prev) => {
-          const modelId = getModelUniqId(model)
-          const exists = prev.some((m) => getModelUniqId(m) === modelId)
-          return exists ? prev.filter((m) => getModelUniqId(m) !== modelId) : [...prev, model]
-        })
-        hasModelActionRef.current = true
-      }
-    },
-    [files, setMentionedModels]
-  )
+      const triggerInfo = triggerInfoRef.current
+      const modelId = model.id
 
-  const onClearMentionModels = useCallback(() => {
-    setMentionedModels([])
-  }, [setMentionedModels])
+      if (triggerInfo?.type === 'input' && triggerInfo.position !== undefined) {
+        const atPos = triggerInfo.position
+        const inserted = '@' + modelId + ' '
+        setText((currentText) => {
+          let endPos = atPos + 1
+          while (endPos < currentText.length && !/\s/.test(currentText[endPos])) {
+            endPos++
+          }
+          return currentText.slice(0, atPos) + inserted + currentText.slice(endPos)
+        })
+        setTimeout(() => {
+          const ta = document.querySelector('.inputbar textarea') as HTMLTextAreaElement | null
+          if (ta) {
+            const newPos = atPos + inserted.length
+            ta.focus()
+            ta.setSelectionRange(newPos, newPos)
+          }
+        }, 50)
+      } else {
+        const inserted = '@' + modelId + ' '
+        setText((prev) => inserted + prev)
+        setTimeout(() => {
+          const ta = document.querySelector('.inputbar textarea') as HTMLTextAreaElement | null
+          if (ta) {
+            ta.focus()
+            ta.setSelectionRange(inserted.length, inserted.length)
+          }
+        }, 50)
+      }
+
+      hasModelActionRef.current = true
+    },
+    [setText]
+  )
 
   const pinnedModels = useLiveQuery(
     async () => {
@@ -148,9 +166,9 @@ export const useMentionModelsPanel = (params: Params, role: 'button' | 'manager'
                 {first(model.name)}
               </Avatar>
             ),
-            filterText: getFancyProviderName(provider) + model.name,
+            filterText: getFancyProviderName(provider) + model.name + model.id,
             action: () => onMentionModel(model),
-            isSelected: mentionedModels.some((selected) => getModelUniqId(selected) === getModelUniqId(model))
+            isSelected: false
           }))
       )
 
@@ -181,9 +199,9 @@ export const useMentionModelsPanel = (params: Params, role: 'button' | 'manager'
             {first(model.name)}
           </Avatar>
         ),
-        filterText: getFancyProviderName(provider) + model.name,
+        filterText: getFancyProviderName(provider) + model.name + model.id,
         action: () => onMentionModel(model),
-        isSelected: mentionedModels.some((selected) => getModelUniqId(selected) === getModelUniqId(model))
+        isSelected: false
       }))
 
       if (providerItems.length > 0) {
@@ -198,38 +216,13 @@ export const useMentionModelsPanel = (params: Params, role: 'button' | 'manager'
       isSelected: false
     })
 
-    items.unshift({
-      label: t('settings.input.clear.all'),
-      description: t('settings.input.clear.models'),
-      icon: <CircleX />,
-      alwaysVisible: true,
-      isSelected: false,
-      action: ({ context }) => {
-        onClearMentionModels()
-
-        if (triggerInfoRef.current?.type === 'input') {
-          setText((currentText) => {
-            const textArea = document.querySelector('.inputbar textarea') as HTMLTextAreaElement | null
-            const caret = textArea ? (textArea.selectionStart ?? currentText.length) : currentText.length
-            return removeAtSymbolAndText(currentText, caret, undefined, triggerInfoRef.current?.position)
-          })
-        }
-
-        context.close()
-      }
-    })
-
     return items
   }, [
     couldMentionNotVisionModel,
-    mentionedModels,
     navigate,
-    onClearMentionModels,
     onMentionModel,
     pinnedModels,
     providers,
-    removeAtSymbolAndText,
-    setText,
     t
   ])
 
@@ -242,15 +235,12 @@ export const useMentionModelsPanel = (params: Params, role: 'button' | 'manager'
         title: t('assistants.presets.edit.model.select.title'),
         list: modelItems,
         symbol: QuickPanelReservedSymbol.MentionModels,
-        multiple: true,
+        multiple: false,
         triggerInfo: triggerInfo || { type: 'button' },
-        afterAction({ item }) {
-          item.isSelected = !item.isSelected
-        },
-        onClose({ action, searchText, context }) {
-          if (action === 'esc') {
-            const trigger = context?.triggerInfo ?? triggerInfoRef.current
-            if (hasModelActionRef.current && trigger?.type === 'input' && trigger?.position !== undefined) {
+        onClose({ action, searchText }) {
+          if (action === 'esc' || action === 'outsideclick') {
+            const trigger = triggerInfoRef.current
+            if (trigger?.type === 'input' && trigger?.position !== undefined) {
               setText((currentText) => {
                 const textArea = document.querySelector('.inputbar textarea') as HTMLTextAreaElement | null
                 const caret = textArea ? (textArea.selectionStart ?? currentText.length) : currentText.length

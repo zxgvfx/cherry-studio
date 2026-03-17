@@ -233,40 +233,48 @@ const MessageMcpTool: FC<Props> = ({ block }) => {
 /**
  * Extract preview content from MCP tool response using SDK schema
  */
-const extractPreviewContent = (response: unknown): string => {
-  if (!response) return ''
+interface ExtractedContent {
+  text: string
+  images: Array<{ data: string; mimeType: string }>
+}
 
-  const result = CallToolResultSchema.safeParse(response)
-  if (result.success) {
-    const contents = result.data.content
-    if (contents.length === 0) return ''
+const extractPreviewContent = (response: unknown): ExtractedContent => {
+  const result_empty: ExtractedContent = { text: '', images: [] }
+  if (!response) return result_empty
+
+  const parsed = CallToolResultSchema.safeParse(response)
+  if (parsed.success) {
+    const contents = parsed.data.content
+    if (contents.length === 0) return result_empty
 
     const textParts: string[] = []
+    const images: Array<{ data: string; mimeType: string }> = []
     for (const content of contents) {
       switch (content.type) {
         case 'text':
           if (content.text) {
             try {
-              const parsed = JSON.parse(content.text)
-              textParts.push(JSON.stringify(parsed, null, 2))
+              const p = JSON.parse(content.text)
+              textParts.push(JSON.stringify(p, null, 2))
             } catch {
               textParts.push(content.text)
             }
           }
           break
         case 'image':
-          textParts.push(`[Image: ${content.mimeType ?? 'image/png'}]`)
+          if (content.data) {
+            images.push({ data: content.data, mimeType: content.mimeType ?? 'image/png' })
+          }
           break
         case 'resource':
           textParts.push(`[Resource: ${content.resource?.uri ?? 'unknown'}]`)
           break
       }
     }
-    return textParts.join('\n\n')
+    return { text: textParts.join('\n\n'), images }
   }
 
-  // Fallback: return JSON string for unknown format
-  return JSON.stringify(response, null, 2)
+  return { text: JSON.stringify(response, null, 2), images: [] }
 }
 
 const escapeHtml = (value: string): string => {
@@ -305,12 +313,15 @@ const ToolResponseContent: FC<{
     return args
   }, [args])
 
+  const [responseImages, setResponseImages] = useState<Array<{ data: string; mimeType: string }>>([])
+
   // Extract and highlight response when available
   useEffect(() => {
     if (!isExpanded || !response) return
 
     const highlight = async () => {
-      const previewContent = extractPreviewContent(response)
+      const { text: previewContent, images } = extractPreviewContent(response)
+      setResponseImages(images)
       const {
         data: truncatedContent,
         isTruncated: wasTruncated,
@@ -394,17 +405,29 @@ const ToolResponseContent: FC<{
     })
   }
 
-  if (response !== undefined && response !== null && highlightedResponse) {
+  const hasResponseContent = (response !== undefined && response !== null) && (highlightedResponse || responseImages.length > 0)
+  if (hasResponseContent) {
     collapseItems.push({
       key: 'response',
       label: <ArgsSectionTitle style={{ marginBottom: 0 }}>Response</ArgsSectionTitle>,
       children: (
         <ResponseSection style={{ borderTop: 'none' }}>
-          <MarkdownContainer
-            className={`markdown ${isLinkified ? 'linkified' : ''}`}
-            onClick={handleLinkClick}
-            dangerouslySetInnerHTML={{ __html: highlightedResponse }}
-          />
+          {responseImages.length > 0 && (
+            <ImageGallery>
+              {responseImages.map((img, i) => (
+                <ImageWrapper key={i}>
+                  <img src={`data:${img.mimeType};base64,${img.data}`} alt={`Generated image ${i + 1}`} />
+                </ImageWrapper>
+              ))}
+            </ImageGallery>
+          )}
+          {highlightedResponse && (
+            <MarkdownContainer
+              className={`markdown ${isLinkified ? 'linkified' : ''}`}
+              onClick={handleLinkClick}
+              dangerouslySetInnerHTML={{ __html: highlightedResponse }}
+            />
+          )}
           {isTruncated && <TruncatedIndicator originalLength={originalLength} />}
         </ResponseSection>
       )
@@ -588,6 +611,28 @@ const ToolResponseContainer = styled.div`
   max-height: 300px;
   border-top: none;
   position: relative;
+`
+
+const ImageGallery = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+`
+
+const ImageWrapper = styled.div`
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-background-soft);
+
+  img {
+    display: block;
+    max-width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+    cursor: pointer;
+  }
 `
 
 const InnerCollapse = styled(Collapse)`

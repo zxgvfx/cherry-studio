@@ -283,3 +283,14 @@ export function isVisionModel(model: Model): boolean {
 
   return VISION_REGEX.test(modelId) || IMAGE_ENHANCEMENT_MODELS_REGEX.test(modelId) || false
 }
+
+const GENERATE_3D_MODELS_REGEX =
+  /hunyuan3d|hunyuan-3d|hy3d|hi3dgen|step1x-3d|trellis|meshy|shap-?e|point-?e|3d-gen|text-to-3d|instant3d|triposr/i
+
+export function isGenerate3DModel(model?: Model | null): boolean {
+  if (!model) return false
+  if (model.primaryModality === 'model_3d') return true
+
+  const modelId = getLowerBaseModelName(model.id)
+  return GENERATE_3D_MODELS_REGEX.test(modelId)
+}

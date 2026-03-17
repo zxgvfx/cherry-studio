@@ -77,6 +77,7 @@ import {
   mcpToolsToOpenAIChatTools,
   openAIToolsToMcpTool
 } from '@renderer/utils/mcp-tools'
+import { hasMultimodalContent, mcpResultToTextSummary } from '@renderer/aiCore/utils/mcp'
 import { findFileBlocks, findImageBlocks } from '@renderer/utils/messageUtils/find'
 import {
   isSupportArrayContentProvider,
@@ -458,13 +459,11 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
     }
 
     for (const imageBlock of imageBlocks) {
-      if (isVision) {
-        if (imageBlock.file) {
-          const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
-          parts.push({ type: 'image_url', image_url: { url: image.data } })
-        } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
-          parts.push({ type: 'image_url', image_url: { url: imageBlock.url } })
-        }
+      if (imageBlock.file) {
+        const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
+        parts.push({ type: 'image_url', image_url: { url: image.data } })
+      } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
+        parts.push({ type: 'image_url', image_url: { url: imageBlock.url } })
       }
     }
 
@@ -567,7 +566,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
       return {
         role: 'tool',
         tool_call_id: mcpToolResponse.toolCallId,
-        content: JSON.stringify(resp.content)
+        content: hasMultimodalContent(resp) ? mcpResultToTextSummary(resp) : JSON.stringify(resp.content)
       } as OpenAI.Chat.Completions.ChatCompletionToolMessageParam
     }
     return undefined

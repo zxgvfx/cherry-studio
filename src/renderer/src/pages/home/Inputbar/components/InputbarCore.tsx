@@ -72,6 +72,9 @@ export interface InputbarCoreProps {
 
   // Override the user preference for quick panel triggers
   forceEnableQuickPanelTriggers?: boolean
+
+  // Disable text input (e.g. for image-only 3D models)
+  textInputDisabled?: boolean
 }
 
 const TextareaStyle: CSSProperties = {
@@ -121,7 +124,8 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   rightToolbar,
   topContent,
   pinnedContent,
-  forceEnableQuickPanelTriggers
+  forceEnableQuickPanelTriggers,
+  textInputDisabled
 }) => {
   const config = useMemo(() => getInputbarConfig(scope), [scope])
   const { files, isExpanded } = useInputbarToolsState()
@@ -661,7 +665,13 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
             onPaste={(e) => handlePaste(e.nativeEvent)}
             onFocus={handleFocus}
             onBlur={() => setInputFocus(false)}
-            placeholder={isTranslating ? t('chat.input.translating') : placeholder}
+            placeholder={
+              textInputDisabled
+                ? t('model3d.no_image', 'Upload an image to generate 3D model')
+                : isTranslating
+                  ? t('chat.input.translating')
+                  : placeholder
+            }
             autoFocus
             variant="borderless"
             spellCheck={enableSpellCheck}
@@ -673,7 +683,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
               height: height,
               minHeight: '30px'
             }}
-            disabled={isTranslating || searching}
+            disabled={isTranslating || searching || textInputDisabled}
             onClick={() => {
               searching && dispatch(setSearching(false))
               quickPanel.close()

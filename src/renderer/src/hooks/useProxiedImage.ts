@@ -1,16 +1,17 @@
-import { isExternalUrl, proxyImageUrl } from '@renderer/utils/proxyImage'
+import { isExternalUrl, isLocalFileUrl, proxyImageUrl, proxyLocalFileUrl } from '@renderer/utils/proxyImage'
 import { useEffect, useState } from 'react'
 
 /**
- * React hook that proxies external image URLs through the backend.
- * Returns { src, loading } where src is a local data URL for external images.
+ * React hook that proxies external and local file:// image URLs through the backend.
+ * Returns { src, loading } where src is a displayable data URL.
  */
 export function useProxiedImage(originalSrc: string): { src: string; loading: boolean } {
   const [proxiedSrc, setProxiedSrc] = useState<string>(originalSrc)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!isExternalUrl(originalSrc)) {
+    const needsProxy = isExternalUrl(originalSrc) || isLocalFileUrl(originalSrc)
+    if (!needsProxy) {
       setProxiedSrc(originalSrc)
       setLoading(false)
       return
@@ -19,7 +20,8 @@ export function useProxiedImage(originalSrc: string): { src: string; loading: bo
     let cancelled = false
     setLoading(true)
 
-    proxyImageUrl(originalSrc).then((result) => {
+    const proxyFn = isLocalFileUrl(originalSrc) ? proxyLocalFileUrl : proxyImageUrl
+    proxyFn(originalSrc).then((result) => {
       if (cancelled) return
       setProxiedSrc(result || originalSrc)
       setLoading(false)

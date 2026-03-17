@@ -28,7 +28,7 @@ import { useTranslation } from 'react-i18next'
 import { useDefaultModel } from './useAssistant'
 import useFullScreenNotice from './useFullScreenNotice'
 import { useRuntime } from './useRuntime'
-import { useNavbarPosition, useSettings } from './useSettings'
+import { useEnableDeveloperMode, useNavbarPosition, useSettings } from './useSettings'
 import useUpdateHandler from './useUpdateHandler'
 
 const logger = loggerService.withContext('useAppInit')
@@ -51,6 +51,7 @@ export function useAppInit() {
   const { setDefaultModel, setQuickModel, setTranslateModel } = useDefaultModel()
   const avatar = useLiveQuery(() => db.settings.get('image://avatar'))
   const { theme } = useTheme()
+  const { enableDeveloperMode, setEnableDeveloperMode: setDevMode } = useEnableDeveloperMode()
   const memoryConfig = useAppSelector(selectMemoryConfig)
   const providers = useAppSelector((state) => state.llm.providers)
 
@@ -291,6 +292,21 @@ export function useAppInit() {
     }
     
     loadCentralizedConfig()
+  }, [])
+
+  useEffect(() => {
+    if (!enableDeveloperMode) return
+    const backendUrl = (window as any).__CHERRY_BACKEND_URL || ''
+    fetch(backendUrl + '/api/v1/config/check-developer-status')
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.allowed) {
+          logger.info('Current user removed from developer whitelist, disabling developer mode')
+          setDevMode(false)
+        }
+      })
+      .catch((e) => logger.warn('Failed to check developer status:', e))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

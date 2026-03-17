@@ -1560,7 +1560,10 @@
     "name": "文件名",
     "open": "打开",
     "preview": {
-      "error": "打开文件失败"
+      "coming_soon": "{{type}}预览功能即将推出",
+      "error": "打开文件失败",
+      "model_3d": "三维模型",
+      "point_cloud": "点云"
     },
     "size": "大小",
     "text": "文本",
@@ -2984,6 +2987,7 @@
     "type": "类型",
     "uninstall": "卸载",
     "uninstall_package": "卸载插件包",
+    "title": "插件工具",
     "uninstalling": "卸载中..."
   },
   "preview": {
@@ -4177,8 +4181,12 @@
     },
     "developer": {
       "enable_developer_mode": "启用开发者模式",
-      "help": "启用开发者模式后，将可以使用调用链功能查看模型调用过程的数据流。",
-      "title": "开发者模式"
+      "help": "启用开发者模式后，将可以使用调用链功能查看模型调用过程的数据流，以及访问 OpenClaw 等开发者工具。",
+      "title": "开发者模式",
+      "password_required": "请输入开发者密码",
+      "password_placeholder": "开发者密码",
+      "password_incorrect": "密码错误，请重试",
+      "user_not_allowed": "当前系统用户无开发者权限"
     },
     "display": {
       "assistant": {
@@ -5126,6 +5134,26 @@
       "titleLabel": "标题",
       "titlePlaceholder": "请输入短语标题"
     },
+    "skills": {
+      "title": "技能",
+      "add": "添加技能",
+      "edit": "编辑技能",
+      "delete": "删除技能",
+      "deleteConfirm": "技能删除后无法恢复，是否继续？",
+      "nameLabel": "名称",
+      "namePlaceholder": "输入技能名称",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "描述这个技能的用途",
+      "sourceLabel": "内容来源",
+      "sourceInline": "内联内容",
+      "sourceFile": "文件引用",
+      "contentLabel": "内容",
+      "contentPlaceholder": "输入 Markdown 格式的技能指令",
+      "filePathLabel": "文件路径",
+      "filePathPlaceholder": "本地 .md 文件路径",
+      "selectFile": "浏览",
+      "empty": "暂未配置任何技能"
+    },
     "shortcuts": {
       "action": "操作",
       "actions": "操作",
@@ -5578,5 +5606,38 @@
     "quit": "退出",
     "show_window": "显示窗口",
     "visualization": "可视化"
+  },
+  "model3d": {
+    "download": "下载模型",
+    "exit_fullscreen": "退出全屏",
+    "fullscreen": "全屏",
+    "generating": "正在生成 3D 模型（图片转3D，可能需要数秒到十多秒）...",
+    "hint": "拖拽旋转 · 滚轮缩放 · 右键平移",
+    "load_error": "加载 3D 模型失败",
+    "no_file": "没有可用的 3D 模型文件",
+    "no_image": "请上传一张图片（建议PNG透明背景）以生成3D模型",
+    "reset_camera": "重置相机",
+    "wireframe": "线框模式",
+    "toggle_material": "显示/隐藏材质",
+    "progress_submitted": "任务已提交，等待处理...",
+    "progress_waiting": "排队等待中...",
+    "progress_processing": "3D模型生成中...",
+    "progress_downloading": "正在下载模型文件...",
+    "progress_saving": "正在保存模型...",
+    "progress_failed": "生成失败",
+    "progress_retry": "重试中..."
+  },
+  "sam3": {
+    "complete": "3D 模型生成完成",
+    "confirm_generate": "生成 3D 模型",
+    "generating": "正在生成 3D 模型...",
+    "launch_error": "无法启动 SAM3 标注窗口",
+    "manual_mode": "SAM3 手动标注",
+    "need_image": "请先添加一张图片作为 SAM3 标注来源",
+    "need_image_auto": "自动模式需要先添加一张图片",
+    "need_mcp": "自动模式需要启用 MCP 工具。请在助手设置中开启 MCP（自动或手动模式）。",
+    "retry": "重试",
+    "server_unavailable": "SAM3 服务器不可用",
+    "waiting_annotation": "等待在 SAM3 窗口中完成标注..."
   }
 }

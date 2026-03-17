@@ -1560,7 +1560,10 @@
     "name": "名稱",
     "open": "開啟",
     "preview": {
-      "error": "開啟檔案失敗"
+      "coming_soon": "{{type}}預覽功能即將推出",
+      "error": "開啟檔案失敗",
+      "model_3d": "三維模型",
+      "point_cloud": "點雲"
     },
     "size": "大小",
     "text": "文字",

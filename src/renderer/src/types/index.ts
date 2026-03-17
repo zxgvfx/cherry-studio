@@ -282,7 +282,7 @@ export type User = {
 export type ModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
 
 export type ModelTag = Exclude<ModelType, 'text'> | 'free'
-export type ModelPrimaryModality = 'text' | 'multimodal' | 'image' | 'embedding' | 'rerank'
+export type ModelPrimaryModality = 'text' | 'multimodal' | 'image' | 'model_3d' | 'embedding' | 'rerank'
 
 // "image-generation" is also openai endpoint, but specifically for image generation.
 export const EndPointTypeSchema = z.enum([
@@ -1102,6 +1102,15 @@ export interface MemoryListOptions extends MemoryEntity {
 }
 
 export interface MemoryDeleteAllOptions extends MemoryEntity {}
+
+export interface SkillConfig {
+  id: string
+  name: string
+  description: string
+  content?: string
+  filePath?: string
+  enabled: boolean
+}
 
 export type EditorView = 'preview' | 'source' | 'read' // 实时,源码,预览
 // ========================================================================

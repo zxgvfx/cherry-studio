@@ -14,9 +14,11 @@ import {
   MonitorCog,
   Package,
   PictureInPicture2,
+  Puzzle,
   Search,
   Server,
   Settings2,
+  Sparkles,
   TextCursorInput,
   Zap
 } from 'lucide-react'
@@ -32,10 +34,12 @@ import DocProcessSettings from './DocProcessSettings'
 import GeneralSettings from './GeneralSettings'
 import MCPSettings from './MCPSettings'
 import MemorySettings from './MemorySettings'
+import PluginSettings from './PluginSettings'
 import { ProviderList } from './ProviderSettings'
 import QuickAssistantSettings from './QuickAssistantSettings'
 import QuickPhraseSettings from './QuickPhraseSettings'
 import SelectionAssistantSettings from './SelectionAssistantSettings/SelectionAssistantSettings'
+import SkillSettings from './SkillSettings/SkillSettings'
 import ShortcutSettings from './ShortcutSettings'
 import { ApiServerSettings } from './ToolSettings/ApiServerSettings'
 import WebSearchSettings from './WebSearchSettings'
@@ -86,6 +90,12 @@ const SettingsPage: FC = () => {
             </MenuItem>
           </MenuItemLink> */}
           <Divider />
+          <MenuItemLink to="/settings/plugins">
+            <MenuItem className={isRoute('/settings/plugins')}>
+              <Puzzle size={18} />
+              {t('plugins.title', 'Plugins')}
+            </MenuItem>
+          </MenuItemLink>
           <MenuItemLink to="/settings/mcp">
             <MenuItem className={isRoute('/settings/mcp')}>
               <McpLogo width={18} height={18} style={{ opacity: 0.8 }} />
@@ -102,6 +112,12 @@ const SettingsPage: FC = () => {
             <MenuItem className={isRoute('/settings/memory')}>
               <Brain size={18} />
               {t('memory.title')}
+            </MenuItem>
+          </MenuItemLink>
+          <MenuItemLink to="/settings/skills">
+            <MenuItem className={isRoute('/settings/skills')}>
+              <Sparkles size={18} />
+              {t('settings.skills.title')}
             </MenuItem>
           </MenuItemLink>
           <MenuItemLink to="/settings/api-server">
@@ -157,8 +173,10 @@ const SettingsPage: FC = () => {
             <Route path="api-server" element={<ApiServerSettings />} />
             <Route path="docprocess" element={<DocProcessSettings />} />
             <Route path="quickphrase" element={<QuickPhraseSettings />} />
+            <Route path="plugins" element={<PluginSettings />} />
             <Route path="mcp/*" element={<MCPSettings />} />
             <Route path="memory" element={<MemorySettings />} />
+            <Route path="skills" element={<SkillSettings />} />
             <Route path="general/*" element={<GeneralSettings />} />
             <Route path="display" element={<DisplaySettings />} />
             <Route path="shortcut" element={<ShortcutSettings />} />

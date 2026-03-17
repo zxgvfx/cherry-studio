@@ -2,7 +2,7 @@ import { OpenClawIcon } from '@renderer/components/Icons/SVGIcon'
 import App from '@renderer/components/MinApp/MinApp'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useRuntime } from '@renderer/hooks/useRuntime'
-import { useSettings } from '@renderer/hooks/useSettings'
+import { useEnableDeveloperMode, useSettings } from '@renderer/hooks/useSettings'
 import { Code, FileSearch, Folder, Languages, LayoutGrid, NotepadText, Palette, Sparkle } from 'lucide-react'
 import type { FC } from 'react'
 import { useMemo } from 'react'
@@ -14,6 +14,7 @@ const LaunchpadPage: FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const { defaultPaintingProvider } = useSettings()
+  const { enableDeveloperMode } = useEnableDeveloperMode()
   const { pinned } = useMinapps()
   const { openedKeepAliveMinapps } = useRuntime()
 
@@ -95,7 +96,9 @@ const LaunchpadPage: FC = () => {
         <Section>
           <SectionTitle>{t('launchpad.apps')}</SectionTitle>
           <Grid>
-            {appMenuItems.map((item) => (
+            {appMenuItems
+              .filter((item) => item.path !== '/openclaw' || enableDeveloperMode)
+              .map((item) => (
               <AppIcon key={item.path} onClick={() => navigate(item.path)}>
                 <IconContainer>
                   <IconWrapper bgColor={item.bgColor}>{item.icon}</IconWrapper>
@@ -103,7 +106,7 @@ const LaunchpadPage: FC = () => {
                 <AppName>{item.text}</AppName>
               </AppIcon>
             ))}
-          </Grid>
+            </Grid>
         </Section>
 
         {sortedMinapps.length > 0 && (

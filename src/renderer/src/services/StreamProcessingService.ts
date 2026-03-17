@@ -56,6 +56,9 @@ export interface StreamProcessorCallbacks {
   // Called when the entire stream processing is signaled as complete (success or failure)
   onComplete?: (status: AssistantMessageStatus, response?: Response) => void
   onVideoSearched?: (video?: { type: 'url' | 'path'; content: string }, metadata?: Record<string, any>) => void
+  onModel3DCreated?: () => void
+  onModel3DProgress?: (progressText: string) => void
+  onModel3DComplete?: (fileData: any, format: string) => void
   // Called when a block is created
   onBlockCreated?: () => void
   // Called when raw data is received (e.g., session_id updates from Agent SDK)
@@ -236,6 +239,18 @@ export function createStreamProcessor(callbacks: StreamProcessorCallbacks = {}) 
         }
         case ChunkType.VIDEO_SEARCHED: {
           if (callbacks.onVideoSearched) callbacks.onVideoSearched(data.video, data.metadata)
+          break
+        }
+        case ChunkType.MODEL_3D_CREATED: {
+          if (callbacks.onModel3DCreated) callbacks.onModel3DCreated()
+          break
+        }
+        case ChunkType.MODEL_3D_PROGRESS: {
+          if (callbacks.onModel3DProgress) callbacks.onModel3DProgress(data.progressText)
+          break
+        }
+        case ChunkType.MODEL_3D_COMPLETE: {
+          if (callbacks.onModel3DComplete) callbacks.onModel3DComplete(data.file, data.format)
           break
         }
         case ChunkType.BLOCK_CREATED: {

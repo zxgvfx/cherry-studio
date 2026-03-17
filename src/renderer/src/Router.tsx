@@ -2,7 +2,7 @@ import '@renderer/databases'
 
 import type { FC } from 'react'
 import { useMemo } from 'react'
-import { HashRouter, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import Sidebar from './components/app/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -18,6 +18,7 @@ import MinAppPage from './pages/minapps/MinAppPage'
 import MinAppsPage from './pages/minapps/MinAppsPage'
 import NotesPage from './pages/notes/NotesPage'
 import OpenClawPage from './pages/openclaw/OpenClawPage'
+import { useAppSelector } from './store'
 import PaintingsRoutePage from './pages/paintings/PaintingsRoutePage'
 import SettingsPage from './pages/settings/SettingsPage'
 import AssistantPresetsPage from './pages/store/assistants/presets/AssistantPresetsPage'
@@ -25,6 +26,7 @@ import TranslatePage from './pages/translate/TranslatePage'
 
 const Router: FC = () => {
   const { navbarPosition } = useNavbarPosition()
+  const enableDeveloperMode = useAppSelector((state) => state.settings.enableDeveloperMode)
 
   const routes = useMemo(() => {
     return (
@@ -40,13 +42,16 @@ const Router: FC = () => {
           <Route path="/apps/:appId" element={<MinAppPage />} />
           <Route path="/apps" element={<MinAppsPage />} />
           <Route path="/code" element={<CodeToolsPage />} />
-          <Route path="/openclaw" element={<OpenClawPage />} />
+          <Route
+            path="/openclaw"
+            element={enableDeveloperMode ? <OpenClawPage /> : <Navigate to="/" replace />}
+          />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/launchpad" element={<LaunchpadPage />} />
         </Routes>
       </ErrorBoundary>
     )
-  }, [])
+  }, [enableDeveloperMode])
 
   if (navbarPosition === 'left') {
     return (

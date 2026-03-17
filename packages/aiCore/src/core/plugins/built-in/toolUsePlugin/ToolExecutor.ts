@@ -89,18 +89,58 @@ export class ToolExecutor {
 
   /**
    * 格式化工具结果为 Cherry Studio 标准格式
+   * 自动将 image/audio 等大体积 base64 内容替换为文本摘要
    */
   formatToolResults(executedResults: ExecutedResult[]): string {
     return executedResults
       .map((tr) => {
         if (!tr.isError) {
-          return `<tool_use_result>\n  <name>${tr.toolName}</name>\n  <result>${JSON.stringify(tr.result)}</result>\n</tool_use_result>`
+          const resultText = this.summarizeResult(tr.result)
+          return `<tool_use_result>\n  <name>${tr.toolName}</name>\n  <result>${resultText}</result>\n</tool_use_result>`
         } else {
           const error = tr.result || 'Unknown error'
           return `<tool_use_result>\n  <name>${tr.toolName}</name>\n  <error>${error}</error>\n</tool_use_result>`
         }
       })
       .join('\n\n')
+  }
+
+  /**
+   * Summarize tool result, replacing large base64 image/audio data with text placeholders
+   */
+  private summarizeResult(result: unknown): string {
+    if (!result || typeof result !== 'object') {
+      return JSON.stringify(result)
+    }
+
+    const r = result as Record<string, unknown>
+    if (Array.isArray(r.content)) {
+      const parts: string[] = []
+      for (const item of r.content) {
+        if (typeof item !== 'object' || item === null) {
+          parts.push(String(item))
+          continue
+        }
+        const ci = item as Record<string, unknown>
+        switch (ci.type) {
+          case 'text':
+            parts.push((ci.text as string) || '')
+            break
+          case 'image':
+            parts.push(`[Image: ${(ci.mimeType as string) || 'image/png'}, delivered to user]`)
+            break
+          case 'audio':
+            parts.push(`[Audio: ${(ci.mimeType as string) || 'audio/mp3'}, delivered to user]`)
+            break
+          default:
+            parts.push(JSON.stringify(ci))
+            break
+        }
+      }
+      return parts.join('\n')
+    }
+
+    return JSON.stringify(result)
   }
 
   /**

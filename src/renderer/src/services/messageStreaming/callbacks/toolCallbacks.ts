@@ -35,7 +35,7 @@ export const createToolCallbacks = (deps: ToolCallbacksDependencies) => {
 
       if (blockManager.hasInitialPlaceholder) {
         const changes = {
-          type: MessageBlockType.TOOL,
+          type: MessageBlockType.TOOL as const,
           status: MessageBlockStatus.PENDING,
           toolName: toolResponse.tool.name,
           metadata: { rawMcpToolResponse: toolResponse }
@@ -67,7 +67,7 @@ export const createToolCallbacks = (deps: ToolCallbacksDependencies) => {
         // Create a new tool block if one doesn't exist yet
         if (blockManager.hasInitialPlaceholder) {
           const changes = {
-            type: MessageBlockType.TOOL,
+            type: MessageBlockType.TOOL as const,
             status: MessageBlockStatus.PENDING,
             toolName: toolResponse.tool.name,
             metadata: { rawMcpToolResponse: toolResponse }

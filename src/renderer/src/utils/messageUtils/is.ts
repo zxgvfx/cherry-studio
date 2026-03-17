@@ -12,6 +12,7 @@ import {
   MessageBlockType,
   type PlaceholderMessageBlock,
   type ThinkingMessageBlock,
+  type Model3DMessageBlock,
   type ToolMessageBlock,
   type TranslationMessageBlock,
   type VideoMessageBlock
@@ -129,6 +130,10 @@ export function isVideoBlock(block: MessageBlock): block is VideoMessageBlock {
  */
 export function isToolBlock(block: MessageBlock): block is ToolMessageBlock {
   return block.type === MessageBlockType.TOOL
+}
+
+export function isModel3DBlock(block: MessageBlock): block is Model3DMessageBlock {
+  return block.type === MessageBlockType.MODEL_3D
 }
 
 /**

@@ -41,6 +41,7 @@ import {
   mcpToolsToOpenAIResponseTools,
   openAIToolsToMcpTool
 } from '@renderer/utils/mcp-tools'
+import { hasMultimodalContent, mcpResultToTextSummary } from '@renderer/aiCore/utils/mcp'
 import { findFileBlocks, findImageBlocks } from '@renderer/utils/messageUtils/find'
 import { isSupportDeveloperRoleProvider } from '@renderer/utils/provider'
 import { MB } from '@shared/config/constant'
@@ -222,21 +223,19 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
     }
 
     for (const imageBlock of imageBlocks) {
-      if (isVision) {
-        if (imageBlock.file) {
-          const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
-          parts.push({
-            detail: 'auto',
-            type: 'input_image',
-            image_url: image.data as string
-          })
-        } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
-          parts.push({
-            detail: 'auto',
-            type: 'input_image',
-            image_url: imageBlock.url
-          })
-        }
+      if (imageBlock.file) {
+        const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
+        parts.push({
+          detail: 'auto',
+          type: 'input_image',
+          image_url: image.data as string
+        })
+      } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
+        parts.push({
+          detail: 'auto',
+          type: 'input_image',
+          image_url: imageBlock.url
+        })
       }
     }
 
@@ -303,7 +302,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
       return {
         type: 'function_call_output',
         call_id: mcpToolResponse.toolCallId,
-        output: JSON.stringify(resp.content)
+        output: hasMultimodalContent(resp) ? mcpResultToTextSummary(resp) : JSON.stringify(resp.content)
       }
     }
     return

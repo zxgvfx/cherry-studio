@@ -1560,7 +1560,10 @@
     "name": "Name",
     "open": "Open",
     "preview": {
-      "error": "Failed to open file"
+      "coming_soon": "{{type}} preview is coming soon",
+      "error": "Failed to open file",
+      "model_3d": "3D Model",
+      "point_cloud": "Point Cloud"
     },
     "size": "Size",
     "text": "Text",
@@ -2984,6 +2987,7 @@
     "type": "Type",
     "uninstall": "Uninstall",
     "uninstall_package": "Uninstall Package",
+    "title": "Plugin Tools",
     "uninstalling": "Uninstalling..."
   },
   "preview": {
@@ -4177,8 +4181,12 @@
     },
     "developer": {
       "enable_developer_mode": "Enable Developer Mode",
-      "help": "After enabling developer mode, you can use the trace feature to view the data flow during model invocation.",
-      "title": "Developer Mode"
+      "help": "After enabling developer mode, you can use the trace feature to view the data flow during model invocation, and access developer tools like OpenClaw.",
+      "title": "Developer Mode",
+      "password_required": "Enter Developer Password",
+      "password_placeholder": "Developer password",
+      "password_incorrect": "Incorrect password, please try again",
+      "user_not_allowed": "Current system user is not authorized for developer mode"
     },
     "display": {
       "assistant": {
@@ -5126,6 +5134,26 @@
       "titleLabel": "Title",
       "titlePlaceholder": "Please enter phrase title"
     },
+    "skills": {
+      "title": "Skills",
+      "add": "Add Skill",
+      "edit": "Edit Skill",
+      "delete": "Delete Skill",
+      "deleteConfirm": "This skill will be permanently deleted. Continue?",
+      "nameLabel": "Name",
+      "namePlaceholder": "Enter skill name",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe what this skill does",
+      "sourceLabel": "Content Source",
+      "sourceInline": "Inline Content",
+      "sourceFile": "File Reference",
+      "contentLabel": "Content",
+      "contentPlaceholder": "Enter skill instructions in Markdown",
+      "filePathLabel": "File Path",
+      "filePathPlaceholder": "Path to a local .md file",
+      "selectFile": "Browse",
+      "empty": "No skills configured yet"
+    },
     "shortcuts": {
       "action": "Action",
       "actions": "operation",
@@ -5578,5 +5606,38 @@
     "quit": "Quit",
     "show_window": "Show Window",
     "visualization": "Visualization"
+  },
+  "model3d": {
+    "download": "Download model",
+    "exit_fullscreen": "Exit fullscreen",
+    "fullscreen": "Fullscreen",
+    "generating": "Generating 3D model (image-to-3D, may take a few seconds)...",
+    "hint": "Drag to rotate · Scroll to zoom · Right-click to pan",
+    "load_error": "Failed to load 3D model",
+    "no_file": "No 3D model file available",
+    "no_image": "Please upload an image (PNG with transparent background recommended) to generate a 3D model",
+    "reset_camera": "Reset camera",
+    "wireframe": "Wireframe",
+    "toggle_material": "Toggle material",
+    "progress_submitted": "Task submitted, waiting...",
+    "progress_waiting": "Queued, waiting...",
+    "progress_processing": "Generating 3D model...",
+    "progress_downloading": "Downloading model file...",
+    "progress_saving": "Saving model...",
+    "progress_failed": "Generation failed",
+    "progress_retry": "retrying..."
+  },
+  "sam3": {
+    "complete": "3D model generation complete",
+    "confirm_generate": "Generate 3D Model",
+    "generating": "Generating 3D model...",
+    "launch_error": "Failed to launch SAM3 annotation window",
+    "manual_mode": "SAM3 Manual Annotation",
+    "need_image": "Please attach an image first for SAM3 annotation",
+    "need_image_auto": "Auto mode requires an attached image",
+    "need_mcp": "Auto mode requires MCP tools. Please enable MCP (auto or manual mode) in assistant settings.",
+    "retry": "Retry",
+    "server_unavailable": "SAM3 server is unavailable",
+    "waiting_annotation": "Waiting for annotation in SAM3 window..."
   }
 }

@@ -3,6 +3,7 @@ import { getAnthropicReasoningParams } from '@renderer/aiCore/utils/reasoning'
 import type { QuickPanelTriggerInfo } from '@renderer/components/QuickPanel'
 import { QuickPanelReservedSymbol, useQuickPanel } from '@renderer/components/QuickPanel'
 import { isGenerateImageModel, isVisionModel } from '@renderer/config/models'
+import { isGenerate3DModel } from '@renderer/config/models/vision'
 import { useSession } from '@renderer/hooks/agents/useSession'
 import { useInputText } from '@renderer/hooks/useInputText'
 import { selectNewTopicLoading } from '@renderer/hooks/useMessageOperations'
@@ -194,10 +195,15 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
     [assistant.model]
   )
 
+  const is3DModelAssistant = useMemo(
+    () => (assistant.model ? isGenerate3DModel(assistant.model) : false),
+    [assistant.model]
+  )
+
   // Agent sessions don't support model mentions yet, so we only check the assistant's model
   const canAddImageFile = useMemo(() => {
-    return isVisionAssistant || isGenerateImageAssistant
-  }, [isVisionAssistant, isGenerateImageAssistant])
+    return isVisionAssistant || isGenerateImageAssistant || is3DModelAssistant
+  }, [isVisionAssistant, isGenerateImageAssistant, is3DModelAssistant])
 
   const canAddTextFile = useMemo(() => {
     return isVisionAssistant || (!isVisionAssistant && !isGenerateImageAssistant)
@@ -511,6 +517,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
       handleSendMessage={sendMessage}
       leftToolbar={leftToolbar}
       forceEnableQuickPanelTriggers
+      textInputDisabled={is3DModelAssistant}
     />
   )
 }

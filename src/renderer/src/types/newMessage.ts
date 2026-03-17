@@ -32,7 +32,8 @@ export enum MessageBlockType {
   ERROR = 'error', // 错误信息
   CITATION = 'citation', // 引用类型 (Now includes web search, grounding, etc.)
   VIDEO = 'video', // 视频内容
-  COMPACT = 'compact' // Compact command response
+  COMPACT = 'compact', // Compact command response
+  MODEL_3D = 'model_3d' // 3D model content
 }
 
 // 块状态定义
@@ -153,6 +154,19 @@ export interface CompactMessageBlock extends BaseMessageBlock {
   compactedContent: string // 从 <local-command-stdout> 提取的内容
 }
 
+// 3D模型块
+export interface Model3DMessageBlock extends BaseMessageBlock {
+  type: MessageBlockType.MODEL_3D
+  file: FileMetadata
+  metadata?: BaseMessageBlock['metadata'] & {
+    format: 'glb' | 'gltf' | 'usd' | 'ply' | 'obj'
+    source_plugin?: string
+    source_image?: string
+    progressText?: string
+    taskId?: string
+  }
+}
+
 // MessageBlock 联合类型
 export type MessageBlock =
   | PlaceholderMessageBlock
@@ -167,6 +181,7 @@ export type MessageBlock =
   | CitationMessageBlock
   | VideoMessageBlock
   | CompactMessageBlock
+  | Model3DMessageBlock
 
 export enum UserMessageStatus {
   SUCCESS = 'success'

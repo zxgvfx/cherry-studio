@@ -5,6 +5,8 @@ import type { ExtractResults } from '@renderer/utils/extract'
 import { type InferToolInput, type InferToolOutput, tool } from 'ai'
 import * as z from 'zod'
 
+import type { BuiltinTool, BuiltinToolContext } from './BuiltinToolRegistry'
+
 /**
  * 使用预提取关键词的网络搜索工具
  * 这个工具直接使用插件阶段分析的搜索意图，避免重复分析
@@ -225,6 +227,22 @@ You can use this tool as-is to search with the prepared queries, or provide addi
 // }
 
 // export type WebSearchToolWithExtractionOutput = InferToolOutput<ReturnType<typeof webSearchToolWithExtraction>>
+
+export const webSearchBuiltinTool: BuiltinTool = {
+  name: 'builtin_web_search',
+  isEnabled: (assistant) => !!assistant.webSearchProviderId,
+  create: (context: BuiltinToolContext) => {
+    const keywords = context.intentKeywords
+      ? { question: context.intentKeywords.question, links: context.intentKeywords.links }
+      : { question: [context.userContent] }
+
+    if (keywords.question[0] === 'not_needed') {
+      keywords.question = [context.userContent]
+    }
+
+    return webSearchToolWithPreExtractedKeywords(context.assistant.webSearchProviderId!, keywords, context.requestId)
+  }
+}
 
 export type WebSearchToolOutput = InferToolOutput<ReturnType<typeof webSearchToolWithPreExtractedKeywords>>
 export type WebSearchToolInput = InferToolInput<ReturnType<typeof webSearchToolWithPreExtractedKeywords>>

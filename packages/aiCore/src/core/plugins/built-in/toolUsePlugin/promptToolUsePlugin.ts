@@ -40,8 +40,8 @@ The tool name should be the exact name of the tool you are using, and the argume
 </tool_use>
 
 <tool_use>
-  <name>exec</name>
-  <arguments>{ "code": "const page = await CherryBrowser_fetch({ url: \\"https://example.com\\" })\nreturn page" }</arguments>
+  <name>call_tool</name>
+  <arguments>{ "tool_name": "confluence_search", "arguments": { "query": "example" } }</arguments>
 </tool_use>
 
 
@@ -188,11 +188,48 @@ function defaultBuildSystemPrompt(userSystemPrompt: string, tools: ToolSet, mcpM
   if (availableTools === null) return userSystemPrompt
 
   if (mcpMode == 'auto') {
-    // Auto 模式保留简短的工具说明，避免模型误以为无工具或提前结束回复
+    // Auto 模式：Hub 元工具（search/call_tool/get_tool_schema/ask_model）由 User Instructions 提供。
+    // 但如果同时启用了前端搜索工具（builtin_web_search），需要在 prompt 中额外描述，
+    // 否则模型不知道该工具的存在。
+    const nonHubToolNames = Object.keys(tools).filter(
+      (name) => !name.startsWith('mcp__CherryHub__')
+    )
+    let directToolsSection = ''
+    if (nonHubToolNames.length > 0) {
+      const directToolDescriptions = nonHubToolNames
+        .map((name) => {
+          const t = tools[name]
+          const desc = t?.description || name
+          const schema = (t as any)?.inputSchema
+          let paramsStr = ''
+          if (schema) {
+            const rawSchema = typeof schema === 'object' && 'jsonSchema' in schema ? (schema as any).jsonSchema : schema
+            const props = rawSchema?.properties || {}
+            const required = rawSchema?.required || []
+            paramsStr = Object.entries(props)
+              .map(([k, v]: [string, any]) => `${required.includes(k) ? '' : '?'}${k}: ${v?.type || 'any'}`)
+              .join(', ')
+          }
+          return `- **${name}**(${paramsStr}): ${desc}`
+        })
+        .join('\n')
+      directToolsSection = `
+
+## Direct Tools (call directly, NOT through Hub search/exec)
+
+The following tools are available for you to call DIRECTLY using the <tool_use> XML format.
+Do NOT use Hub \`search\` or \`call_tool\` for these tools. Call them by their exact name.
+
+${directToolDescriptions}`
+    }
+
     const autoModeToolsInfo = `
 ## Tool Use (Auto / Hub Mode)
 
-You MUST use the <tool_use> XML format above when calling tools. The exact tool names, workflow, and discoverable tools are defined in the "User Instructions" section below. After each tool result, continue the conversation: call more tools if needed, or reply to the user with the final answer. Do not stop mid-turn after outputting a tool call.`
+You MUST use the <tool_use> XML format above when calling tools. The exact tool names, workflow, and discoverable tools are defined in the "User Instructions" section below. After each tool result, continue the conversation: call more tools if needed, or reply to the user with the final answer. Do not stop mid-turn after outputting a tool call.
+
+Available Hub meta-tools: search, call_tool, get_tool_schema, ask_model.
+Use call_tool to execute any discovered tool. Do NOT use exec.${directToolsSection}`
     return DEFAULT_SYSTEM_PROMPT.replace('{{ TOOLS_INFO }}', autoModeToolsInfo).replace(
       '{{ USER_SYSTEM_PROMPT }}',
       userSystemPrompt || ''
@@ -247,10 +284,41 @@ function defaultParseToolUse(content: string, tools: ToolSet): { results: ToolUs
     let toolName = match[2].trim()
     switch (toolName.toLowerCase()) {
       case 'search':
+      case 'list':
+      case 'list_tools':
+      case 'list-tools':
         toolName = 'mcp__CherryHub__search'
         break
+      case 'call_tool':
+      case 'tool_call':
       case 'exec':
-        toolName = 'mcp__CherryHub__exec'
+      case 'execute':
+      case 'call':
+      case 'run':
+      case 'invoke':
+      case 'use':
+      case 'use_tool':
+        toolName = 'mcp__CherryHub__callTool'
+        break
+      case 'get_tool_schema':
+      case 'inspect':
+      case 'inspect_tool':
+      case 'tool_info':
+      case 'describe':
+        toolName = 'mcp__CherryHub__getToolSchema'
+        break
+      case 'ask_model':
+      case 'askmodel':
+      case 'delegate':
+        toolName = 'mcp__CherryHub__askModel'
+        break
+      case 'web_search':
+      case 'websearch':
+      case 'google_search':
+      case 'bing_search':
+        if (tools['builtin_web_search']) {
+          toolName = 'builtin_web_search'
+        }
         break
       default:
         break

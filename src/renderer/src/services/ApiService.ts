@@ -6,6 +6,7 @@ import { buildStreamTextParams } from '@renderer/aiCore/prepareParams'
 import type { AiSdkMiddlewareConfig } from '@renderer/aiCore/types/middlewareConfig'
 import { buildProviderOptions } from '@renderer/aiCore/utils/options'
 import { isDedicatedImageGenerationModel, isEmbeddingModel, isFunctionCallingModel, isTextChatModel } from '@renderer/config/models'
+import { isGenerate3DModel } from '@renderer/config/models/vision'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
@@ -22,7 +23,7 @@ import { isToolUseModeFunction } from '@renderer/utils/assistant'
 import { getErrorMessage, isAbortError } from '@renderer/utils/error'
 import { purifyMarkdownImages } from '@renderer/utils/markdown'
 import { isPromptToolUse, isSupportedToolUse } from '@renderer/utils/mcp-tools'
-import { findFileBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
+import { findFileBlocks, findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { containsSupportedVariables, replacePromptVariables } from '@renderer/utils/prompt'
 import { NOT_SUPPORT_API_KEY_PROVIDER_TYPES, NOT_SUPPORT_API_KEY_PROVIDERS } from '@renderer/utils/provider'
 import { isEmpty, takeRight } from 'lodash'
@@ -38,7 +39,7 @@ import {
   getQuickModel
 } from './AssistantService'
 import { ConversationService } from './ConversationService'
-import { injectUserMessageWithKnowledgeSearchPrompt } from './KnowledgeService'
+import { injectOrchestrationInstructions } from './OrchestrationPreprocessor'
 import { generateUnifiedImage } from './ImageGenerationService'
 import { getRotatedApiKey } from './providerKey'
 import type { BlockManager } from './messageStreaming'
@@ -132,45 +133,64 @@ export async function fetchMcpTools(assistant: Assistant) {
     }
   }
 
-  // Auto 模式下确保 Hub 的 search/exec 工具有定义（避免提示模式无法解析/执行）
+  // Auto 模式下确保 Hub 核心元工具存在（search/call_tool/get_tool_schema）
   const hasHub = enabledMCPs?.some((server) => server.id === hubMCPServer.id)
   if (hasHub) {
-    const hasSearch = mcpTools.some((tool) => tool.id === 'search' || tool.name === 'search')
-    const hasExec = mcpTools.some((tool) => tool.id === 'exec' || tool.name === 'exec')
+    const hasSearch = mcpTools.some((tool) => tool.name === 'search')
+    const hasCallTool = mcpTools.some((tool) => tool.name === 'call_tool')
+    const hasGetSchema = mcpTools.some((tool) => tool.name === 'get_tool_schema')
 
     if (!hasSearch) {
       mcpTools.push({
         id: 'search',
         name: 'search',
-        description: 'Search available MCP tools using keywords.',
+        description: 'Discover available tools by keyword. Use * to list all.',
         serverId: hubMCPServer.id,
         serverName: hubMCPServer.name,
         type: 'mcp',
         inputSchema: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: 'Search keywords, comma-separated.' },
-            limit: { type: 'number', description: 'Max number of tools to return.' }
+            query: { type: 'string', description: 'Search keywords, comma-separated.' }
           },
           required: ['query']
         }
       })
     }
 
-    if (!hasExec) {
+    if (!hasCallTool) {
       mcpTools.push({
-        id: 'exec',
-        name: 'exec',
-        description: 'Execute code that calls MCP tools.',
+        id: 'call_tool',
+        name: 'call_tool',
+        description: 'Execute any available tool by name.',
         serverId: hubMCPServer.id,
         serverName: hubMCPServer.name,
         type: 'mcp',
         inputSchema: {
           type: 'object',
           properties: {
-            code: { type: 'string', description: 'JavaScript code invoking MCP tools.' }
+            tool_name: { type: 'string', description: 'The tool to execute' },
+            arguments: { type: 'object', description: 'Tool arguments as key-value pairs' }
           },
-          required: ['code']
+          required: ['tool_name']
+        }
+      })
+    }
+
+    if (!hasGetSchema) {
+      mcpTools.push({
+        id: 'get_tool_schema',
+        name: 'get_tool_schema',
+        description: 'Get full parameter schema for a specific tool.',
+        serverId: hubMCPServer.id,
+        serverName: hubMCPServer.name,
+        type: 'mcp',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            tool_name: { type: 'string', description: 'The exact tool name' }
+          },
+          required: ['tool_name']
         }
       })
     }
@@ -210,15 +230,8 @@ export async function transformMessagesAndFetch(
     // replace prompt variables
     assistant.prompt = await replacePromptVariables(assistant.prompt, assistant.model?.name)
 
-    // inject knowledge search prompt into model messages
-    await injectUserMessageWithKnowledgeSearchPrompt({
-      modelMessages,
-      assistant,
-      assistantMsgId: request.assistantMsgId,
-      topicId: request.topicId,
-      blockManager: request.blockManager,
-      setCitationBlockId: request.callbacks.setCitationBlockId!
-    })
+    // inject orchestration instructions for /tool triggers and @model mentions
+    injectOrchestrationInstructions(modelMessages, uiMessages)
 
     await fetchChatCompletion({
       messages: modelMessages,
@@ -253,6 +266,11 @@ export async function fetchChatCompletion({
     modelId: assistant.model?.id,
     modelName: assistant.model?.name
   })
+
+  if (isGenerate3DModel(assistant.model)) {
+    await handle3DGeneration(assistant, onChunkReceived, requestOptions, uiMessages)
+    return
+  }
 
   // Get base provider and apply API key rotation
   // NOTE: Shallow copy is intentional. Provider objects are not mutated by downstream code.
@@ -390,12 +408,18 @@ export async function fetchMessagesSummary({
       mainText: purifyMarkdownImages(getMainTextContent(message))
     }
 
-    // 让LLM知道消息中包含的文件，但只提供文件名
-    // 对助手消息而言，没有提供工具调用结果等更多信息，仅提供文本上下文。
+    // 让LLM知道消息中包含的文件和图片，但只提供文件名
     const fileBlocks = findFileBlocks(message)
+    const imageBlocks = findImageBlocks(message)
     let fileList: Array<string> = []
-    if (fileBlocks.length && fileBlocks.length > 0) {
+    if (fileBlocks.length > 0) {
       fileList = fileBlocks.map((fileBlock) => fileBlock.file.origin_name)
+    }
+    if (imageBlocks.length > 0) {
+      fileList = [
+        ...fileList,
+        ...imageBlocks.filter((b) => b.file).map((b) => `[image] ${b.file!.origin_name || b.file!.name}`)
+      ]
     }
     return {
       ...structredMessage,
@@ -767,4 +791,201 @@ export async function checkModel(provider: Provider, model: Model, timeout = 150
   const startTime = performance.now()
   await checkApi(provider, model, timeout)
   return { latency: performance.now() - startTime }
+}
+
+async function handle3DGeneration(
+  assistant: Assistant,
+  onChunkReceived: (chunk: Chunk) => void,
+  requestOptions?: { signal?: AbortSignal },
+  uiMessages?: Message[]
+) {
+  const lastUserMsg = uiMessages ? [...uiMessages].reverse().find((m) => m.role === 'user') : undefined
+
+  if (!lastUserMsg) {
+    onChunkReceived({ type: ChunkType.ERROR, error: { message: 'No user message found for 3D generation' } })
+    return
+  }
+
+  const imageBlocks = findImageBlocks(lastUserMsg)
+  const fileBlocks = findFileBlocks(lastUserMsg)
+  const imageFiles = [
+    ...imageBlocks.filter((b) => b.file).map((b) => b.file!),
+    ...fileBlocks.filter((b) => b.file?.type === 'image').map((b) => b.file!)
+  ]
+
+  if (imageFiles.length === 0) {
+    onChunkReceived({
+      type: ChunkType.ERROR,
+      error: {
+        message: i18n.t('model3d.no_image', 'Please upload an image to generate a 3D model')
+      }
+    })
+    return
+  }
+
+  const imageFile = imageFiles[0]
+
+  onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
+  onChunkReceived({ type: ChunkType.MODEL_3D_CREATED } as any)
+  onChunkReceived({
+    type: ChunkType.MODEL_3D_PROGRESS,
+    progressText: i18n.t('model3d.progress_submitted', 'Task submitted, waiting...')
+  } as any)
+
+  const provider = getProviderByModel(assistant.model || getDefaultModel())
+
+  try {
+    const imageData = await window.api.file.base64Image(imageFile.id + imageFile.ext)
+    if (!imageData?.data) {
+      onChunkReceived({ type: ChunkType.ERROR, error: { message: 'Failed to read image file' } })
+      return
+    }
+
+    // Step 1: Submit
+    const submitResp = await fetch('/api/v1/generate-3d/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image_data: imageData.data,
+        model: assistant.model?.name || assistant.model?.id || 'Hunyuan3D-2',
+        generate_type: 'Normal',
+        enable_pbr: true,
+        face_count: 500000,
+        output_format: 'glb',
+        seed: 1234,
+        apiHost: provider?.apiHost,
+        apiKey: provider?.apiKey
+      }),
+      signal: requestOptions?.signal
+    })
+
+    const submitResult = await submitResp.json()
+    if (submitResult.error) {
+      onChunkReceived({ type: ChunkType.ERROR, error: { message: submitResult.error } })
+      return
+    }
+
+    const taskId = submitResult.task_id
+    onChunkReceived({
+      type: ChunkType.MODEL_3D_PROGRESS,
+      progressText: i18n.t('model3d.progress_waiting', 'Queued, waiting...')
+    } as any)
+
+    // Step 2: Frontend polling loop — no timeout, only user abort stops it
+    const pollStart = Date.now()
+    let pollInterval = 3000
+    let lastStatus = ''
+    let consecutiveErrors = 0
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      if (requestOptions?.signal?.aborted) return
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval))
+      pollInterval = Math.min(pollInterval * 1.2, 10000)
+
+      if (requestOptions?.signal?.aborted) return
+
+      let pollResult: any
+      try {
+        const pollResp = await fetch('/api/v1/generate-3d/poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_id: taskId,
+            apiHost: provider?.apiHost,
+            apiKey: provider?.apiKey
+          }),
+          signal: requestOptions?.signal
+        })
+        pollResult = await pollResp.json()
+        consecutiveErrors = 0
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError') return
+        consecutiveErrors++
+        const elapsed = Math.round((Date.now() - pollStart) / 1000)
+        onChunkReceived({
+          type: ChunkType.MODEL_3D_PROGRESS,
+          progressText: `${i18n.t('model3d.progress_processing')} (${elapsed}s) — ${i18n.t('model3d.progress_retry', 'retrying...')}`
+        } as any)
+        continue
+      }
+
+      if (pollResult.error) {
+        consecutiveErrors++
+        const elapsed = Math.round((Date.now() - pollStart) / 1000)
+        onChunkReceived({
+          type: ChunkType.MODEL_3D_PROGRESS,
+          progressText: `${i18n.t('model3d.progress_processing')} (${elapsed}s) — ${i18n.t('model3d.progress_retry', 'retrying...')}`
+        } as any)
+        continue
+      }
+
+      const status = pollResult.status || 'waiting'
+      const elapsed = Math.round((Date.now() - pollStart) / 1000)
+
+      if (status !== lastStatus) {
+        lastStatus = status
+      }
+
+      let progressKey = 'model3d.progress_waiting'
+      if (status === 'in_progress' || status === 'processing') {
+        progressKey = 'model3d.progress_processing'
+      } else if (status === 'failure') {
+        progressKey = 'model3d.progress_failed'
+      }
+
+      onChunkReceived({
+        type: ChunkType.MODEL_3D_PROGRESS,
+        progressText: `${i18n.t(progressKey)} (${elapsed}s)`
+      } as any)
+
+      if (status === 'success') {
+        // Step 3: Download & save
+        onChunkReceived({
+          type: ChunkType.MODEL_3D_PROGRESS,
+          progressText: i18n.t('model3d.progress_downloading', 'Downloading model file...')
+        } as any)
+
+        const saveResp = await fetch('/api/v1/generate-3d/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            download_url: pollResult.download_url,
+            format: pollResult.format || 'glb',
+            task_id: taskId
+          }),
+          signal: requestOptions?.signal
+        })
+
+        const saveResult = await saveResp.json()
+
+        if (saveResult.error) {
+          onChunkReceived({ type: ChunkType.ERROR, error: { message: saveResult.error } })
+          return
+        }
+
+        if (saveResult.ok && saveResult.file) {
+          onChunkReceived({
+            type: ChunkType.MODEL_3D_COMPLETE,
+            file: saveResult.file,
+            format: saveResult.format || 'glb'
+          } as any)
+        }
+
+        const imageName = imageFile.origin_name || imageFile.name || 'image'
+        const modelName = assistant.model?.name || assistant.model?.id || '3D'
+        onChunkReceived({
+          type: ChunkType.BLOCK_COMPLETE,
+          response: { text: `[Image-to-3D] ${modelName}: ${imageName}` }
+        } as any)
+        return
+      }
+
+      // failure 不终止，继续轮询等待可能的恢复
+    }
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return
+    onChunkReceived({ type: ChunkType.ERROR, error: { message: error?.message || 'Unknown 3D generation error' } })
+  }
 }

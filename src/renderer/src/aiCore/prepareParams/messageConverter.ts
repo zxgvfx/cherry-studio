@@ -118,8 +118,9 @@ async function convertMessageToUserModelMessage(
     parts.push({ type: 'text', text: content })
   }
 
-  // 处理图片（仅在支持视觉的模型中）
-  if (isVisionModel) {
+  // 处理图片：只要用户附带了图片就发送给模型，
+  // 不再仅限 vision 模型（由 API 端决定是否支持图片输入）
+  if (imageBlocks.length > 0) {
     parts.push(...(await convertImageBlockToImagePart(imageBlocks)))
   }
   // 处理文件

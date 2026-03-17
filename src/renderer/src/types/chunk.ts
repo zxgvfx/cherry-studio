@@ -61,6 +61,9 @@ export enum ChunkType {
   SEARCH_COMPLETE_UNION = 'search_complete_union',
   VIDEO_SEARCHED = 'video.searched',
   IMAGE_SEARCHED = 'image.searched',
+  MODEL_3D_CREATED = 'model_3d.created',
+  MODEL_3D_PROGRESS = 'model_3d.progress',
+  MODEL_3D_COMPLETE = 'model_3d.complete',
   RAW = 'raw'
 }
 
@@ -457,6 +460,30 @@ export interface ImageSearchedChunk {
   metadata: Record<string, any>
 }
 
+export interface Model3DCreatedChunk {
+  type: ChunkType.MODEL_3D_CREATED
+}
+
+export interface Model3DProgressChunk {
+  type: ChunkType.MODEL_3D_PROGRESS
+  progressText: string
+}
+
+export interface Model3DCompleteChunk {
+  type: ChunkType.MODEL_3D_COMPLETE
+  file: {
+    id: string
+    name: string
+    origin_name?: string
+    path: string
+    ext: string
+    size: number
+    type: string
+    created_at?: string
+  }
+  format: string
+}
+
 export interface RawChunk {
   /**
    * The type of the chunk
@@ -505,4 +532,7 @@ export type Chunk =
   | SearchCompleteUnionChunk // 搜索(知识库/互联网)完成
   | VideoSearchedChunk // 知识库检索视频
   | ImageSearchedChunk // 知识库检索图片
+  | Model3DCreatedChunk // 3D模型生成开始
+  | Model3DProgressChunk // 3D模型生成进度更新
+  | Model3DCompleteChunk // 3D模型生成完成
   | RawChunk

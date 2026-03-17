@@ -31,9 +31,11 @@ import { generateText } from 'ai'
 import { isEmpty } from 'lodash'
 
 import { MemoryProcessor } from '../../services/MemoryProcessor'
-import { knowledgeSearchTool } from '../tools/KnowledgeSearchTool'
-import { memorySearchTool } from '../tools/MemorySearchTool'
-import { webSearchToolWithPreExtractedKeywords } from '../tools/WebSearchTool'
+import { BuiltinToolRegistry } from '../tools/BuiltinToolRegistry'
+import { knowledgeBuiltinTool } from '../tools/KnowledgeSearchTool'
+import { memoryBuiltinTool } from '../tools/MemorySearchTool'
+import { skillBuiltinTool } from '../tools/SkillTool'
+import { webSearchBuiltinTool } from '../tools/WebSearchTool'
 
 const logger = loggerService.withContext('SearchOrchestrationPlugin')
 
@@ -272,13 +274,19 @@ export const searchOrchestrationPlugin = (
         // 存储用户消息用于后续记忆存储
         userMessages[context.requestId] = lastUserMessage
 
-        // 判断是否需要各种搜索
+        // /sam3 等工具触发命令不需要 intent analysis，跳过以加速
+        const userText = getMessageContent(lastUserMessage) || ''
+        if (/^\/?sam3\b/i.test(userText.trim())) {
+          logger.info('Skipping intent analysis for /sam3 command')
+          return
+        }
+
+        // 判断是否需要各种搜索（KB 与 WebSearch 平级，由模型决定是否调用）
         const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
         const hasKnowledgeBase = !isEmpty(knowledgeBaseIds)
-        const knowledgeRecognition = assistant.knowledgeRecognition || 'off'
         const globalMemoryEnabled = selectGlobalMemoryEnabled(store.getState())
         const shouldWebSearch = !!assistant.webSearchProviderId
-        const shouldKnowledgeSearch = hasKnowledgeBase && knowledgeRecognition === 'on'
+        const shouldKnowledgeSearch = hasKnowledgeBase
         const shouldMemorySearch = globalMemoryEnabled && assistant.enableMemory
 
         // 执行意图分析
@@ -307,68 +315,39 @@ export const searchOrchestrationPlugin = (
      * 🔧 Step 2: 工具配置阶段
      */
     transformParams: async (params, context) => {
-      // logger.info('🔧 Configuring tools based on intent...', context.requestId)
-
       try {
         const analysisResult = intentAnalysisResults[context.requestId]
-        // if (!analysisResult || !assistant) {
-        //   logger.info('🔧 No analysis result or assistant, skipping tool configuration')
-        //   return params
-        // }
 
-        // 确保 tools 对象存在
         if (!params.tools) {
           params.tools = {}
         }
 
-        // 🌐 网络搜索工具配置
-        if (analysisResult?.websearch && assistant.webSearchProviderId) {
-          const needsSearch = analysisResult.websearch.question && analysisResult.websearch.question[0] !== 'not_needed'
-
-          if (needsSearch) {
-            // onChunk({ type: ChunkType.EXTERNEL_TOOL_IN_PROGRESS })
-            // logger.info('🌐 Adding web search tool with pre-extracted keywords')
-            params.tools['builtin_web_search'] = webSearchToolWithPreExtractedKeywords(
-              assistant.webSearchProviderId,
-              analysisResult.websearch,
-              context.requestId
-            )
+        const userMessage = userMessages[context.requestId]
+        let userContent = 'search'
+        if (userMessage) {
+          userContent = getMessageContent(userMessage) || 'search'
+        } else {
+          const msgs = context.originalParams.messages
+          if (msgs && msgs.length > 0) {
+            const lastMsg = msgs[msgs.length - 1]
+            userContent = getMessageContent(lastMsg) || 'search'
           }
         }
 
-        // 📚 知识库搜索工具配置
-        const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
-        const hasKnowledgeBase = !isEmpty(knowledgeBaseIds)
-        const knowledgeRecognition = assistant.knowledgeRecognition || 'off'
-        const shouldKnowledgeSearch = hasKnowledgeBase && knowledgeRecognition === 'on'
+        const registry = new BuiltinToolRegistry()
+        registry.register(knowledgeBuiltinTool)
+        registry.register(webSearchBuiltinTool)
+        registry.register(memoryBuiltinTool)
+        registry.register(skillBuiltinTool)
 
-        if (shouldKnowledgeSearch) {
-          // on 模式：根据意图识别结果决定是否添加工具
-          const needsKnowledgeSearch =
-            analysisResult?.knowledge &&
-            analysisResult.knowledge.question &&
-            analysisResult.knowledge.question[0] !== 'not_needed'
+        registry.registerAll(params as { tools?: Record<string, any> }, {
+          assistant,
+          topicId,
+          userContent,
+          intentKeywords: analysisResult?.knowledge || analysisResult?.websearch,
+          requestId: context.requestId
+        })
 
-          if (needsKnowledgeSearch && analysisResult.knowledge) {
-            // logger.info('📚 Adding knowledge search tool (intent-based)')
-            const userMessage = userMessages[context.requestId]
-            params.tools['builtin_knowledge_search'] = knowledgeSearchTool(
-              assistant,
-              analysisResult.knowledge,
-              getMessageContent(userMessage),
-              topicId
-            )
-          }
-        }
-
-        // 🧠 记忆搜索工具配置
-        const globalMemoryEnabled = selectGlobalMemoryEnabled(store.getState())
-        if (globalMemoryEnabled && assistant.enableMemory) {
-          // logger.info('🧠 Adding memory search tool')
-          params.tools['builtin_memory_search'] = memorySearchTool()
-        }
-
-        // logger.info('🔧 Tools configured:', Object.keys(params.tools))
         return params
       } catch (error) {
         logger.error('🔧 Tool configuration failed:', error as Error)

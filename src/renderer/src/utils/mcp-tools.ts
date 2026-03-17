@@ -9,7 +9,7 @@ import type {
 import type { Content, FunctionCall, Part, Tool } from '@google/genai'
 import { Type as GeminiSchemaType } from '@google/genai'
 import { loggerService } from '@logger'
-import { isFunctionCallingModel, isVisionModel } from '@renderer/config/models'
+import { isFunctionCallingModel } from '@renderer/config/models'
 import i18n from '@renderer/i18n'
 import { currentSpan } from '@renderer/services/SpanManagerService'
 import store from '@renderer/store'
@@ -131,6 +131,42 @@ export async function callBuiltInTool(toolResponse: MCPToolResponse): Promise<MC
   return undefined
 }
 
+function trySam3Popup(toolResponse: MCPToolResponse, resp: MCPCallToolResponse) {
+  try {
+    let parsedArgs = toolResponse.arguments
+    if (typeof parsedArgs === 'string') {
+      try {
+        parsedArgs = JSON.parse(parsedArgs)
+      } catch {
+        return
+      }
+    }
+    if (!parsedArgs || typeof parsedArgs !== 'object') return
+
+    const argsObj = parsedArgs as Record<string, unknown>
+    const innerToolName = argsObj.tool_name as string | undefined
+
+    logger.info(`[SAM3 check] tool.name=${toolResponse.tool.name} innerTool=${innerToolName} isError=${resp.isError}`)
+
+    if (innerToolName !== 'sam3_launch_manual' || resp.isError) return
+
+    const innerArgs = (argsObj.arguments ?? argsObj) as Record<string, unknown>
+    const imagePath = (innerArgs?.image_path ?? argsObj.image_path) as string | undefined
+
+    logger.info(`[SAM3] Will open popup, imagePath=${imagePath}`)
+    if (!imagePath) return
+
+    import('@renderer/components/Popups/SAM3ManualPopup')
+      .then(({ default: SAM3ManualPopup }) => {
+        logger.info('[SAM3] SAM3ManualPopup.show() invoked')
+        SAM3ManualPopup.show(imagePath)
+      })
+      .catch((e) => logger.error('[SAM3] Failed to import SAM3ManualPopup', e as Error))
+  } catch (e) {
+    logger.error('[SAM3] trySam3Popup error', e as Error)
+  }
+}
+
 export async function callMCPTool(
   toolResponse: MCPToolResponse,
   topicId?: string,
@@ -175,6 +211,10 @@ export async function callMCPTool(
     }
 
     logger.info(`Tool called: ${toolResponse.tool.serverName} ${toolResponse.tool.name}`, resp)
+
+    // SAM3 web mode: open annotation popup when sam3_launch_manual completes
+    trySam3Popup(toolResponse, resp)
+
     return resp
   } catch (e) {
     logger.error(`Error calling Tool: ${toolResponse.tool.serverName} ${toolResponse.tool.name}`, e as Error)
@@ -415,7 +455,7 @@ export function parseToolUse(
 export function mcpToolCallResponseToOpenAICompatibleMessage(
   mcpToolResponse: MCPToolResponse,
   resp: MCPCallToolResponse,
-  isVisionModel: boolean = false,
+  _isVisionModel: boolean = false,
   noSupportArrayContent: boolean = false
 ): ChatCompletionMessageParam {
   const message = {
@@ -426,28 +466,21 @@ export function mcpToolCallResponseToOpenAICompatibleMessage(
   } else if (noSupportArrayContent) {
     let content: string = `Here is the result of mcp tool use \`${mcpToolResponse.tool.name}\`:\n`
 
-    if (isVisionModel) {
-      for (const item of resp.content) {
-        switch (item.type) {
-          case 'text':
-            content += (item.text || 'no content') + '\n'
-            break
-          case 'image':
-            // NOTE: 假设兼容模式下支持解析base64图片，虽然我觉得应该不支持
-            content += `Here is a image result: data:${item.mimeType};base64,${item.data}\n`
-            break
-          case 'audio':
-            // NOTE: 假设兼容模式下支持解析base64音频，虽然我觉得应该不支持
-            content += `Here is a audio result: data:${item.mimeType};base64,${item.data}\n`
-            break
-          default:
-            content += `Here is a unsupported result type: ${item.type}\n`
-            break
-        }
+    for (const item of resp.content) {
+      switch (item.type) {
+        case 'text':
+          content += (item.text || 'no content') + '\n'
+          break
+        case 'image':
+          content += `[Image generated successfully and displayed to the user]\n`
+          break
+        case 'audio':
+          content += `[Audio generated successfully and played to the user]\n`
+          break
+        default:
+          content += `Here is a unsupported result type: ${item.type}\n`
+          break
       }
-    } else {
-      content += JSON.stringify(resp.content)
-      content += '\n'
     }
 
     message.content = content
@@ -459,46 +492,36 @@ export function mcpToolCallResponseToOpenAICompatibleMessage(
       }
     ]
 
-    if (isVisionModel) {
-      for (const item of resp.content) {
-        switch (item.type) {
-          case 'text':
-            content.push({
-              type: 'text',
-              text: item.text || 'no content'
-            })
-            break
-          case 'image':
-            content.push({
-              type: 'image_url',
-              image_url: {
-                url: `data:${item.mimeType};base64,${item.data}`,
-                detail: 'auto'
-              }
-            })
-            break
-          case 'audio':
-            content.push({
-              type: 'input_audio',
-              input_audio: {
-                data: `data:${item.mimeType};base64,${item.data}`,
-                format: 'mp3'
-              }
-            })
-            break
-          default:
-            content.push({
-              type: 'text',
-              text: `Unsupported type: ${item.type}`
-            })
-            break
-        }
+    for (const item of resp.content) {
+      switch (item.type) {
+        case 'text':
+          content.push({
+            type: 'text',
+            text: item.text || 'no content'
+          })
+          break
+        case 'image':
+          content.push({
+            type: 'text',
+            text: `[Image generated successfully and displayed to the user]`
+          })
+          break
+        case 'audio':
+          content.push({
+            type: 'input_audio',
+            input_audio: {
+              data: `data:${item.mimeType};base64,${item.data}`,
+              format: 'mp3'
+            }
+          })
+          break
+        default:
+          content.push({
+            type: 'text',
+            text: `Unsupported type: ${item.type}`
+          })
+          break
       }
-    } else {
-      content.push({
-        type: 'text',
-        text: JSON.stringify(resp.content)
-      })
     }
 
     message.content = content
@@ -510,7 +533,7 @@ export function mcpToolCallResponseToOpenAICompatibleMessage(
 export function mcpToolCallResponseToOpenAIMessage(
   mcpToolResponse: MCPToolResponse,
   resp: MCPCallToolResponse,
-  isVisionModel: boolean = false
+  _isVisionModel: boolean = false
 ): OpenAI.Responses.EasyInputMessage {
   const message = {
     role: 'user'
@@ -526,35 +549,27 @@ export function mcpToolCallResponseToOpenAIMessage(
       }
     ]
 
-    if (isVisionModel) {
-      for (const item of resp.content) {
-        switch (item.type) {
-          case 'text':
-            content.push({
-              type: 'input_text',
-              text: item.text || 'no content'
-            })
-            break
-          case 'image':
-            content.push({
-              type: 'input_image',
-              image_url: `data:${item.mimeType};base64,${item.data}`,
-              detail: 'auto'
-            })
-            break
-          default:
-            content.push({
-              type: 'input_text',
-              text: `Unsupported type: ${item.type}`
-            })
-            break
-        }
+    for (const item of resp.content) {
+      switch (item.type) {
+        case 'text':
+          content.push({
+            type: 'input_text',
+            text: item.text || 'no content'
+          })
+          break
+        case 'image':
+          content.push({
+            type: 'input_text',
+            text: `[Image generated successfully and displayed to the user]`
+          })
+          break
+        default:
+          content.push({
+            type: 'input_text',
+            text: `Unsupported type: ${item.type}`
+          })
+          break
       }
-    } else {
-      content.push({
-        type: 'input_text',
-        text: JSON.stringify(resp.content)
-      })
     }
 
     message.content = content
@@ -566,7 +581,7 @@ export function mcpToolCallResponseToOpenAIMessage(
 export function mcpToolCallResponseToAnthropicMessage(
   mcpToolResponse: MCPToolResponse,
   resp: MCPCallToolResponse,
-  model: Model
+  _model: Model
 ): MessageParam {
   const message = {
     role: 'user'
@@ -580,50 +595,27 @@ export function mcpToolCallResponseToAnthropicMessage(
         text: `Here is the result of mcp tool use \`${mcpToolResponse.tool.name}\`:`
       }
     ]
-    if (isVisionModel(model)) {
-      for (const item of resp.content) {
-        switch (item.type) {
-          case 'text':
-            content.push({
-              type: 'text',
-              text: item.text || 'no content'
-            })
-            break
-          case 'image':
-            if (
-              item.mimeType === 'image/png' ||
-              item.mimeType === 'image/jpeg' ||
-              item.mimeType === 'image/webp' ||
-              item.mimeType === 'image/gif'
-            ) {
-              content.push({
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  data: `data:${item.mimeType};base64,${item.data}`,
-                  media_type: item.mimeType
-                }
-              })
-            } else {
-              content.push({
-                type: 'text',
-                text: `Unsupported image type: ${item.mimeType}`
-              })
-            }
-            break
-          default:
-            content.push({
-              type: 'text',
-              text: `Unsupported type: ${item.type}`
-            })
-            break
-        }
+    for (const item of resp.content) {
+      switch (item.type) {
+        case 'text':
+          content.push({
+            type: 'text',
+            text: item.text || 'no content'
+          })
+          break
+        case 'image':
+          content.push({
+            type: 'text',
+            text: `[Image generated successfully and displayed to the user]`
+          })
+          break
+        default:
+          content.push({
+            type: 'text',
+            text: `Unsupported type: ${item.type}`
+          })
+          break
       }
-    } else {
-      content.push({
-        type: 'text',
-        text: JSON.stringify(resp.content)
-      })
     }
     message.content = content
   }
@@ -634,7 +626,7 @@ export function mcpToolCallResponseToAnthropicMessage(
 export function mcpToolCallResponseToGeminiMessage(
   mcpToolResponse: MCPToolResponse,
   resp: MCPCallToolResponse,
-  isVisionModel: boolean = false
+  _isVisionModel: boolean = false
 ): Content {
   const message = {
     role: 'user'
@@ -652,39 +644,24 @@ export function mcpToolCallResponseToGeminiMessage(
         text: `Here is the result of mcp tool use \`${mcpToolResponse.tool.name}\`:`
       }
     ]
-    if (isVisionModel) {
-      for (const item of resp.content) {
-        switch (item.type) {
-          case 'text':
-            parts.push({
-              text: item.text || 'no content'
-            })
-            break
-          case 'image':
-            if (!item.data) {
-              parts.push({
-                text: 'No image data provided'
-              })
-            } else {
-              parts.push({
-                inlineData: {
-                  data: item.data,
-                  mimeType: item.mimeType || 'image/png'
-                }
-              })
-            }
-            break
-          default:
-            parts.push({
-              text: `Unsupported type: ${item.type}`
-            })
-            break
-        }
+    for (const item of resp.content) {
+      switch (item.type) {
+        case 'text':
+          parts.push({
+            text: item.text || 'no content'
+          })
+          break
+        case 'image':
+          parts.push({
+            text: `[Image generated successfully and displayed to the user]`
+          })
+          break
+        default:
+          parts.push({
+            text: `Unsupported type: ${item.type}`
+          })
+          break
       }
-    } else {
-      parts.push({
-        text: JSON.stringify(resp.content)
-      })
     }
     message.parts = parts
   }
@@ -738,7 +715,7 @@ export function awsBedrockToolUseToMcpTool(
 export function mcpToolCallResponseToAwsBedrockMessage(
   mcpToolResponse: MCPToolResponse,
   resp: MCPCallToolResponse,
-  model: Model
+  _model: Model
 ): AwsBedrockSdkMessageParam {
   const message: AwsBedrockSdkMessageParam = {
     role: 'user',
@@ -782,57 +759,35 @@ export function mcpToolCallResponseToAwsBedrockMessage(
       }
     }> = []
 
-    if (isVisionModel(model)) {
-      for (const item of resp.content) {
-        switch (item.type) {
-          case 'text':
-            toolResultContent.push({
-              text: item.text || 'no content'
-            })
-            break
-          case 'image':
-            if (item.data && item.mimeType) {
-              const awsImage = convertBase64ImageToAwsBedrockFormat(item.data, item.mimeType)
-              if (awsImage) {
-                toolResultContent.push({ image: awsImage })
-              } else {
-                toolResultContent.push({
-                  text: `[Image received: ${item.mimeType}, size: ${item.data?.length || 0} bytes]`
-                })
-              }
+    for (const item of resp.content) {
+      switch (item.type) {
+        case 'text':
+          toolResultContent.push({
+            text: item.text || 'no content'
+          })
+          break
+        case 'image':
+          if (item.data && item.mimeType) {
+            const awsImage = convertBase64ImageToAwsBedrockFormat(item.data, item.mimeType)
+            if (awsImage) {
+              toolResultContent.push({ image: awsImage })
             } else {
               toolResultContent.push({
-                text: '[Image received but no data available]'
+                text: `[Image received: ${item.mimeType}, size: ${item.data?.length || 0} bytes]`
               })
             }
-            break
-          default:
-            toolResultContent.push({
-              text: `Unsupported content type: ${item.type}`
-            })
-            break
-        }
-      }
-    } else {
-      // 对于非视觉模型，将所有内容合并为文本
-      const textContent = resp.content
-        .map((item) => {
-          if (item.type === 'text') {
-            return item.text
           } else {
-            // 对于非文本内容，尝试转换为JSON格式
-            try {
-              return JSON.stringify(item)
-            } catch {
-              return `[${item.type} content]`
-            }
+            toolResultContent.push({
+              text: '[Image received but no data available]'
+            })
           }
-        })
-        .join('\n')
-
-      toolResultContent.push({
-        text: textContent || 'Tool execution completed with no output'
-      })
+          break
+        default:
+          toolResultContent.push({
+            text: `Unsupported content type: ${item.type}`
+          })
+          break
+      }
     }
 
     message.content = [

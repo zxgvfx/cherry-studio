@@ -6,6 +6,8 @@ import { type InferToolInput, type InferToolOutput, tool } from 'ai'
 import { isEmpty } from 'lodash'
 import * as z from 'zod'
 
+import type { BuiltinTool, BuiltinToolContext } from './BuiltinToolRegistry'
+
 /**
  * 知识库搜索工具
  * 使用预提取关键词，直接使用插件阶段分析的搜索意图，避免重复分析
@@ -13,8 +15,7 @@ import * as z from 'zod'
 export const knowledgeSearchTool = (
   assistant: Assistant,
   extractedKeywords: KnowledgeExtractResults,
-  topicId: string,
-  userMessage?: string
+  topicId: string
 ) => {
   return tool({
     description: `Knowledge base search tool for retrieving information from user's private knowledge base. This searches your local collection of documents, web content, notes, and other materials you have stored.
@@ -33,14 +34,8 @@ You can use this tool as-is, or provide additionalContext to refine the search f
     }),
 
     execute: async ({ additionalContext }) => {
-      // try {
-      // 获取助手的知识库配置
       const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
-      const hasKnowledgeBase = !isEmpty(knowledgeBaseIds)
-      const knowledgeRecognition = assistant.knowledgeRecognition || 'on'
-
-      // 检查是否有知识库
-      if (!hasKnowledgeBase) {
+      if (isEmpty(knowledgeBaseIds)) {
         return []
       }
 
@@ -48,35 +43,17 @@ You can use this tool as-is, or provide additionalContext to refine the search f
       let finalRewrite = extractedKeywords.rewrite
 
       if (additionalContext?.trim()) {
-        // 如果大模型提供了额外上下文，使用更具体的描述
-        const cleanContext = additionalContext.trim()
-        if (cleanContext) {
-          finalQueries = [cleanContext]
-          finalRewrite = cleanContext
-        }
+        finalQueries = [additionalContext.trim()]
+        finalRewrite = additionalContext.trim()
       }
 
-      // 检查是否需要搜索
       if (finalQueries[0] === 'not_needed') {
         return []
       }
 
-      // 构建搜索条件
-      let searchCriteria: { question: string[]; rewrite: string }
-
-      if (knowledgeRecognition === 'off') {
-        // 直接模式：使用用户消息内容
-        const directContent = userMessage || finalQueries[0] || 'search'
-        searchCriteria = {
-          question: [directContent],
-          rewrite: directContent
-        }
-      } else {
-        // 自动模式：使用意图识别的结果
-        searchCriteria = {
-          question: finalQueries,
-          rewrite: finalRewrite
-        }
+      const searchCriteria = {
+        question: finalQueries,
+        rewrite: finalRewrite
       }
 
       // 构建 ExtractResults 对象
@@ -132,6 +109,21 @@ You can use this tool as-is, or provide additionalContext to refine the search f
       }
     }
   })
+}
+
+export const knowledgeBuiltinTool: BuiltinTool = {
+  name: 'builtin_knowledge_search',
+  isEnabled: (assistant) => !isEmpty(assistant.knowledge_bases),
+  create: (context: BuiltinToolContext) => {
+    const keywords: KnowledgeExtractResults =
+      context.intentKeywords &&
+      context.intentKeywords.question &&
+      context.intentKeywords.question[0] !== 'not_needed'
+        ? { question: context.intentKeywords.question, rewrite: context.intentKeywords.rewrite || context.userContent }
+        : { question: [context.userContent], rewrite: context.userContent }
+
+    return knowledgeSearchTool(context.assistant, keywords, context.topicId)
+  }
 }
 
 export type KnowledgeSearchToolInput = InferToolInput<ReturnType<typeof knowledgeSearchTool>>

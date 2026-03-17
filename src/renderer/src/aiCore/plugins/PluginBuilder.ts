@@ -2,7 +2,10 @@ import type { AiPlugin } from '@cherrystudio/ai-core'
 import { createPromptToolUsePlugin, webSearchPlugin } from '@cherrystudio/ai-core/built-in/plugins'
 import { loggerService } from '@logger'
 import { isGemini3Model, isQwen35Model, isSupportedThinkingTokenQwenModel } from '@renderer/config/models'
+import { isEmpty } from 'lodash'
 import { getEnableDeveloperMode } from '@renderer/hooks/useSettings'
+import store from '@renderer/store'
+import { selectEnabledSkills } from '@renderer/store/skills'
 import type { Assistant, Model, Provider } from '@renderer/types'
 import { SystemProviderIds } from '@renderer/types'
 import { isOllamaProvider, isSupportEnableThinkingProvider } from '@renderer/utils/provider'
@@ -110,8 +113,13 @@ export function buildPlugins({ provider, model, config }: BuildPluginsContext): 
   if (config.enableWebSearch && config.webSearchPluginConfig) {
     plugins.push(webSearchPlugin(config.webSearchPluginConfig))
   }
-  // 2. 支持工具调用时添加搜索插件
-  if (config.isSupportedToolUse || config.isPromptToolUse) {
+  // 2. 搜索编排插件：按功能（KB/WebSearch/Memory）添加，不依赖 MCP 模式
+  const hasBuiltinTools =
+    !!config.assistant.webSearchProviderId ||
+    !isEmpty(config.assistant.knowledge_bases) ||
+    config.assistant.enableMemory ||
+    selectEnabledSkills(store.getState()).length > 0
+  if (config.isSupportedToolUse || config.isPromptToolUse || hasBuiltinTools) {
     plugins.push(searchOrchestrationPlugin(config.assistant, config.topicId || ''))
   }
 
@@ -121,7 +129,7 @@ export function buildPlugins({ provider, model, config }: BuildPluginsContext): 
   // }
 
   // 4. 启用Prompt工具调用时添加工具插件
-  // Auto 模式也需要这个插件来解析 XML 格式的 search/exec 工具调用
+  // Auto 模式也需要这个插件来解析 XML 格式的 search/call_tool 工具调用
   if (config.isPromptToolUse || config.mcpMode === 'auto') {
     plugins.push(
       createPromptToolUsePlugin({

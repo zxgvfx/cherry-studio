@@ -3255,6 +3255,23 @@ const migrateConfig = {
       logger.error('migrate 199 error', error as Error)
       return state
     }
+  },
+  '200': (state: RootState) => {
+    try {
+      if (state.settings?.sidebarIcons && !state.settings.enableDeveloperMode) {
+        const visible = state.settings.sidebarIcons.visible.filter((icon: string) => icon !== 'openclaw')
+        const disabled = state.settings.sidebarIcons.disabled || []
+        if (!disabled.includes('openclaw')) {
+          disabled.push('openclaw')
+        }
+        state.settings.sidebarIcons = { ...state.settings.sidebarIcons, visible, disabled }
+      }
+      logger.info('migrate 200 success')
+      return state
+    } catch (error) {
+      logger.error('migrate 200 error', error as Error)
+      return state
+    }
   }
 }
 

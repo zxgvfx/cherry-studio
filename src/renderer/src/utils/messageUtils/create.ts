@@ -12,6 +12,7 @@ import type {
   ImageMessageBlock,
   MainTextMessageBlock,
   Message,
+  Model3DMessageBlock,
   ThinkingMessageBlock,
   ToolMessageBlock,
   TranslationMessageBlock,
@@ -289,6 +290,19 @@ export function createVideoBlock(
     ...baseBlock,
     url: url,
     filePath: filePath
+  }
+}
+
+export function createModel3DBlock(
+  messageId: string,
+  overrides: Partial<Omit<Model3DMessageBlock, 'id' | 'messageId' | 'type'>> = {}
+): Model3DMessageBlock {
+  const { file, metadata, ...baseOverrides } = overrides
+  const baseBlock = createBaseMessageBlock(messageId, MessageBlockType.MODEL_3D, baseOverrides)
+  return {
+    ...baseBlock,
+    file: file!,
+    metadata
   }
 }
 

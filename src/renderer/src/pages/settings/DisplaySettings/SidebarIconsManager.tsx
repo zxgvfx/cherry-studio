@@ -18,6 +18,7 @@ import {
   Palette,
   Sparkle
 } from 'lucide-react'
+import { useEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import type { FC, ReactNode } from 'react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +38,7 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
   setDisabledIcons
 }) => {
   const { t } = useTranslation()
+  const { enableDeveloperMode } = useEnableDeveloperMode()
 
   const dispatch = useAppDispatch()
 
@@ -140,7 +142,9 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
           <Droppable droppableId="visible">
             {(provided: DroppableProvided) => (
               <IconList ref={provided.innerRef} {...provided.droppableProps}>
-                {visibleIcons.map((icon, index) => (
+                {visibleIcons
+                  .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
+                  .map((icon, index) => (
                   <Draggable key={icon} draggableId={icon} index={index}>
                     {(provided: DraggableProvided) => (
                       <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
@@ -170,7 +174,9 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
                 {disabledIcons.length === 0 ? (
                   <EmptyPlaceholder>{t('settings.display.sidebar.empty')}</EmptyPlaceholder>
                 ) : (
-                  disabledIcons.map((icon, index) => (
+                  disabledIcons
+                    .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
+                    .map((icon, index) => (
                     <Draggable key={icon} draggableId={icon} index={index}>
                       {(provided: DraggableProvided) => (
                         <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>

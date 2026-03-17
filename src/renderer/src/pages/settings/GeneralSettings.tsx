@@ -24,9 +24,9 @@ import type { NotificationSource } from '@renderer/types/notification'
 import { isValidProxyUrl } from '@renderer/utils'
 import { formatErrorMessage } from '@renderer/utils/error'
 import { defaultByPassRules, defaultLanguage } from '@shared/config/constant'
-import { Flex, Input, Switch, Tooltip } from 'antd'
+import { Flex, Input, message, Modal, Switch, Tooltip } from 'antd'
 import type { FC } from 'react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 
@@ -71,6 +71,45 @@ const GeneralSettings: FC = () => {
   const { theme } = useTheme()
   const { enableDeveloperMode, setEnableDeveloperMode } = useEnableDeveloperMode()
   const { setTimeoutTimer } = useTimer()
+  const dispatch = useAppDispatch()
+  const { t } = useTranslation()
+  const [devPasswordModalOpen, setDevPasswordModalOpen] = useState(false)
+  const [devPassword, setDevPassword] = useState('')
+
+  const handleDeveloperModeToggle = useCallback(
+    async (checked: boolean) => {
+      if (!checked) {
+        setEnableDeveloperMode(false)
+        return
+      }
+      setDevPassword('')
+      setDevPasswordModalOpen(true)
+    },
+    [setEnableDeveloperMode]
+  )
+
+  const handleDevPasswordConfirm = useCallback(async () => {
+    const backendUrl = (window as any).__CHERRY_BACKEND_URL || ''
+    try {
+      const resp = await fetch(backendUrl + '/api/v1/config/verify-developer-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: devPassword })
+      })
+      const data = await resp.json()
+      if (data.valid) {
+        setEnableDeveloperMode(true)
+        setDevPasswordModalOpen(false)
+        setDevPassword('')
+      } else if (data.message === 'user_not_allowed') {
+        message.error(t('settings.developer.user_not_allowed'))
+      } else {
+        message.error(t('settings.developer.password_incorrect'))
+      }
+    } catch {
+      message.error(t('settings.developer.password_incorrect'))
+    }
+  }, [devPassword, setEnableDeveloperMode, t])
 
   const updateTray = (isShowTray: boolean) => {
     setTray(isShowTray)
@@ -99,9 +138,6 @@ const GeneralSettings: FC = () => {
       updateTray(true)
     }
   }
-
-  const dispatch = useAppDispatch()
-  const { t } = useTranslation()
 
   const onSelectLanguage = (value: LanguageVarious) => {
     dispatch(setLanguage(value))
@@ -362,9 +398,28 @@ const GeneralSettings: FC = () => {
             <SettingRowTitle>{t('settings.developer.enable_developer_mode')}</SettingRowTitle>
             <InfoTooltip title={t('settings.developer.help')} />
           </Flex>
-          <Switch checked={enableDeveloperMode} onChange={setEnableDeveloperMode} />
+          <Switch checked={enableDeveloperMode} onChange={handleDeveloperModeToggle} />
         </SettingRow>
       </SettingGroup>
+      <Modal
+        title={t('settings.developer.password_required')}
+        open={devPasswordModalOpen}
+        onOk={handleDevPasswordConfirm}
+        onCancel={() => {
+          setDevPasswordModalOpen(false)
+          setDevPassword('')
+        }}
+        okButtonProps={{ disabled: !devPassword }}
+        destroyOnClose>
+        <Input.Password
+          placeholder={t('settings.developer.password_placeholder')}
+          value={devPassword}
+          onChange={(e) => setDevPassword(e.target.value)}
+          onPressEnter={handleDevPasswordConfirm}
+          autoFocus
+          style={{ marginTop: 12, marginBottom: 8 }}
+        />
+      </Modal>
     </SettingContainer>
   )
 }

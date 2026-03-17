@@ -100,13 +100,32 @@ export function isExternalUrl(url: string): boolean {
   return false
 }
 
+export function isLocalFileUrl(url: string): boolean {
+  return !!url && url.startsWith('file://')
+}
+
 /**
  * Convert an external URL to a base64 data URL via the backend proxy.
  * Checks memory cache → IndexedDB → backend (which has its own disk cache).
  */
 export async function proxyImageUrl(url: string): Promise<string | null> {
   if (!url || !isExternalUrl(url)) return url || null
+  return _cachedProxy(url, _doProxy)
+}
 
+/**
+ * Convert a file:// URL to a base64 data URL via the backend.
+ * Qt WebEngine blocks file:// resources, so we read through the backend instead.
+ */
+export async function proxyLocalFileUrl(url: string): Promise<string | null> {
+  if (!url || !isLocalFileUrl(url)) return url || null
+  return _cachedProxy(url, _doLocalFileProxy)
+}
+
+async function _cachedProxy(
+  url: string,
+  fetchFn: (url: string) => Promise<string | null>
+): Promise<string | null> {
   const memHit = _memCache.get(url)
   if (memHit) return memHit
 
@@ -120,7 +139,7 @@ export async function proxyImageUrl(url: string): Promise<string | null> {
       return idbHit.dataUrl
     }
 
-    const result = await _doProxy(url)
+    const result = await fetchFn(url)
     if (result) {
       _memCache.set(url, result)
       _idbPut(url, result)
@@ -150,6 +169,40 @@ async function _doProxy(url: string): Promise<string | null> {
     return await blobToDataUrl(blob)
   } catch (e) {
     console.error('[proxyImage] failed for', url, e)
+    return null
+  }
+}
+
+async function _doLocalFileProxy(fileUrl: string): Promise<string | null> {
+  try {
+    let filePath = fileUrl
+    if (fileUrl.startsWith('file:///')) {
+      filePath = fileUrl.slice(8)
+    } else if (fileUrl.startsWith('file://')) {
+      filePath = fileUrl.slice(7)
+    }
+
+    const api = (window as any).api
+    if (api?.file?.binaryImage) {
+      const result = await api.file.binaryImage(filePath)
+      if (result?.data) return result.data
+    }
+
+    const backendUrl = (window as any).__CHERRY_BACKEND_URL || ''
+    if (backendUrl) {
+      const resp = await fetch(backendUrl + '/api/v1/files/binary-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: filePath })
+      })
+      if (!resp.ok) return null
+      const data = await resp.json()
+      if (data?.data) return data.data
+    }
+
+    return null
+  } catch (e) {
+    console.error('[proxyImage] local file proxy failed:', fileUrl, e)
     return null
   }
 }

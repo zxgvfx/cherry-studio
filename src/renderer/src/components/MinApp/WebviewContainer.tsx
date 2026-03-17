@@ -5,10 +5,11 @@ import { memo, useEffect, useRef } from 'react'
 
 const logger = loggerService.withContext('WebviewContainer')
 
+const isQtRuntime = !!(window as any).__CHERRY_BACKEND_URL
+
 /**
  * WebviewContainer is a component that renders a webview element.
- * It is used in the MinAppPopupContainer component.
- * The webcontent can be remain in memory
+ * In Qt/Houdini environment, falls back to iframe since webview is Electron-only.
  */
 const WebviewContainer = memo(
   ({
@@ -25,8 +26,42 @@ const WebviewContainer = memo(
     onNavigateCallback: (appid: string, url: string) => void
   }) => {
     const webviewRef = useRef<WebviewTag | null>(null)
+    const iframeRef = useRef<HTMLIFrameElement | null>(null)
     const { enableSpellCheck, minappsOpenLinkExternal } = useSettings()
 
+    // ─── Qt iframe mode ─────────────────────────────────────────────────
+    useEffect(() => {
+      if (!isQtRuntime || !iframeRef.current) return
+
+      const iframe = iframeRef.current
+
+      const handleLoad = () => {
+        logger.debug(`[Qt] iframe loaded for app: ${appid}`)
+        onLoadedCallback(appid)
+        try {
+          onNavigateCallback(appid, iframe.contentWindow?.location?.href || url)
+        } catch {
+          // cross-origin — ignore
+        }
+      }
+
+      const handleError = () => {
+        logger.debug(`[Qt] iframe load error for app: ${appid}`)
+        onLoadedCallback(appid)
+      }
+
+      iframe.addEventListener('load', handleLoad)
+      iframe.addEventListener('error', handleError)
+      iframe.src = url
+
+      return () => {
+        iframe.removeEventListener('load', handleLoad)
+        iframe.removeEventListener('error', handleError)
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [appid, url])
+
+    // ─── Electron webview mode ──────────────────────────────────────────
     const setRef = (appid: string) => {
       onSetRefCallback(appid, null)
 
@@ -41,16 +76,15 @@ const WebviewContainer = memo(
     }
 
     useEffect(() => {
+      if (isQtRuntime) return
       if (!webviewRef.current) return
 
       let loadCallbackFired = false
 
       const handleLoaded = () => {
         logger.debug(`WebView did-finish-load for app: ${appid}`)
-        // Only fire callback once per load cycle
         if (!loadCallbackFired) {
           loadCallbackFired = true
-          // Small delay to ensure content is actually visible
           setTimeout(() => {
             logger.debug(`Calling onLoadedCallback for app: ${appid}`)
             onLoadedCallback(appid)
@@ -58,13 +92,11 @@ const WebviewContainer = memo(
         }
       }
 
-      // Handle load errors (e.g. network error in intranet)
       const handleLoadError = (event: any) => {
         if (event.isMainFrame) {
           logger.debug(`WebView did-fail-load for app: ${appid}, error: ${event.errorDescription}`)
-          
+
           const errorDesc = event.errorDescription
-          // Ignore ERR_ABORTED (user cancelled or navigated away)
           if (errorDesc && errorDesc !== 'ERR_ABORTED') {
             window.toast?.error?.(`Load failed: ${errorDesc}. Please check Network or Proxy settings.`)
           }
@@ -76,7 +108,6 @@ const WebviewContainer = memo(
         }
       }
 
-      // Additional callback for when page is ready to show
       const handleReadyToShow = () => {
         logger.debug(`WebView ready-to-show for app: ${appid}`)
         if (!loadCallbackFired) {
@@ -94,13 +125,11 @@ const WebviewContainer = memo(
         const webviewId = webviewRef.current?.getWebContentsId()
         if (webviewId) {
           window.api?.webview?.setSpellCheckEnabled?.(webviewId, enableSpellCheck)
-          // Set link opening behavior for this webview
           window.api?.webview?.setOpenLinkExternal?.(webviewId, minappsOpenLinkExternal)
         }
       }
 
       const handleStartLoading = () => {
-        // Reset callback flag when starting a new load
         loadCallbackFired = false
       }
 
@@ -111,7 +140,6 @@ const WebviewContainer = memo(
       webviewRef.current.addEventListener('ready-to-show', handleReadyToShow)
       webviewRef.current.addEventListener('did-navigate-in-page', handleNavigate)
 
-      // we set the url when the webview is ready
       webviewRef.current.src = url
 
       return () => {
@@ -122,29 +150,24 @@ const WebviewContainer = memo(
         webviewRef.current?.removeEventListener('ready-to-show', handleReadyToShow)
         webviewRef.current?.removeEventListener('did-navigate-in-page', handleNavigate)
       }
-      // because the appid and url are enough, no need to add onLoadedCallback
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [appid, url])
 
-    // Setup keyboard shortcuts handler for print and save
+    // Electron-only: keyboard shortcuts
     useEffect(() => {
+      if (isQtRuntime) return
       if (!webviewRef.current) return
 
       const unsubscribe = window.api?.webview?.onFindShortcut?.(async (payload) => {
-        // Get webviewId when event is triggered
         const webviewId = webviewRef.current?.getWebContentsId()
-
-        // Only handle events for this webview
         if (!webviewId || payload.webviewId !== webviewId) return
 
         const key = payload.key?.toLowerCase()
         const isModifier = payload.control || payload.meta
-
         if (!isModifier || !key) return
 
         try {
           if (key === 'p') {
-            // Print to PDF
             logger.info(`Printing webview ${appid} to PDF`)
             const filePath = await window.api.webview.printToPDF(webviewId)
             if (filePath) {
@@ -152,7 +175,6 @@ const WebviewContainer = memo(
               logger.info(`PDF saved to: ${filePath}`)
             }
           } else if (key === 's') {
-            // Save as HTML
             logger.info(`Saving webview ${appid} as HTML`)
             const filePath = await window.api.webview.saveAsHTML(webviewId)
             if (filePath) {
@@ -171,8 +193,9 @@ const WebviewContainer = memo(
       }
     }, [appid])
 
-    // Update webview settings when they change
+    // Electron-only: update webview settings
     useEffect(() => {
+      if (isQtRuntime) return
       if (!webviewRef.current) return
 
       try {
@@ -182,16 +205,28 @@ const WebviewContainer = memo(
           window.api?.webview?.setOpenLinkExternal?.(webviewId, minappsOpenLinkExternal)
         }
       } catch (error) {
-        // WebView may not be ready yet, settings will be applied in dom-ready event
         logger.debug(`WebView ${appid} not ready for settings update`)
       }
     }, [appid, minappsOpenLinkExternal, enableSpellCheck])
 
-    const WebviewStyle: React.CSSProperties = {
+    const commonStyle: React.CSSProperties = {
       width: '100%',
       height: '100%',
       backgroundColor: 'var(--color-background)',
-      display: 'inline-flex'
+      display: 'inline-flex',
+      border: 'none'
+    }
+
+    if (isQtRuntime) {
+      return (
+        <iframe
+          key={appid}
+          ref={iframeRef}
+          data-minapp-id={appid}
+          style={commonStyle}
+          allow="clipboard-write; clipboard-read"
+        />
+      )
     }
 
     return (
@@ -199,7 +234,7 @@ const WebviewContainer = memo(
         key={appid}
         ref={setRef(appid)}
         data-minapp-id={appid}
-        style={WebviewStyle}
+        style={commonStyle}
         allowpopups={'true' as any}
         partition="persist:webview"
         useragent={

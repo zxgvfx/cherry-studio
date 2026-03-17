@@ -5,6 +5,7 @@ import { createBaseCallbacks } from './baseCallbacks'
 import { createCitationCallbacks } from './citationCallbacks'
 import { createCompactCallbacks } from './compactCallbacks'
 import { createImageCallbacks } from './imageCallbacks'
+import { createModel3DCallbacks } from './model3dCallbacks'
 import { createTextCallbacks } from './textCallbacks'
 import { createThinkingCallbacks } from './thinkingCallbacks'
 import { createToolCallbacks } from './toolCallbacks'
@@ -60,6 +61,8 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
 
   const videoCallbacks = createVideoCallbacks({ blockManager, assistantMsgId })
 
+  const model3dCallbacks = createModel3DCallbacks({ blockManager, assistantMsgId })
+
   const compactCallbacks = createCompactCallbacks({
     blockManager,
     assistantMsgId,
@@ -88,6 +91,7 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
     ...imageCallbacks,
     ...citationCallbacks,
     ...videoCallbacks,
+    ...model3dCallbacks,
     ...compactCallbacks,
     // 清理资源的方法
     cleanup: () => {

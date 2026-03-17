@@ -1,7 +1,7 @@
 import type { Model, ModelPrimaryModality } from '@renderer/types'
 
 import { isEmbeddingModel, isRerankModel } from './embedding'
-import { isDedicatedImageGenerationModel, isPureGenerateImageModel, isVisionModel } from './vision'
+import { isDedicatedImageGenerationModel, isGenerate3DModel, isPureGenerateImageModel, isVisionModel } from './vision'
 
 /**
  * Centralized model modality classification with explicit-field priority.
@@ -16,6 +16,8 @@ export function getModelPrimaryModality(model?: Model): ModelPrimaryModality {
 
   if (isEmbeddingModel(model)) return 'embedding'
   if (isRerankModel(model)) return 'rerank'
+
+  if (isGenerate3DModel(model)) return 'model_3d'
 
   // Dedicated/pure image models do not participate in text tool pipelines.
   if (isDedicatedImageGenerationModel(model) || isPureGenerateImageModel(model)) {
