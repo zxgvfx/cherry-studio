@@ -33,6 +33,27 @@ export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
   // Track thoughtSignature for Gemini thought signature persistence
   let currentThoughtSignature: string | undefined
 
+  const ensureMainTextBlock = async () => {
+    if (mainTextBlockId) return
+    // 复用 onTextStart 逻辑：在部分模型/插件组合下可能出现 text-delta 早于 text-start 的情况
+    //（例如 prompt-tool-use 插件会 hold text-start，直到确认有非工具标签文本）
+    if (blockManager.hasInitialPlaceholder) {
+      const changes = {
+        type: MessageBlockType.MAIN_TEXT,
+        content: '',
+        status: MessageBlockStatus.STREAMING
+      }
+      mainTextBlockId = blockManager.initialPlaceholderBlockId!
+      blockManager.smartBlockUpdate(mainTextBlockId, changes, MessageBlockType.MAIN_TEXT, true)
+      return
+    }
+    const newBlock = createMainTextBlock(assistantMsgId, '', {
+      status: MessageBlockStatus.STREAMING
+    })
+    mainTextBlockId = newBlock.id
+    await blockManager.handleBlockTransition(newBlock, MessageBlockType.MAIN_TEXT)
+  }
+
   return {
     getCurrentMainTextBlockId: () => mainTextBlockId,
     onTextStart: async () => {
@@ -54,6 +75,7 @@ export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
     },
 
     onTextChunk: async (text: string, providerMetadata?: ProviderMetadata) => {
+      await ensureMainTextBlock()
       const citationBlockId = getCitationBlockId() || getCitationBlockIdFromTool()
       const citationBlockSource = citationBlockId
         ? (getState().messageBlocks.entities[citationBlockId] as CitationMessageBlock).response?.source
@@ -73,6 +95,9 @@ export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
     },
 
     onTextComplete: async (finalText: string, providerMetadata?: ProviderMetadata) => {
+      if (!mainTextBlockId && finalText) {
+        await ensureMainTextBlock()
+      }
       if (mainTextBlockId) {
         // Use thoughtSignature from providerMetadata if available, otherwise use collected one
         const thoughtSignature = providerMetadata?.google?.thoughtSignature || currentThoughtSignature

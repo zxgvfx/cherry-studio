@@ -57,9 +57,11 @@ const PopupContainer: React.FC<Props> = ({ model, apiFilter, modelFilter, showTa
   const listRef = useRef<DynamicVirtualListRef>(null)
   const [_searchText, setSearchText] = useState('')
   const searchText = useDeferredValue(_searchText)
+
   const { models, isLoading } = useApiModels(apiFilter)
-  const adaptedModels = useMemo(() => models.map((model) => apiModelAdapter(model)), [models])
   const allProviders = useAllProviders()
+
+  const adaptedModels = useMemo(() => models.map((model) => apiModelAdapter(model)), [models])
   const providerOrderMap = useMemo(() => new Map(allProviders.map((p, i) => [p.id, i])), [allProviders])
 
   // 当前选中的模型ID（需要转换为与列表项相同的格式）

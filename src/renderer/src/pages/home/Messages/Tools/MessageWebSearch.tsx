@@ -18,7 +18,12 @@ export const MessageWebSearchToolTitle = ({ toolResponse }: { toolResponse: Norm
       text={
         <PrepareToolWrapper>
           {t('message.searching')}
-          <span>{toolInput?.additionalContext ?? ''}</span>
+          <span>
+            {(toolInput as any)?.queries?.join(', ') ??
+              (toolInput as any)?.query ??
+              (toolInput as any)?.additionalContext ??
+              ''}
+          </span>
         </PrepareToolWrapper>
       }
     />

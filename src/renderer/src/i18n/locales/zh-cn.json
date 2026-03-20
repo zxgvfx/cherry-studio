@@ -4830,7 +4830,7 @@
       "quick_assistant_model": "快捷助手模型",
       "quick_assistant_selection": "选择助手",
       "quick_model": {
-        "description": "执行话题命名、搜索关键字提炼等简单任务时使用的模型",
+        "description": "执行话题命名、搜索关键字提炼、对话摘要生成等简单任务时使用的模型",
         "label": "快速模型",
         "setting_title": "快速模型设置",
         "tooltip": "建议选择轻量模型，不建议选择思考模型"
@@ -4839,6 +4839,13 @@
         "auto": "话题自动重命名",
         "label": "话题命名",
         "prompt": "话题命名提示词"
+      },
+      "context_summary": {
+        "label": "对话摘要",
+        "enable": "启用上下文摘要压缩",
+        "enable_tooltip": "开启后，早期的对话轮次会使用上方的快速模型压缩为摘要，减少 token 消耗。模型可通过工具查看详细内容。",
+        "full_turns": "保留完整内容的轮数",
+        "full_turns_tooltip": "最近 N 轮对话保留完整内容，更早的轮次使用摘要替代"
       },
       "translate_model": "翻译模型",
       "translate_model_description": "翻译服务使用的模型",

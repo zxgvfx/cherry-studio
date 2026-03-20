@@ -4830,7 +4830,7 @@
       "quick_assistant_model": "Quick Assistant Model",
       "quick_assistant_selection": "Select Assistant",
       "quick_model": {
-        "description": "Model used for simple tasks such as topic naming and keyword extraction",
+        "description": "Model used for simple tasks such as topic naming, keyword extraction, and conversation summary generation",
         "label": "Quick Model",
         "setting_title": "Quick model setup",
         "tooltip": "It is recommended to choose a lightweight model and not recommended to choose a thinking model."
@@ -4839,6 +4839,13 @@
         "auto": "Topic Auto Naming",
         "label": "Topic naming",
         "prompt": "Topic Naming Prompt"
+      },
+      "context_summary": {
+        "label": "Context Summary",
+        "enable": "Enable context summary compression",
+        "enable_tooltip": "When enabled, earlier conversation turns are compressed into summaries using the Quick Model above, reducing token usage. The model can retrieve full details via a tool.",
+        "full_turns": "Full content turns",
+        "full_turns_tooltip": "Number of recent turns to keep full content. Earlier turns use summaries."
       },
       "translate_model": "Translate Model",
       "translate_model_description": "Model used for translation service",

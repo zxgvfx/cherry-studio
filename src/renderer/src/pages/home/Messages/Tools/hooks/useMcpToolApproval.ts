@@ -5,9 +5,13 @@ import type { ToolMessageBlock } from '@renderer/types/newMessage'
 import { isToolAutoApproved } from '@renderer/utils/mcp-tools'
 import {
   cancelToolAction,
+  confirmAllPendingTools,
   confirmToolAction,
+  isSessionAutoApproveAll,
   isToolPending,
-  onToolPendingChange
+  onSessionAutoApproveChange,
+  onToolPendingChange,
+  setSessionAutoApproveAll
 } from '@renderer/utils/userConfirmation'
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -47,7 +51,7 @@ async function resolveHubToolServer(
  */
 export function useMcpToolApproval(block: ToolMessageBlock): ToolApprovalState & ToolApprovalActions {
   const { t } = useTranslation()
-  const { mcpServers, updateMCPServer } = useMCPServers()
+  const { mcpServers } = useMCPServers()
   const { agent } = useActiveAgent()
 
   const toolResponse = block.metadata?.rawMcpToolResponse as MCPToolResponse | undefined
@@ -55,10 +59,9 @@ export function useMcpToolApproval(block: ToolMessageBlock): ToolApprovalState &
   const id = toolResponse?.id ?? ''
   const status = toolResponse?.status
 
-  // Force re-render when requestToolConfirmation() is called for this tool.
-  // The resolver Map is not React state, so we need this subscription
-  // to detect when the execution layer has registered a pending approval.
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0)
+
+  // Re-render when requestToolConfirmation() is called for this tool
   useEffect(() => {
     if (!id) return
     return onToolPendingChange((toolId) => {
@@ -66,14 +69,14 @@ export function useMcpToolApproval(block: ToolMessageBlock): ToolApprovalState &
     })
   }, [id])
 
-  // Treat both 'pending' and 'streaming' as pending states.
-  // During streaming, the tool execution layer may have already called
-  // requestToolConfirmation() before tool-input-end fires, so we check
-  // isToolPending() to detect this race condition.
+  // Re-render when the session-level auto-approve flag changes
+  useEffect(() => {
+    return onSessionAutoApproveChange(() => forceUpdate())
+  }, [])
+
   const isPending = status === 'pending' || (status === 'streaming' && !!id && isToolPending(id))
 
   // For hub invoke/exec tools, resolve the underlying server asynchronously
-  // so the UI auto-approve state matches the execution layer's decision.
   const [hubResolvedAutoApproved, setHubResolvedAutoApproved] = useState(false)
   useEffect(() => {
     if (!tool || tool.serverId !== 'hub' || (tool.name !== 'invoke' && tool.name !== 'exec')) {
@@ -95,21 +98,19 @@ export function useMcpToolApproval(block: ToolMessageBlock): ToolApprovalState &
   }, [tool, toolResponse, mcpServers])
 
   const isAutoApproved = (() => {
+    if (isSessionAutoApproveAll()) return true
     if (!tool) return false
-    // Check basic auto-approve (built-in, agent allowed_tools, server-level)
     const basicApproved = isToolAutoApproved(
       tool,
       mcpServers.find((s) => s.id === tool.serverId),
       agent?.allowed_tools
     )
     if (basicApproved) return true
-    // For hub invoke/exec, use the async-resolved underlying server result
     return hubResolvedAutoApproved
   })()
 
   const [isConfirmed, setIsConfirmed] = useState(isAutoApproved)
 
-  // Compute approval states
   const isWaiting = isPending && !isAutoApproved && !isConfirmed
   const isExecuting = isPending && (isAutoApproved || isConfirmed)
 
@@ -122,48 +123,19 @@ export function useMcpToolApproval(block: ToolMessageBlock): ToolApprovalState &
     cancelToolAction(id)
   }, [id])
 
-  const autoApprove = useCallback(async () => {
-    if (!tool || !tool.name) {
-      return
-    }
-
-    // Try to resolve hub tools to the underlying server
-    const hubResult = await resolveHubToolServer(tool, toolResponse, mcpServers)
-
-    // Determine which server and tool name to update
-    const server = hubResult?.server ?? mcpServers.find((s) => s.id === tool.serverId)
-    const toolNameToApprove = hubResult?.toolName ?? tool.name
-
-    if (!server) {
-      // Even if we can't persist auto-approve, confirm the current tool
-      setIsConfirmed(true)
-      confirmToolAction(id)
-      return
-    }
-
-    let disabledAutoApproveTools = [...(server.disabledAutoApproveTools || [])]
-
-    // Remove tool from disabledAutoApproveTools to enable auto-approve
-    disabledAutoApproveTools = disabledAutoApproveTools.filter((name) => name !== toolNameToApprove)
-
-    updateMCPServer({ ...server, disabledAutoApproveTools })
-
-    // Confirm the current tool. The execution layer will auto-confirm other
-    // pending tools with the same name via confirmSameNameTools.
+  const autoApprove = useCallback(() => {
+    setSessionAutoApproveAll(true)
     setIsConfirmed(true)
     confirmToolAction(id)
-
+    confirmAllPendingTools()
     window.toast.success(t('message.tools.autoApproveEnabled', 'Auto-approve enabled for this tool'))
-  }, [tool, toolResponse, mcpServers, updateMCPServer, id, t])
+  }, [id, t])
 
   return {
-    // State
     isWaiting,
     isExecuting,
     isSubmitting: false,
     input: undefined,
-
-    // Actions
     confirm,
     cancel,
     autoApprove: isWaiting ? autoApprove : undefined

@@ -100,16 +100,18 @@ export function getTimeout(model: Model): number {
   return DEFAULT_TIMEOUT
 }
 
+const AUTO_MAX_TOKENS = 16384
+
 export function getMaxTokens(assistant: Assistant, model: Model): number | undefined {
   // NOTE: ai-sdk会把maxToken和budgetToken加起来
   const assistantSettings = getAssistantSettings(assistant)
   const enabledMaxTokens = assistantSettings.enableMaxTokens ?? false
   let maxTokens = assistantSettings.maxTokens
 
-  // If user hasn't enabled enableMaxTokens, return undefined to let the API use its default value.
-  // Note: Anthropic API requires max_tokens, but that's handled by the Anthropic client with a fallback.
   if (!enabledMaxTokens || maxTokens === undefined) {
-    return undefined
+    // 用户未手动设定时，使用足够高的默认值，避免长代码/长回复被截断。
+    // 模型会在完成输出后自然发出 EOS 停止，不会因为上限高而多生成内容。
+    return AUTO_MAX_TOKENS
   }
 
   const provider = getProviderByModel(model)

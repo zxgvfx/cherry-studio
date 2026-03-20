@@ -67,7 +67,7 @@ const AgentPage = () => {
     )
   }
 
-  if (agents && agents.length === 0) {
+  if (!agents || agents.length === 0) {
     return (
       <Container>
         <Navbar>

@@ -111,22 +111,91 @@ You can use this tool as-is, or provide additionalContext to refine the search f
   })
 }
 
+/**
+ * LLM 驱动的知识库搜索工具
+ * 无需预分析，由主 LLM 直接提供搜索查询
+ * 工具描述中包含知识库大纲，帮助 LLM 判断是否需要搜索
+ */
+export const knowledgeSearchToolDirect = (assistant: Assistant, topicId: string) => {
+  const kbOutline =
+    assistant.knowledge_bases
+      ?.map((kb) => `- ${kb.name}${kb.description ? `: ${kb.description}` : ''} (${kb.documentCount ?? '?'} docs)`)
+      .join('\n') || ''
+
+  return tool({
+    description: `Search your private knowledge base for relevant documents and information.
+
+Available knowledge bases:
+${kbOutline}
+
+Use this tool when the user's question may be answered by stored documents, notes, or web content in the knowledge base.`,
+
+    inputSchema: z.object({
+      query: z.string().describe('Search query for the knowledge base')
+    }),
+
+    execute: async ({ query }) => {
+      const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
+      if (isEmpty(knowledgeBaseIds)) {
+        return []
+      }
+
+      const extractResults: ExtractResults = {
+        websearch: undefined,
+        knowledge: { question: [query], rewrite: query }
+      }
+
+      const knowledgeReferences = await processKnowledgeSearch(extractResults, knowledgeBaseIds, topicId)
+      return knowledgeReferences.map((ref: KnowledgeReference) => ({
+        id: ref.id,
+        content: ref.content,
+        sourceUrl: ref.sourceUrl,
+        type: ref.type,
+        file: ref.file,
+        metadata: ref.metadata
+      }))
+    },
+    toModelOutput: ({ output: results }) => {
+      let summary = 'No relevant documents found.'
+      if (results.length > 0) {
+        summary = `Found ${results.length} relevant sources. Use [number] format to cite specific information.`
+      }
+      const referenceContent = `\`\`\`json\n${JSON.stringify(results, null, 2)}\n\`\`\``
+      const fullInstructions = REFERENCE_PROMPT.replace(
+        '{question}',
+        "Based on the knowledge references, please answer the user's question with proper citations."
+      ).replace('{references}', referenceContent)
+
+      return {
+        type: 'content',
+        value: [
+          { type: 'text', text: summary },
+          { type: 'text', text: fullInstructions }
+        ]
+      }
+    }
+  })
+}
+
 export const knowledgeBuiltinTool: BuiltinTool = {
   name: 'builtin_knowledge_search',
   isEnabled: (assistant) => !isEmpty(assistant.knowledge_bases),
   create: (context: BuiltinToolContext) => {
-    const keywords: KnowledgeExtractResults =
-      context.intentKeywords &&
-      context.intentKeywords.question &&
-      context.intentKeywords.question[0] !== 'not_needed'
-        ? { question: context.intentKeywords.question, rewrite: context.intentKeywords.rewrite || context.userContent }
-        : { question: [context.userContent], rewrite: context.userContent }
-
-    return knowledgeSearchTool(context.assistant, keywords, context.topicId)
+    if (context.intentKeywords) {
+      const keywords: KnowledgeExtractResults =
+        context.intentKeywords.question && context.intentKeywords.question[0] !== 'not_needed'
+          ? {
+              question: context.intentKeywords.question,
+              rewrite: context.intentKeywords.rewrite || context.userContent
+            }
+          : { question: [context.userContent], rewrite: context.userContent }
+      return knowledgeSearchTool(context.assistant, keywords, context.topicId)
+    }
+    return knowledgeSearchToolDirect(context.assistant, context.topicId)
   }
 }
 
-export type KnowledgeSearchToolInput = InferToolInput<ReturnType<typeof knowledgeSearchTool>>
-export type KnowledgeSearchToolOutput = InferToolOutput<ReturnType<typeof knowledgeSearchTool>>
+export type KnowledgeSearchToolInput = InferToolInput<ReturnType<typeof knowledgeSearchToolDirect>>
+export type KnowledgeSearchToolOutput = InferToolOutput<ReturnType<typeof knowledgeSearchToolDirect>>
 
 export default knowledgeSearchTool

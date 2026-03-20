@@ -6,19 +6,23 @@
 import type { ReasoningPart } from '@ai-sdk/provider-utils'
 import { loggerService } from '@logger'
 import { getModelPrimaryModality, isImageEnhancementModel, isVisionModel } from '@renderer/config/models'
+import type { ConversationSummary } from '@renderer/services/ConversationSummaryService'
 import type { Message, Model } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import type {
   FileMessageBlock,
   ImageMessageBlock,
   MainTextMessageBlock,
-  ThinkingMessageBlock
+  ThinkingMessageBlock,
+  ToolMessageBlock
 } from '@renderer/types/newMessage'
+import { MessageBlockStatus } from '@renderer/types/newMessage'
 import {
   findFileBlocks,
   findImageBlocks,
   findMainTextBlocks,
   findThinkingBlocks,
+  findToolBlocks,
   getMainTextContent
 } from '@renderer/utils/messageUtils/find'
 import { parseDataUrl } from '@shared/utils'
@@ -29,10 +33,18 @@ import type {
   ModelMessage,
   SystemModelMessage,
   TextPart,
+  ToolCallPart,
+  ToolModelMessage,
+  ToolResultPart,
   UserModelMessage
 } from 'ai'
 
 import { convertFileBlockToFilePart, convertFileBlockToTextPart } from './fileProcessor'
+
+export interface SummaryOptions {
+  summaryMap: Map<string, ConversationSummary | null>
+  splitIndex: number
+}
 
 const logger = loggerService.withContext('messageConverter')
 
@@ -50,15 +62,17 @@ export async function convertMessageToSdkParam(
   const imageBlocks = findImageBlocks(message)
   const reasoningBlocks = findThinkingBlocks(message)
   const mainTextBlocks = findMainTextBlocks(message)
+  const toolBlocks = findToolBlocks(message)
   if (message.role === 'user' || message.role === 'system') {
     return convertMessageToUserModelMessage(content, fileBlocks, imageBlocks, isVisionModel, model)
   } else {
-    return convertMessageToAssistantModelMessage(
+    return convertAssistantWithToolBlocks(
       content,
       fileBlocks,
       imageBlocks,
       reasoningBlocks,
       mainTextBlocks,
+      toolBlocks,
       model
     )
   }
@@ -288,6 +302,139 @@ async function convertMessageToAssistantModelMessage(
 }
 
 /**
+ * Wraps assistant message conversion with tool block handling.
+ * When an assistant message contains completed TOOL blocks, it produces:
+ * 1. An AssistantModelMessage with ToolCallPart entries appended
+ * 2. A ToolModelMessage with corresponding ToolResultPart entries
+ * This preserves multi-turn tool-calling context for the LLM.
+ */
+async function convertAssistantWithToolBlocks(
+  content: string,
+  fileBlocks: FileMessageBlock[],
+  imageBlocks: ImageMessageBlock[],
+  thinkingBlocks: ThinkingMessageBlock[],
+  mainTextBlocks: MainTextMessageBlock[],
+  toolBlocks: ToolMessageBlock[],
+  model?: Model
+): Promise<ModelMessage | ModelMessage[]> {
+  const assistantMsg = await convertMessageToAssistantModelMessage(
+    content,
+    fileBlocks,
+    imageBlocks,
+    thinkingBlocks,
+    mainTextBlocks,
+    model
+  )
+
+  const completedToolBlocks = toolBlocks.filter(
+    (tb) => tb.status === MessageBlockStatus.SUCCESS || tb.status === MessageBlockStatus.ERROR
+  )
+
+  if (completedToolBlocks.length === 0) {
+    return assistantMsg
+  }
+
+  const assistantParts = Array.isArray(assistantMsg.content)
+    ? [...assistantMsg.content]
+    : assistantMsg.content
+      ? [{ type: 'text' as const, text: assistantMsg.content }]
+      : []
+
+  const toolResultParts: ToolResultPart[] = []
+
+  for (const toolBlock of completedToolBlocks) {
+    const toolCallId = toolBlock.toolId
+    const rawResponse = toolBlock.metadata?.rawMcpToolResponse
+    const toolName = toolBlock.toolName || rawResponse?.tool?.name || 'unknown_tool'
+    const args = toolBlock.arguments ?? rawResponse?.arguments ?? {}
+
+    const toolCallPart: ToolCallPart = {
+      type: 'tool-call',
+      toolCallId,
+      toolName,
+      input: args
+    }
+    assistantParts.push(toolCallPart)
+
+    let resultValue: string
+    const rawResult = toolBlock.content ?? rawResponse?.response
+    if (rawResult === undefined || rawResult === null) {
+      resultValue = ''
+    } else if (typeof rawResult === 'string') {
+      resultValue = rawResult
+    } else {
+      try {
+        resultValue = JSON.stringify(rawResult)
+      } catch {
+        resultValue = String(rawResult)
+      }
+    }
+
+    const toolResultPart: ToolResultPart = {
+      type: 'tool-result',
+      toolCallId,
+      toolName,
+      output: { type: 'text', value: resultValue }
+    }
+    toolResultParts.push(toolResultPart)
+  }
+
+  const enrichedAssistant: AssistantModelMessage = {
+    role: 'assistant',
+    content: assistantParts as AssistantModelMessage['content']
+  }
+
+  const toolMessage: ToolModelMessage = {
+    role: 'tool',
+    content: toolResultParts
+  }
+
+  logger.debug(`Converted ${completedToolBlocks.length} tool blocks for multi-turn context`)
+
+  return [enrichedAssistant, toolMessage]
+}
+
+/**
+ * Converts a message in the summary zone to a compact SDK message.
+ * For assistant messages with a summary, uses the summary text.
+ * For user messages paired with a summarized assistant, uses the summary's userQuery.
+ * Falls back to null (triggering normal full conversion) if no summary is available.
+ */
+function convertSummarizedMessage(
+  message: Message,
+  summaryMap: Map<string, ConversationSummary | null>,
+  index: number,
+  allMessages: Message[]
+): ModelMessage | null {
+  if (message.role === 'assistant') {
+    const summary = summaryMap.get(message.id)
+    if (!summary) return null
+
+    let text = `[Summary] ${summary.assistantResult}`
+    if (summary.toolCalls.length > 0) {
+      const toolText = summary.toolCalls.map((t) => `${t.toolName}: ${t.resultSummary}`).join('; ')
+      text += `\n[Tools used] ${toolText}`
+    }
+    text += `\n[Detail ID: ${message.id}]`
+
+    return { role: 'assistant', content: text }
+  }
+
+  if (message.role === 'user') {
+    const nextMsg = index + 1 < allMessages.length ? allMessages[index + 1] : null
+    if (nextMsg?.role === 'assistant') {
+      const summary = summaryMap.get(nextMsg.id)
+      if (summary) {
+        return { role: 'user', content: `[Historical summary] ${summary.userQuery}` }
+      }
+    }
+    return null
+  }
+
+  return null
+}
+
+/**
  * Converts an array of messages to SDK-compatible model messages.
  *
  * This function processes messages and transforms them into the format required by the SDK.
@@ -313,12 +460,26 @@ async function convertMessageToAssistantModelMessage(
  *
  * The function automatically detects vision model capabilities and adjusts conversion accordingly.
  */
-export async function convertMessagesToSdkMessages(messages: Message[], model: Model): Promise<ModelMessage[]> {
+export async function convertMessagesToSdkMessages(
+  messages: Message[],
+  model: Model,
+  summaryOptions?: SummaryOptions
+): Promise<ModelMessage[]> {
   const sdkMessages: ModelMessage[] = []
   const modality = getModelPrimaryModality(model)
   const isVision = isVisionModel(model) || modality === 'image'
 
-  for (const message of messages) {
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+
+    if (summaryOptions && i < summaryOptions.splitIndex) {
+      const converted = convertSummarizedMessage(message, summaryOptions.summaryMap, i, messages)
+      if (converted) {
+        sdkMessages.push(converted)
+        continue
+      }
+    }
+
     const sdkMessage = await convertMessageToSdkParam(message, isVision, model)
     sdkMessages.push(...(Array.isArray(sdkMessage) ? sdkMessage : [sdkMessage]))
   }

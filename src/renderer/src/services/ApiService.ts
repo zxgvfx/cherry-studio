@@ -5,7 +5,12 @@ import { loggerService } from '@logger'
 import { buildStreamTextParams } from '@renderer/aiCore/prepareParams'
 import type { AiSdkMiddlewareConfig } from '@renderer/aiCore/types/middlewareConfig'
 import { buildProviderOptions } from '@renderer/aiCore/utils/options'
-import { isDedicatedImageGenerationModel, isEmbeddingModel, isFunctionCallingModel, isTextChatModel } from '@renderer/config/models'
+import {
+  isDedicatedImageGenerationModel,
+  isEmbeddingModel,
+  isFunctionCallingModel,
+  isTextChatModel
+} from '@renderer/config/models'
 import { isGenerate3DModel } from '@renderer/config/models/vision'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
@@ -26,6 +31,7 @@ import { isPromptToolUse, isSupportedToolUse } from '@renderer/utils/mcp-tools'
 import { findFileBlocks, findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { containsSupportedVariables, replacePromptVariables } from '@renderer/utils/prompt'
 import { NOT_SUPPORT_API_KEY_PROVIDER_TYPES, NOT_SUPPORT_API_KEY_PROVIDERS } from '@renderer/utils/provider'
+import type { ModelMessage } from 'ai'
 import { isEmpty, takeRight } from 'lodash'
 
 import type { ModernAiProviderConfig } from '../aiCore/index_new'
@@ -39,10 +45,10 @@ import {
   getQuickModel
 } from './AssistantService'
 import { ConversationService } from './ConversationService'
-import { injectOrchestrationInstructions } from './OrchestrationPreprocessor'
 import { generateUnifiedImage } from './ImageGenerationService'
-import { getRotatedApiKey } from './providerKey'
 import type { BlockManager } from './messageStreaming'
+import { injectOrchestrationInstructions } from './OrchestrationPreprocessor'
+import { getRotatedApiKey } from './providerKey'
 import type { StreamProcessorCallbacks } from './StreamProcessingService'
 // import { processKnowledgeSearch } from './KnowledgeService'
 // import {
@@ -108,95 +114,216 @@ export async function fetchAllActiveServerTools(): Promise<MCPTool[]> {
   }
 }
 
-export async function fetchMcpTools(assistant: Assistant) {
-  let mcpTools: MCPTool[] = []
+// ─── 静态元工具定义（0 IPC 开销）────────────────────────────────────────────
+// 这 4 个工具是 Hub 的核心能力，定义固定不变，无需每次从后端获取
+const STATIC_HUB_META_TOOLS: MCPTool[] = [
+  {
+    id: 'mcp__CherryHub__discoverTools',
+    name: 'discover_tools',
+    description:
+      'Discover available MCP tools by keyword (NOT for web search). Use * to list all. Use the dedicated web search tool for searching the internet.',
+    serverId: hubMCPServer.id,
+    serverName: hubMCPServer.name,
+    type: 'mcp',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Keywords to find MCP tools (comma-separated). Use * to list all.' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    id: 'mcp__CherryHub__callTool',
+    name: 'call_tool',
+    description: 'Execute any available MCP tool by name.',
+    serverId: hubMCPServer.id,
+    serverName: hubMCPServer.name,
+    type: 'mcp',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool_name: { type: 'string', description: 'The tool to execute' },
+        arguments: { type: 'object', description: 'Tool arguments as key-value pairs' }
+      },
+      required: ['tool_name']
+    }
+  },
+  {
+    id: 'mcp__CherryHub__getToolSchema',
+    name: 'get_tool_schema',
+    description: 'Get full parameter schema for a specific MCP tool.',
+    serverId: hubMCPServer.id,
+    serverName: hubMCPServer.name,
+    type: 'mcp',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tool_name: { type: 'string', description: 'The exact tool name' }
+      },
+      required: ['tool_name']
+    }
+  },
+  {
+    id: 'mcp__CherryHub__askModel',
+    name: 'ask_model',
+    description: 'Delegate a subtask to another model (routing decided by system).',
+    serverId: hubMCPServer.id,
+    serverName: hubMCPServer.name,
+    type: 'mcp',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Task prompt for the delegated model' },
+        model: { type: 'string', description: 'Optional target model id/name' }
+      },
+      required: ['prompt']
+    }
+  }
+]
+
+// ─── 插件工具后台缓存（用于 /tool_name 斜杠命令匹配）─────────────────────────
+// 注册插件（SAM3、Atlassian 等）的工具 schema 在会话期间不变，
+// 后台异步预热，避免阻塞首字路径
+let _pluginToolsCache: MCPTool[] | null = null
+let _pluginCacheRefreshing = false
+
+export function invalidateMcpToolsCache() {
+  _pluginToolsCache = null
+}
+
+function refreshPluginToolsCacheInBackground(assistant: Assistant) {
+  if (_pluginCacheRefreshing) return
+  _pluginCacheRefreshing = true
   const enabledMCPs = getMcpServersForAssistant(assistant)
-
-  if (enabledMCPs && enabledMCPs.length > 0) {
-    try {
-      const toolPromises = enabledMCPs.map(async (mcpServer: MCPServer) => {
-        try {
-          const tools = await window.api.mcp.listTools(mcpServer)
-          return tools.filter((tool: any) => !mcpServer.disabledTools?.includes(tool.name))
-        } catch (error) {
-          logger.error(`Error fetching tools from MCP server ${mcpServer.name}:`, error as Error)
-          return []
-        }
-      })
-      const results = await Promise.allSettled(toolPromises)
-      mcpTools = results
-        .filter((result): result is PromiseFulfilledResult<MCPTool[]> => result.status === 'fulfilled')
-        .map((result) => result.value)
-        .flat()
-    } catch (toolError) {
-      logger.error('Error fetching MCP tools:', toolError as Error)
-    }
+  if (!enabledMCPs?.length) {
+    _pluginCacheRefreshing = false
+    return
   }
+  const t0 = performance.now()
+  Promise.allSettled(
+    enabledMCPs.map(async (mcpServer: MCPServer) => {
+      try {
+        const tools = await window.api.mcp.listTools(mcpServer)
+        return tools.filter((tool: any) => !mcpServer.disabledTools?.includes(tool.name))
+      } catch {
+        return []
+      }
+    })
+  )
+    .then((results) => {
+      const allTools = results
+        .filter((r): r is PromiseFulfilledResult<MCPTool[]> => r.status === 'fulfilled')
+        .flatMap((r) => r.value)
+      // 只保留非元工具的插件工具
+      _pluginToolsCache = allTools.filter((t) => !STATIC_HUB_META_TOOLS.some((m) => m.name === t.name))
+      const elapsed = Math.round(performance.now() - t0)
+      logger.info(`[pluginToolsCache] background refresh: ${_pluginToolsCache.length} plugin tools in ${elapsed}ms`)
+    })
+    .finally(() => {
+      _pluginCacheRefreshing = false
+    })
+}
 
-  // Auto 模式下确保 Hub 核心元工具存在（search/call_tool/get_tool_schema）
+/**
+ * 同步获取当前可用的 MCP 工具（0 IPC 开销，不阻塞首字）
+ * - 始终包含 4 个静态元工具
+ * - 如果用户消息含 /tool_name，从后台缓存中匹配插件工具 schema
+ * - 首次调用时触发后台预热缓存
+ */
+function getMcpToolsSync(assistant: Assistant, messages: ModelMessage[]): MCPTool[] {
+  const enabledMCPs = getMcpServersForAssistant(assistant)
   const hasHub = enabledMCPs?.some((server) => server.id === hubMCPServer.id)
-  if (hasHub) {
-    const hasSearch = mcpTools.some((tool) => tool.name === 'search')
-    const hasCallTool = mcpTools.some((tool) => tool.name === 'call_tool')
-    const hasGetSchema = mcpTools.some((tool) => tool.name === 'get_tool_schema')
+  if (!hasHub) return []
 
-    if (!hasSearch) {
-      mcpTools.push({
-        id: 'search',
-        name: 'search',
-        description: 'Discover available tools by keyword. Use * to list all.',
-        serverId: hubMCPServer.id,
-        serverName: hubMCPServer.name,
-        type: 'mcp',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Search keywords, comma-separated.' }
-          },
-          required: ['query']
-        }
-      })
+  // 触发后台缓存预热（非阻塞）
+  if (_pluginToolsCache === null) {
+    refreshPluginToolsCacheInBackground(assistant)
+  }
+
+  const allTools = [...STATIC_HUB_META_TOOLS, ...(_pluginToolsCache || [])]
+  return filterToolsBySlashCommand(allTools, messages)
+}
+
+// 保留 fetchMcpTools 供其他场景（如非 auto 模式）使用
+export async function fetchMcpTools(assistant: Assistant) {
+  const enabledMCPs = getMcpServersForAssistant(assistant)
+  if (!enabledMCPs?.length) return []
+
+  const toolPromises = enabledMCPs.map(async (mcpServer: MCPServer) => {
+    try {
+      const tools = await window.api.mcp.listTools(mcpServer)
+      return tools.filter((tool: any) => !mcpServer.disabledTools?.includes(tool.name))
+    } catch (error) {
+      logger.error(`Error fetching tools from MCP server ${mcpServer.name}:`, error as Error)
+      return []
+    }
+  })
+  const results = await Promise.allSettled(toolPromises)
+  return results.filter((r): r is PromiseFulfilledResult<MCPTool[]> => r.status === 'fulfilled').flatMap((r) => r.value)
+}
+
+/**
+ * Auto 模式"经典+斜杠"策略：
+ * - 默认只保留 Hub 元工具（discover_tools/call_tool/get_tool_schema/ask_model）→ 省 token
+ * - 当用户消息中包含 /工具名 时，额外注入匹配的直接工具 schema → 无需 discover_tools 三步
+ * - 直接工具仍可通过 call_tool 执行，只是不在 prompt 中占用 token
+ */
+function filterToolsBySlashCommand(allTools: MCPTool[], messages: ModelMessage[]): MCPTool[] {
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
+  const userText =
+    typeof lastUserMsg?.content === 'string'
+      ? lastUserMsg.content
+      : Array.isArray(lastUserMsg?.content)
+        ? lastUserMsg.content
+            .filter((p): p is { type: 'text'; text: string } => (p as any).type === 'text')
+            .map((p) => p.text)
+            .join(' ')
+        : ''
+
+  // 提取所有 /xxx 斜杠命令（支持 /sam3、/confluence_search 等格式）
+  const slashMatches = userText.match(/\/([a-zA-Z0-9_-]+)/g) || []
+  const slashNames = new Set(slashMatches.map((m) => m.slice(1).toLowerCase()))
+
+  const HUB_PREFIX = 'mcp__CherryHub__'
+  const metaTools: MCPTool[] = []
+  const matchedDirectTools: MCPTool[] = []
+
+  for (const tool of allTools) {
+    if (
+      tool.id.startsWith(HUB_PREFIX) ||
+      tool.name === 'discover_tools' ||
+      tool.name === 'call_tool' ||
+      tool.name === 'get_tool_schema' ||
+      tool.name === 'ask_model'
+    ) {
+      metaTools.push(tool)
+      continue
     }
 
-    if (!hasCallTool) {
-      mcpTools.push({
-        id: 'call_tool',
-        name: 'call_tool',
-        description: 'Execute any available tool by name.',
-        serverId: hubMCPServer.id,
-        serverName: hubMCPServer.name,
-        type: 'mcp',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            tool_name: { type: 'string', description: 'The tool to execute' },
-            arguments: { type: 'object', description: 'Tool arguments as key-value pairs' }
-          },
-          required: ['tool_name']
+    // 非 Hub 元工具：检查是否被 /斜杠命令 选中
+    if (slashNames.size > 0) {
+      const toolNameLower = (tool.name || '').toLowerCase()
+      const toolIdLower = (tool.id || '').toLowerCase()
+      for (const slash of slashNames) {
+        if (toolNameLower === slash || toolNameLower.includes(slash) || toolIdLower.includes(slash)) {
+          matchedDirectTools.push(tool)
+          break
         }
-      })
-    }
-
-    if (!hasGetSchema) {
-      mcpTools.push({
-        id: 'get_tool_schema',
-        name: 'get_tool_schema',
-        description: 'Get full parameter schema for a specific tool.',
-        serverId: hubMCPServer.id,
-        serverName: hubMCPServer.name,
-        type: 'mcp',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            tool_name: { type: 'string', description: 'The exact tool name' }
-          },
-          required: ['tool_name']
-        }
-      })
+      }
     }
   }
 
-  return mcpTools
+  if (matchedDirectTools.length > 0) {
+    logger.info(
+      `[filterToolsBySlashCommand] Slash commands: [${[...slashNames].join(', ')}] → injected ${matchedDirectTools.length} direct tools`,
+      {
+        tools: matchedDirectTools.map((t) => t.name)
+      }
+    )
+  }
+
+  return [...metaTools, ...matchedDirectTools]
 }
 
 /**
@@ -223,15 +350,19 @@ export async function transformMessagesAndFetch(
   onChunkReceived: (chunk: Chunk) => void
 ) {
   const { messages, assistant } = request
+  const _t0 = performance.now()
 
   try {
-    const { modelMessages, uiMessages } = await ConversationService.prepareMessagesForModel(messages, assistant)
-
-    // replace prompt variables
-    assistant.prompt = await replacePromptVariables(assistant.prompt, assistant.model?.name)
+    const { modelMessages, uiMessages, hasSummaries } = await ConversationService.prepareMessagesForModel(
+      messages,
+      assistant
+    )
+    const _t1 = performance.now()
 
     // inject orchestration instructions for /tool triggers and @model mentions
     injectOrchestrationInstructions(modelMessages, uiMessages)
+    const _t2 = performance.now()
+    logger.info(`[TTFT] prepareMessages=${Math.round(_t1 - _t0)}ms, orchestration=${Math.round(_t2 - _t1)}ms`)
 
     await fetchChatCompletion({
       messages: modelMessages,
@@ -240,7 +371,8 @@ export async function transformMessagesAndFetch(
       allowedTools: request.allowedTools,
       requestOptions: request.options,
       uiMessages,
-      onChunkReceived
+      onChunkReceived,
+      hasSummaries
     })
   } catch (error: any) {
     onChunkReceived({ type: ChunkType.ERROR, error })
@@ -259,8 +391,10 @@ export async function fetchChatCompletion({
   onChunkReceived,
   topicId,
   uiMessages,
-  allowedTools
+  allowedTools,
+  hasSummaries
 }: FetchChatCompletionParams) {
+  const _fc0 = performance.now()
   logger.info('fetchChatCompletion called with detailed context', {
     messageCount: messages?.length || 0,
     prompt: prompt,
@@ -277,8 +411,6 @@ export async function fetchChatCompletion({
   }
 
   // Get base provider and apply API key rotation
-  // NOTE: Shallow copy is intentional. Provider objects are not mutated by downstream code.
-  // Nested properties (if any) are never modified after creation.
   const baseProvider = getProviderByModel(assistant.model || getDefaultModel())
   const providerWithRotatedKey = {
     ...baseProvider,
@@ -288,14 +420,8 @@ export async function fetchChatCompletion({
   const AI = new AiProviderNew(assistant.model || getDefaultModel(), providerWithRotatedKey)
   const provider = AI.getActualProvider()
 
-  const mcpTools: MCPTool[] = []
   onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
 
-  // 仅在当前助手/模型支持工具使用时才拉取 MCP 工具。
-  // 图片模型等不支持工具使用的场景，不应触发 listTools。
-  if ((isPromptToolUse(assistant) || isSupportedToolUse(assistant)) && isTextChatModel(assistant.model)) {
-    mcpTools.push(...(await fetchMcpTools(assistant)))
-  }
   if (prompt) {
     messages = [
       {
@@ -305,7 +431,23 @@ export async function fetchChatCompletion({
     ]
   }
 
-  // 使用 transformParameters 模块构建参数
+  // Auto 模式：0 IPC 开销获取工具
+  // - 静态元工具（discover_tools/call_tool/get_tool_schema/ask_model）直接使用常量
+  // - /tool_name 匹配的插件工具从后台缓存获取
+  // - 非 auto 模式仍使用异步 fetchMcpTools
+  const mcpMode = getEffectiveMcpMode(assistant)
+  let mcpTools: MCPTool[] = []
+  const _fc1 = performance.now()
+
+  if ((isPromptToolUse(assistant) || isSupportedToolUse(assistant)) && isTextChatModel(assistant.model)) {
+    if (mcpMode === 'auto') {
+      mcpTools = getMcpToolsSync(assistant, messages || [])
+    } else {
+      mcpTools = await fetchMcpTools(assistant)
+    }
+  }
+  const _fc2 = performance.now()
+
   const {
     params: aiSdkParams,
     modelId,
@@ -316,22 +458,27 @@ export async function fetchChatCompletion({
     mcpTools: mcpTools,
     allowedTools,
     webSearchProviderId: assistant.webSearchProviderId,
-    requestOptions
+    requestOptions,
+    hasSummaries
   })
+  const _fc3 = performance.now()
+  logger.info(
+    `[TTFT] providerSetup=${Math.round(_fc1 - _fc0)}ms, mcpTools=${Math.round(_fc2 - _fc1)}ms (${mcpMode}, ${mcpTools.length} tools), buildParams=${Math.round(_fc3 - _fc2)}ms, total=${Math.round(_fc3 - _fc0)}ms`
+  )
 
   // Safely fallback to prompt tool use when function calling is not supported by model.
   const usePromptToolUse =
     isPromptToolUse(assistant) || (isToolUseModeFunction(assistant) && !isFunctionCallingModel(assistant.model))
 
-  const mcpMode = getEffectiveMcpMode(assistant)
   const middlewareConfig: AiSdkMiddlewareConfig = {
     streamOutput: assistant.settings?.streamOutput ?? true,
     onChunk: onChunkReceived,
     enableReasoning: capabilities.enableReasoning,
     isPromptToolUse: usePromptToolUse,
     isSupportedToolUse: isSupportedToolUse(assistant),
-    isImageGenerationEndpoint: isDedicatedImageGenerationModel(assistant.model || getDefaultModel())
-      && (!assistant.model?.endpoint_type || assistant.model.endpoint_type === 'image-generation'),
+    isImageGenerationEndpoint:
+      isDedicatedImageGenerationModel(assistant.model || getDefaultModel()) &&
+      (!assistant.model?.endpoint_type || assistant.model.endpoint_type === 'image-generation'),
     webSearchPluginConfig: webSearchPluginConfig,
     enableWebSearch: capabilities.enableWebSearch,
     enableGenerateImage: capabilities.enableGenerateImage,
@@ -873,7 +1020,6 @@ async function handle3DGeneration(
     let lastStatus = ''
     let consecutiveErrors = 0
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (requestOptions?.signal?.aborted) return
 

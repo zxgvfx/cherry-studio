@@ -11,7 +11,12 @@ import {
   parseToolUse,
   upsertMCPToolResponse
 } from '@renderer/utils/mcp-tools'
-import { confirmSameNameTools, requestToolConfirmation, setToolIdToNameMapping } from '@renderer/utils/userConfirmation'
+import {
+  confirmSameNameTools,
+  isSessionAutoApproveAll,
+  requestToolConfirmation,
+  setToolIdToNameMapping
+} from '@renderer/utils/userConfirmation'
 
 import type { CompletionsParams, CompletionsResult, GenericChunk } from '../schemas'
 import type { CompletionsContext, CompletionsMiddleware } from '../types'
@@ -439,7 +444,7 @@ export async function parseAndCallTools<R>(
 
   curToolResponses.forEach((toolResponse) => {
     const server = getMcpServerByTool(toolResponse.tool)
-    const isAutoApproveEnabled = isToolAutoApproved(toolResponse.tool, server)
+    const isAutoApproveEnabled = isToolAutoApproved(toolResponse.tool, server) || isSessionAutoApproveAll()
     let confirmationPromise: Promise<boolean>
     if (isAutoApproveEnabled) {
       confirmationPromise = Promise.resolve(true)

@@ -16,7 +16,7 @@ export function MessageKnowledgeSearchToolTitle({ toolResponse }: { toolResponse
       text={
         <PrepareToolWrapper>
           {i18n.t('message.searching')}
-          <span>{toolInput?.additionalContext ?? ''}</span>
+          <span>{(toolInput as any)?.query ?? (toolInput as any)?.additionalContext ?? ''}</span>
         </PrepareToolWrapper>
       }
     />

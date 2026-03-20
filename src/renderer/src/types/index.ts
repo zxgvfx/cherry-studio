@@ -1248,9 +1248,10 @@ type BaseParams = {
   assistant: Assistant
   requestOptions?: FetchChatCompletionRequestOptions
   onChunkReceived: (chunk: Chunk) => void
-  topicId?: string // 添加 topicId 参数
+  topicId?: string
   allowedTools?: string[]
   uiMessages?: Message[]
+  hasSummaries?: boolean
 }
 
 type MessagesParams = BaseParams & {

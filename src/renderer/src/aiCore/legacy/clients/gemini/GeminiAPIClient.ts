@@ -426,26 +426,30 @@ export class GeminiAPIClient extends BaseApiClient<
   private getBudgetToken(assistant: Assistant, model: Model) {
     if (isSupportedThinkingTokenGeminiModel(model)) {
       const reasoningEffort = assistant?.settings?.reasoning_effort
+      const includeThoughts = reasoningEffort !== 'none'
 
-      // 如果thinking_budget是undefined，不思考
-      if (reasoningEffort === undefined) {
-        return GEMINI_FLASH_MODEL_REGEX.test(model.id)
-          ? {
-              thinkingConfig: {
-                thinkingBudget: 0
-              }
-            }
-          : {}
+      // undefined/default 都表示不显式开启 thoughts，避免默认将 Gemini thinking 暴露到 UI。
+      if (reasoningEffort === undefined || reasoningEffort === 'default') {
+        return {}
       }
 
       if (reasoningEffort === 'auto') {
         return {
           thinkingConfig: {
-            includeThoughts: true,
+            includeThoughts,
             thinkingBudget: -1
           }
         }
       }
+      if (reasoningEffort === 'none') {
+        return {
+          thinkingConfig: {
+            includeThoughts,
+            ...(GEMINI_FLASH_MODEL_REGEX.test(model.id) ? { thinkingBudget: 0 } : {})
+          } satisfies ThinkingConfig
+        }
+      }
+
       const effortRatio = EFFORT_RATIO[reasoningEffort]
       const { min, max } = findTokenLimit(model.id) || { min: 0, max: 0 }
       // 计算 budgetTokens，确保不低于 min
@@ -454,7 +458,7 @@ export class GeminiAPIClient extends BaseApiClient<
       return {
         thinkingConfig: {
           ...(budget > 0 ? { thinkingBudget: budget } : {}),
-          includeThoughts: true
+          includeThoughts
         } satisfies ThinkingConfig
       }
     }

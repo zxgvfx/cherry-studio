@@ -160,3 +160,29 @@ export function confirmSameNameTools(confirmedToolName: string): void {
     confirmToolAction(toolId)
   })
 }
+
+// Session-level global auto-approve: once enabled, all MCP tools run without confirmation
+let _sessionAutoApproveAll = false
+type SessionAutoApproveListener = () => void
+const sessionAutoApproveListeners = new Set<SessionAutoApproveListener>()
+
+export function setSessionAutoApproveAll(enabled: boolean): void {
+  _sessionAutoApproveAll = enabled
+  sessionAutoApproveListeners.forEach((listener) => listener())
+}
+
+export function isSessionAutoApproveAll(): boolean {
+  return _sessionAutoApproveAll
+}
+
+export function onSessionAutoApproveChange(listener: SessionAutoApproveListener): () => void {
+  sessionAutoApproveListeners.add(listener)
+  return () => sessionAutoApproveListeners.delete(listener)
+}
+
+export function confirmAllPendingTools(): void {
+  const allToolIds = Array.from(toolConfirmResolvers.keys()).filter((id) => id !== '_global')
+  allToolIds.forEach((toolId) => {
+    confirmToolAction(toolId)
+  })
+}

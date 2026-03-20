@@ -21,6 +21,12 @@ const TOOL_USE_TAG_CONFIG: TagConfig = {
   separator: '\n'
 }
 
+const TOOL_USE_RESULT_TAG_CONFIG: TagConfig = {
+  openingTag: '<tool_use_result>',
+  closingTag: '</tool_use_result>',
+  separator: '\n'
+}
+
 export const DEFAULT_SYSTEM_PROMPT = `In this environment you have access to a set of tools you can use to answer the user's question. \
 You can use one or more tools per message, and will receive the result of that tool use in the user's response. You use tools step-by-step to accomplish a given task, with each tool use informed by the result of the previous tool use.
 
@@ -188,48 +194,62 @@ function defaultBuildSystemPrompt(userSystemPrompt: string, tools: ToolSet, mcpM
   if (availableTools === null) return userSystemPrompt
 
   if (mcpMode == 'auto') {
-    // Auto 模式：Hub 元工具（search/call_tool/get_tool_schema/ask_model）由 User Instructions 提供。
-    // 但如果同时启用了前端搜索工具（builtin_web_search），需要在 prompt 中额外描述，
-    // 否则模型不知道该工具的存在。
-    const nonHubToolNames = Object.keys(tools).filter(
-      (name) => !name.startsWith('mcp__CherryHub__')
-    )
-    let directToolsSection = ''
-    if (nonHubToolNames.length > 0) {
-      const directToolDescriptions = nonHubToolNames
-        .map((name) => {
-          const t = tools[name]
-          const desc = t?.description || name
-          const schema = (t as any)?.inputSchema
-          let paramsStr = ''
-          if (schema) {
-            const rawSchema = typeof schema === 'object' && 'jsonSchema' in schema ? (schema as any).jsonSchema : schema
-            const props = rawSchema?.properties || {}
-            const required = rawSchema?.required || []
-            paramsStr = Object.entries(props)
-              .map(([k, v]: [string, any]) => `${required.includes(k) ? '' : '?'}${k}: ${v?.type || 'any'}`)
-              .join(', ')
-          }
-          return `- **${name}**(${paramsStr}): ${desc}`
-        })
-        .join('\n')
-      directToolsSection = `
-
-## Direct Tools (call directly, NOT through Hub search/exec)
-
-The following tools are available for you to call DIRECTLY using the <tool_use> XML format.
-Do NOT use Hub \`search\` or \`call_tool\` for these tools. Call them by their exact name.
-
-${directToolDescriptions}`
+    // Auto 模式：直接工具 + Hub 元工具并列，区分展示避免混淆
+    const nonHubTools: ToolSet = {}
+    const hubTools: ToolSet = {}
+    for (const [name, t] of Object.entries(tools)) {
+      if (name.startsWith('mcp__CherryHub__')) {
+        hubTools[name] = t
+      } else {
+        nonHubTools[name] = t
+      }
     }
 
+    const directToolsXml = buildAvailableTools(nonHubTools)
+    let directToolsSection = ''
+    if (directToolsXml) {
+      directToolsSection = `
+
+## Direct Tools (call directly by name)
+
+The following tools are available for you to call DIRECTLY using the <tool_use> XML format.
+Do NOT use Hub \`discover_tools\` or \`call_tool\` for these — call them by their exact name.
+
+${directToolsXml}`
+    }
+
+    const hubToolList =
+      Object.keys(hubTools).length > 0
+        ? Object.keys(hubTools)
+            .map((k) => k.replace('mcp__CherryHub__', ''))
+            .join(', ')
+        : 'discover_tools, call_tool, get_tool_schema, ask_model'
+
+    const hasDirectTools = Object.keys(nonHubTools).length > 0
+    const hubSection = hasDirectTools
+      ? `
+## Hub Meta-Tools (for discovering additional external MCP tools, NOT for web search)
+
+Available Hub meta-tools: ${hubToolList}.
+Use \`discover_tools\` to find external MCP tools, then \`call_tool\` to execute them.
+IMPORTANT: Do NOT use \`discover_tools\` to search the web — use \`builtin_web_search\` instead.
+Do NOT use Hub meta-tools for any tool listed in the "Direct Tools" section above.`
+      : `
+## Hub Meta-Tools
+
+Available Hub meta-tools: ${hubToolList}.
+
+You have access to many additional MCP tools (3D modeling, document management, etc.) that are not listed above.
+If you cannot fully answer the user's request with your built-in capabilities alone, use \`discover_tools\` to search for relevant tools by keyword, then \`get_tool_schema\` to see parameters, and \`call_tool\` to execute them.
+
+IMPORTANT: \`discover_tools\` is for finding MCP tools, NOT for searching the web. Use the dedicated web search tool for internet searches.`
+
     const autoModeToolsInfo = `
-## Tool Use (Auto / Hub Mode)
+## Tool Use Examples
+{{ TOOL_USE_EXAMPLES }}
+${directToolsSection}
+${hubSection}`.replace('{{ TOOL_USE_EXAMPLES }}', DEFAULT_TOOL_USE_EXAMPLES)
 
-You MUST use the <tool_use> XML format above when calling tools. The exact tool names, workflow, and discoverable tools are defined in the "User Instructions" section below. After each tool result, continue the conversation: call more tools if needed, or reply to the user with the final answer. Do not stop mid-turn after outputting a tool call.
-
-Available Hub meta-tools: search, call_tool, get_tool_schema, ask_model.
-Use call_tool to execute any discovered tool. Do NOT use exec.${directToolsSection}`
     return DEFAULT_SYSTEM_PROMPT.replace('{{ TOOLS_INFO }}', autoModeToolsInfo).replace(
       '{{ USER_SYSTEM_PROMPT }}',
       userSystemPrompt || ''
@@ -283,11 +303,11 @@ function defaultParseToolUse(content: string, tools: ToolSet): { results: ToolUs
     const fullMatch = match[0]
     let toolName = match[2].trim()
     switch (toolName.toLowerCase()) {
-      case 'search':
+      case 'discover_tools':
       case 'list':
       case 'list_tools':
       case 'list-tools':
-        toolName = 'mcp__CherryHub__search'
+        toolName = 'mcp__CherryHub__discoverTools'
         break
       case 'call_tool':
       case 'tool_call':
@@ -312,12 +332,15 @@ function defaultParseToolUse(content: string, tools: ToolSet): { results: ToolUs
       case 'delegate':
         toolName = 'mcp__CherryHub__askModel'
         break
+      case 'search':
       case 'web_search':
       case 'websearch':
       case 'google_search':
       case 'bing_search':
         if (tools['builtin_web_search']) {
           toolName = 'builtin_web_search'
+        } else if (tools['mcp__CherryHub__discoverTools']) {
+          toolName = 'mcp__CherryHub__discoverTools'
         }
         break
       default:
@@ -334,17 +357,32 @@ function defaultParseToolUse(content: string, tools: ToolSet): { results: ToolUs
       parsedArgs = toolArgs
     }
 
-    // Find the corresponding tool
-    const tool = tools[toolName]
+    // Find the corresponding tool: exact key match first, then fuzzy fallback
+    let resolvedName = toolName
+    if (!tools[resolvedName]) {
+      // Fallback: model may use the raw tool name (e.g. "sam3_auto_segment")
+      // instead of the full ID (e.g. "mcp__sam3Segmentation__sam3AutoSegment")
+      const lowerName = resolvedName.toLowerCase().replace(/[-_]/g, '')
+      const found = Object.keys(tools).find((key) => {
+        if (key.toLowerCase().replace(/[-_]/g, '') === lowerName) return true
+        const parts = key.split('__')
+        const tail = parts[parts.length - 1]
+        return tail?.toLowerCase().replace(/[-_]/g, '') === lowerName
+      })
+      if (found) {
+        resolvedName = found
+      }
+    }
+
+    const tool = tools[resolvedName]
     if (!tool) {
       console.warn(`Tool "${toolName}" not found in available tools`)
       continue
     }
 
-    // Add to results array
     results.push({
-      id: `${toolName}-${idx++}`, // Unique ID for each tool use
-      toolName: toolName,
+      id: `${resolvedName}-${idx++}`,
+      toolName: resolvedName,
       arguments: parsedArgs,
       status: 'pending'
     })
@@ -366,9 +404,7 @@ export const createPromptToolUsePlugin = (
   return definePlugin<StreamTextParams, StreamTextResult>({
     name: 'built-in:prompt-tool-use',
     transformParams: (params: any, context: AiRequestContext) => {
-      console.log('[PromptToolUse] transformParams called, enabled:', enabled, 'params.tools:', params.tools ? Object.keys(params.tools) : 'undefined')
       if (!enabled || !params.tools || typeof params.tools !== 'object') {
-        console.log('[PromptToolUse] Early return - enabled:', enabled, 'tools:', !!params.tools)
         return params
       }
 
@@ -387,10 +423,8 @@ export const createPromptToolUsePlugin = (
       }
 
       // 只有当有非 provider 工具时才保存到 context
-      console.log('[PromptToolUse] promptTools count:', Object.keys(promptTools).length, 'keys:', Object.keys(promptTools))
       if (Object.keys(promptTools).length > 0) {
         context.mcpTools = promptTools
-        console.log('[PromptToolUse] Set context.mcpTools with', Object.keys(promptTools).length, 'tools')
       }
 
       // 递归调用时，不重新构建 system prompt，避免重复追加工具定义
@@ -421,9 +455,7 @@ export const createPromptToolUsePlugin = (
       // let stepId = ''
 
       // 如果没有需要 prompt 模式处理的工具，直接返回原始流
-      console.log('[PromptToolUse] transformStream called, context.mcpTools:', context.mcpTools ? Object.keys(context.mcpTools) : 'undefined')
       if (!context.mcpTools) {
-        console.log('[PromptToolUse] No mcpTools in context, returning empty TransformStream')
         return new TransformStream()
       }
 
@@ -442,6 +474,7 @@ export const createPromptToolUsePlugin = (
       const toolExecutor = new ToolExecutor()
       const streamEventManager = new StreamEventManager()
       const tagExtractor = new TagExtractor(TOOL_USE_TAG_CONFIG)
+      const toolUseResultExtractor = new TagExtractor(TOOL_USE_RESULT_TAG_CONFIG)
 
       // 在context中初始化工具执行状态，避免递归调用时状态丢失
       if (!context.hasExecutedToolsInCurrentStep) {
@@ -469,24 +502,28 @@ export const createPromptToolUsePlugin = (
             textBuffer += chunk.text || ''
             // stepId = chunk.id || ''
 
-            // 使用TagExtractor过滤工具标签，只传递非标签内容到UI层
+            // 先过滤 <tool_use>，再过滤模型偶发回显的 <tool_use_result>，避免内部协议文本泄漏到 UI。
             const extractionResults = tagExtractor.processText(chunk.text || '')
 
             for (const result of extractionResults) {
-              // 只传递非标签内容到UI层
               if (!result.isTagContent && result.content) {
-                // 如果还没有发送text-start且有pending的text-start，先发送它
-                if (!hasStartedText && pendingTextStart) {
-                  controller.enqueue(pendingTextStart)
-                  hasStartedText = true
-                  pendingTextStart = null
-                }
+                const resultExtractionResults = toolUseResultExtractor.processText(result.content)
 
-                const filteredChunk = {
-                  ...chunk,
-                  text: result.content
+                for (const visibleResult of resultExtractionResults) {
+                  if (!visibleResult.isTagContent && visibleResult.content) {
+                    if (!hasStartedText && pendingTextStart) {
+                      controller.enqueue(pendingTextStart)
+                      hasStartedText = true
+                      pendingTextStart = null
+                    }
+
+                    const filteredChunk = {
+                      ...chunk,
+                      text: visibleResult.content
+                    }
+                    controller.enqueue(filteredChunk)
+                  }
                 }
-                controller.enqueue(filteredChunk)
               }
             }
             return
@@ -503,12 +540,9 @@ export const createPromptToolUsePlugin = (
           if (chunk.type === 'finish-step') {
             // 统一在finish-step阶段检查并执行工具调用
             const tools = context.mcpTools
-            console.log('[PromptToolUse] finish-step, tools count:', tools ? Object.keys(tools).length : 0, 'textBuffer length:', textBuffer.length)
-            console.log('[PromptToolUse] textBuffer preview:', textBuffer.substring(0, 500))
             if (tools && Object.keys(tools).length > 0 && !context.hasExecutedToolsInCurrentStep) {
               // 解析完整的textBuffer来检测工具调用
               const { results: parsedTools } = parseToolUse(textBuffer, tools)
-              console.log('[PromptToolUse] Parsed tools:', parsedTools.length, parsedTools.map(t => t.toolName))
               const validToolUses = parsedTools.filter((t) => t.status === 'pending')
 
               if (validToolUses.length > 0) {

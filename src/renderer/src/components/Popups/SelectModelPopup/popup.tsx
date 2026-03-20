@@ -5,8 +5,9 @@ import ModelTagsWithLabel from '@renderer/components/ModelTagsWithLabel'
 import { TopView } from '@renderer/components/TopView'
 import { DynamicVirtualList, type DynamicVirtualListRef } from '@renderer/components/VirtualList'
 import { getModelLogo } from '@renderer/config/models'
+import { CHERRYAI_PROVIDER } from '@renderer/config/providers'
 import { usePinnedModels } from '@renderer/hooks/usePinnedModels'
-import { useProviders } from '@renderer/hooks/useProvider'
+import { useAllProviders, useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId } from '@renderer/services/ModelService'
 import type { Model, ModelType, Provider } from '@renderer/types'
 import { objectEntries } from '@renderer/types'
@@ -54,7 +55,18 @@ export type FilterType = Exclude<ModelType, 'text'> | 'free'
 
 const PopupContainer: React.FC<Props> = ({ model, filter: baseFilter, showTagFilter = true, resolve }) => {
   const { t } = useTranslation()
-  const { providers } = useProviders()
+  const { providers: enabledProviders } = useProviders()
+  const allProviders = useAllProviders()
+  // Houdini/QWebChannel 环境下可能会拿到“全部 providers”，但模型切换弹窗只应展示“已启用”的 providers。
+  // 同时确保 CherryAI 始终可选（与 useProviders 行为保持一致）。
+  // @ts-ignore
+  const isHoudini = typeof window !== 'undefined' && typeof window.api !== 'undefined'
+  const providers = useMemo(() => {
+    const baseProviders = (isHoudini ? allProviders : enabledProviders) ?? []
+    const filtered = baseProviders.filter((p) => p.enabled)
+    const hasCherryAi = filtered.some((p) => p.id === CHERRYAI_PROVIDER.id)
+    return hasCherryAi ? filtered : filtered.concat(CHERRYAI_PROVIDER)
+  }, [allProviders, enabledProviders, isHoudini])
   const { pinnedModels, togglePinnedModel, loading } = usePinnedModels()
   const [open, setOpen] = useState(true)
   const listRef = useRef<DynamicVirtualListRef>(null)

@@ -1,10 +1,16 @@
 import { QuestionCircleOutlined } from '@ant-design/icons'
 import { ResetIcon } from '@renderer/components/Icons'
 import { HStack } from '@renderer/components/Layout'
+import { InfoTooltip } from '@renderer/components/TooltipIcons'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useAppDispatch } from '@renderer/store'
-import { setEnableTopicNaming, setTopicNamingPrompt } from '@renderer/store/settings'
-import { Button, Divider, Flex, Input, Modal, Popover, Switch } from 'antd'
+import {
+  setContextSummaryEnabled,
+  setContextSummaryFullTurns,
+  setEnableTopicNaming,
+  setTopicNamingPrompt
+} from '@renderer/store/settings'
+import { Button, Divider, Flex, Input, InputNumber, Modal, Popover, Switch } from 'antd'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -18,7 +24,7 @@ interface Props {
 const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const { t } = useTranslation()
-  const { enableTopicNaming, topicNamingPrompt } = useSettings()
+  const { enableTopicNaming, topicNamingPrompt, contextSummaryEnabled, contextSummaryFullTurns } = useSettings()
   const dispatch = useAppDispatch()
 
   const onOk = () => {
@@ -77,6 +83,37 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
             style={{ width: '100%' }}
           />
         </div>
+      </Flex>
+      <Divider />
+      <SettingSubtitle style={{ marginTop: 0, marginBottom: 8 }}>
+        {t('settings.models.context_summary.label')}
+      </SettingSubtitle>
+      <Flex vertical align="stretch" gap={8}>
+        <HStack style={{ gap: 16 }} alignItems="center">
+          <HStack alignItems="center" gap={4}>
+            <div>{t('settings.models.context_summary.enable')}</div>
+            <InfoTooltip title={t('settings.models.context_summary.enable_tooltip')} />
+          </HStack>
+          <Switch checked={contextSummaryEnabled} onChange={(v) => dispatch(setContextSummaryEnabled(v))} />
+        </HStack>
+        {contextSummaryEnabled && (
+          <>
+            <Divider style={{ margin: 0 }} />
+            <HStack style={{ gap: 16 }} alignItems="center">
+              <HStack alignItems="center" gap={4}>
+                <div>{t('settings.models.context_summary.full_turns')}</div>
+                <InfoTooltip title={t('settings.models.context_summary.full_turns_tooltip')} />
+              </HStack>
+              <InputNumber
+                min={1}
+                max={20}
+                value={contextSummaryFullTurns}
+                onChange={(v) => v !== null && dispatch(setContextSummaryFullTurns(v))}
+                style={{ width: 80 }}
+              />
+            </HStack>
+          </>
+        )}
       </Flex>
     </Modal>
   )

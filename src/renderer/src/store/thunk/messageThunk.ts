@@ -19,6 +19,7 @@ import { AiSdkToChunkAdapter } from '@renderer/aiCore/chunk/AiSdkToChunkAdapter'
 import { AgentApiClient } from '@renderer/api/agent'
 import db from '@renderer/databases'
 import { fetchMessagesSummary, transformMessagesAndFetch } from '@renderer/services/ApiService'
+import { ConversationSummaryService } from '@renderer/services/ConversationSummaryService'
 import { dbService } from '@renderer/services/db'
 import { DbService } from '@renderer/services/db/DbService'
 import FileManager from '@renderer/services/FileManager'
@@ -778,6 +779,24 @@ const dispatchMultiModelResponses = async (
   }
 }
 
+function triggerAsyncSummaryGeneration(
+  getState: () => RootState,
+  userMessageId: string | undefined,
+  assistantMsgId: string
+): void {
+  if (!userMessageId) return
+  try {
+    const state = getState()
+    const userMsg = state.messages.entities[userMessageId]
+    const assistantMsg = state.messages.entities[assistantMsgId]
+    if (userMsg && assistantMsg) {
+      ConversationSummaryService.generateAndStoreSummaryAsync(userMsg, assistantMsg)
+    }
+  } catch (error) {
+    logger.error('Error triggering summary generation:', error as Error)
+  }
+}
+
 // --- End Helper Function ---
 // 发送和处理助手响应的实现函数，话题提示词在此拼接
 const fetchAndProcessAssistantResponseImpl = async (
@@ -889,6 +908,8 @@ const fetchAndProcessAssistantResponseImpl = async (
       },
       streamProcessorCallbacks
     )
+
+    triggerAsyncSummaryGeneration(getState, userMessageId, assistantMsgId)
   } catch (error: any) {
     logger.error('Error in fetchAndProcessAssistantResponseImpl:', error)
     endSpan({

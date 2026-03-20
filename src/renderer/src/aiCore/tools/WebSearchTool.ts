@@ -226,23 +226,108 @@ You can use this tool as-is to search with the prepared queries, or provide addi
 //   })
 // }
 
-// export type WebSearchToolWithExtractionOutput = InferToolOutput<ReturnType<typeof webSearchToolWithExtraction>>
+/**
+ * LLM 驱动的网络搜索工具
+ * 无需预分析，由主 LLM 直接提供搜索查询
+ */
+export const webSearchToolDirect = (webSearchProviderId: WebSearchProvider['id'], requestId: string) => {
+  const webSearchProvider = WebSearchService.getWebSearchProvider(webSearchProviderId)
+
+  return tool({
+    description:
+      'Search the web for current information, news, and real-time data. ' +
+      'Use this when you need up-to-date information or facts not in your training data. ' +
+      'You can provide multiple search queries to get comprehensive results from different angles in a single call. ' +
+      "Tips: use concise, keyword-rich queries; try both English and the user's language for better coverage.",
+
+    inputSchema: z.object({
+      queries: z
+        .array(z.string())
+        .min(1)
+        .max(3)
+        .describe(
+          'Search queries to execute (1-3). Use multiple queries with different angles for better coverage. ' +
+            'Example: ["GitHub most starred agent 2026", "AI agent framework GitHub stars ranking"]'
+        ),
+      urls: z.array(z.string()).optional().describe('Specific URLs to fetch and summarize')
+    }),
+
+    execute: async ({ queries, urls }) => {
+      const extractResults: ExtractResults = {
+        websearch: {
+          question: queries,
+          links: urls
+        }
+      }
+      return await WebSearchService.processWebsearch(webSearchProvider!, extractResults, requestId)
+    },
+    toModelOutput: ({ output: results }) => {
+      let summary = 'No results found.'
+      if (results.query && results.results.length > 0) {
+        summary = `Found ${results.results.length} relevant sources. Use [number] format to cite specific information.`
+      }
+
+      const imageUrlPattern = /!\[.*?\]\((https?:\/\/[^)]+)\)/g
+      const allImageUrls: string[] = []
+      const citationData = results.results.map((result, index) => {
+        const imgs: string[] = []
+        let match: RegExpExecArray | null
+        imageUrlPattern.lastIndex = 0
+        while ((match = imageUrlPattern.exec(result.content || '')) !== null) {
+          imgs.push(match[1])
+        }
+        allImageUrls.push(...imgs)
+        return {
+          number: index + 1,
+          title: result.title,
+          content: result.content,
+          url: result.url,
+          ...(imgs.length > 0 ? { images: imgs } : {})
+        }
+      })
+
+      const hasImages = allImageUrls.length > 0
+
+      const referenceContent = `\`\`\`json\n${JSON.stringify(citationData, null, 2)}\n\`\`\``
+      const fullInstructions = REFERENCE_PROMPT.replace(
+        '{question}',
+        "Based on the search results, please answer the user's question with proper citations."
+      ).replace('{references}', referenceContent)
+
+      const value: Array<{ type: 'text'; text: string }> = [
+        { type: 'text', text: summary },
+        { type: 'text', text: fullInstructions }
+      ]
+
+      if (hasImages) {
+        value.push({
+          type: 'text',
+          text:
+            'IMPORTANT: The search results contain real image URLs in the "images" field. ' +
+            'When the user asks for reference images/photos/pictures, you MUST display them using markdown image syntax: ![description](url). ' +
+            'Show the most relevant images directly in your response. Do NOT just provide text links — render images inline.'
+        })
+      }
+
+      return { type: 'content', value }
+    }
+  })
+}
 
 export const webSearchBuiltinTool: BuiltinTool = {
   name: 'builtin_web_search',
   isEnabled: (assistant) => !!assistant.webSearchProviderId,
   create: (context: BuiltinToolContext) => {
-    const keywords = context.intentKeywords
-      ? { question: context.intentKeywords.question, links: context.intentKeywords.links }
-      : { question: [context.userContent] }
-
-    if (keywords.question[0] === 'not_needed') {
-      keywords.question = [context.userContent]
+    if (context.intentKeywords) {
+      const keywords = { question: context.intentKeywords.question, links: context.intentKeywords.links }
+      if (keywords.question[0] === 'not_needed') {
+        keywords.question = [context.userContent]
+      }
+      return webSearchToolWithPreExtractedKeywords(context.assistant.webSearchProviderId!, keywords, context.requestId)
     }
-
-    return webSearchToolWithPreExtractedKeywords(context.assistant.webSearchProviderId!, keywords, context.requestId)
+    return webSearchToolDirect(context.assistant.webSearchProviderId!, context.requestId)
   }
 }
 
-export type WebSearchToolOutput = InferToolOutput<ReturnType<typeof webSearchToolWithPreExtractedKeywords>>
-export type WebSearchToolInput = InferToolInput<ReturnType<typeof webSearchToolWithPreExtractedKeywords>>
+export type WebSearchToolOutput = InferToolOutput<ReturnType<typeof webSearchToolDirect>>
+export type WebSearchToolInput = InferToolInput<ReturnType<typeof webSearchToolDirect>>

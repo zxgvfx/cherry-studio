@@ -4,6 +4,7 @@ import type { MCPCallToolResponse, MCPTool, MCPToolResponse } from '@renderer/ty
 import { callMCPTool, getMcpServerByTool, isToolAutoApproved } from '@renderer/utils/mcp-tools'
 import {
   confirmSameNameTools,
+  isSessionAutoApproveAll,
   requestToolConfirmation,
   sendToolApprovalNotification,
   setToolIdToNameMapping
@@ -119,6 +120,10 @@ export function convertMcpToolsToAiSdkTools(mcpTools: MCPTool[], allowedTools?: 
               logger.warn('Failed to resolve hub tool for auto-approve check', err as Error)
             }
           }
+        }
+
+        if (!isAutoApproveEnabled && isSessionAutoApproveAll()) {
+          isAutoApproveEnabled = true
         }
 
         let confirmed = true

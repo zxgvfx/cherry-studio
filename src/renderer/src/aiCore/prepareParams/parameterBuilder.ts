@@ -36,7 +36,7 @@ import { type Assistant, getEffectiveMcpMode, type MCPTool, type Provider, Syste
 import type { StreamTextParams } from '@renderer/types/aiCoreTypes'
 import { mapRegexToPatterns } from '@renderer/utils/blacklistMatchPattern'
 import { IdleTimeoutController, type IdleTimeoutHandle } from '@renderer/utils/IdleTimeoutController'
-import { replacePromptVariables } from '@renderer/utils/prompt'
+import { containsSupportedVariables, replacePromptVariables } from '@renderer/utils/prompt'
 import { isAIGatewayProvider, isAwsBedrockProvider, isSupportUrlContextProvider } from '@renderer/utils/provider'
 import { DEFAULT_TIMEOUT } from '@shared/config/constant'
 import type { ModelMessage, Tool } from 'ai'
@@ -274,6 +274,7 @@ export async function buildStreamTextParams(
     allowedTools?: string[]
     webSearchProviderId?: string
     webSearchConfig?: CherryWebSearchConfig
+    hasSummaries?: boolean
     requestOptions?: {
       signal?: AbortSignal
       timeout?: number
@@ -472,13 +473,25 @@ export async function buildStreamTextParams(
     params.tools = tools
   }
 
-  let systemPrompt = assistant.prompt ? await replacePromptVariables(assistant.prompt, model.name) : ''
+  let systemPrompt = assistant.prompt || ''
+  if (systemPrompt && containsSupportedVariables(systemPrompt)) {
+    systemPrompt = await replacePromptVariables(systemPrompt, model.name)
+  }
 
   if (getEffectiveMcpMode(assistant) === 'auto' && (mcpTools?.length ?? 0) > 0) {
     const autoModePrompt = getHubModeSystemPrompt()
     if (autoModePrompt) {
       systemPrompt = systemPrompt ? `${systemPrompt}\n\n${autoModePrompt}` : autoModePrompt
     }
+  }
+
+  if (options.hasSummaries) {
+    const summaryGuidance = [
+      'Some earlier messages in this conversation are provided as summaries (marked with [Summary] and [Detail ID]).',
+      'If you need the full content of a summarized message, use the builtin_conversation_detail tool with the Detail ID.',
+      'Only request details when the summary is insufficient to answer the current question.'
+    ].join(' ')
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${summaryGuidance}` : summaryGuidance
   }
 
   if (systemPrompt) {

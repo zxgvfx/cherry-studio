@@ -19,9 +19,7 @@ import type { BasicPreviewHandles } from '@renderer/components/Preview'
 import { MAX_COLLAPSED_CODE_HEIGHT } from '@renderer/config/constant'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { pyodideService } from '@renderer/services/PyodideService'
-import { getExtensionByLanguage } from '@renderer/utils/code-language'
-import { extractHtmlTitle, getFileNameFromHtmlTitle } from '@renderer/utils/formats'
-import dayjs from 'dayjs'
+import { Check } from 'lucide-react'
 import React, { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled, { css } from 'styled-components'
@@ -141,22 +139,16 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
   // Note: sourceViewRef not in deps because it's a stable ref,
   // and getContent reads content in real-time from editorViewRef.current.state.doc
 
-  const handleDownloadSource = useCallback(() => {
-    let fileName = ''
-
-    // 尝试提取 HTML 标题
-    if (language === 'html') {
-      fileName = getFileNameFromHtmlTitle(extractHtmlTitle(children)) || ''
+  const handleDownloadSource = useCallback(async () => {
+    try {
+      const content = sourceViewRef.current?.getContent?.() ?? children
+      await navigator.clipboard.writeText(content.trimEnd())
+      window.toast?.success?.(t('code_block.copy.success'))
+    } catch (error) {
+      logger.error('Failed to copy to clipboard:', { error })
+      window.toast?.error?.(t('code_block.copy.failed'))
     }
-
-    // 默认使用日期格式命名
-    if (!fileName) {
-      fileName = `${dayjs().format('YYYYMMDDHHmm')}`
-    }
-
-    const ext = getExtensionByLanguage(language)
-    window.api.file.save(`${fileName}${ext}`, children)
-  }, [children, language])
+  }, [children, t])
 
   const handleRunScript = useCallback(() => {
     setIsRunning(true)
@@ -292,10 +284,40 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     )
   }, [children, codeImageTools, language])
 
+  const [headerCopied, setHeaderCopied] = useState(false)
+  const headerCopyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleHeaderCopy = useCallback(async () => {
+    try {
+      const content = sourceViewRef.current?.getContent?.() ?? children
+      await navigator.clipboard.writeText(content.trimEnd())
+      setHeaderCopied(true)
+      if (headerCopyTimerRef.current) clearTimeout(headerCopyTimerRef.current)
+      headerCopyTimerRef.current = setTimeout(() => setHeaderCopied(false), 1500)
+    } catch (error) {
+      logger.error('Failed to copy to clipboard:', { error })
+    }
+  }, [children])
+
+  useEffect(() => {
+    return () => {
+      if (headerCopyTimerRef.current) clearTimeout(headerCopyTimerRef.current)
+    }
+  }, [])
+
   const renderHeader = useMemo(() => {
     const langTag = '<' + language.toUpperCase() + '>'
-    return <CodeHeader $isInSpecialView={isInSpecialView}>{isInSpecialView ? '' : langTag}</CodeHeader>
-  }, [isInSpecialView, language])
+    return (
+      <CodeHeader $isInSpecialView={isInSpecialView}>
+        <span>{isInSpecialView ? '' : langTag}</span>
+        {!isInSpecialView && (
+          <HeaderCopyButton onClick={handleHeaderCopy} title={t('code_block.copy.source')} $copied={headerCopied}>
+            {headerCopied ? <Check size={14} color="var(--color-status-success)" /> : <CopySvg />}
+          </HeaderCopyButton>
+        )}
+      </CodeHeader>
+    )
+  }, [isInSpecialView, language, handleHeaderCopy, headerCopied, t])
 
   // 根据视图模式和语言选择组件，优先展示特殊视图，fallback是源代码视图
   const renderContent = useMemo(() => {
@@ -357,9 +379,25 @@ const CodeBlockWrapper = styled.div<{ $isInSpecialView: boolean }>`
   }
 `
 
+const CopySvg = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+)
+
 const CodeHeader = styled.div<{ $isInSpecialView?: boolean }>`
   display: flex;
   align-items: center;
+  justify-content: space-between;
   color: var(--color-text);
   font-size: 14px;
   line-height: 1;
@@ -370,6 +408,27 @@ const CodeHeader = styled.div<{ $isInSpecialView?: boolean }>`
   margin-top: ${(props) => (props.$isInSpecialView ? '6px' : '0')};
   height: ${(props) => (props.$isInSpecialView ? '16px' : '34px')};
   background-color: ${(props) => (props.$isInSpecialView ? 'transparent' : 'var(--color-background-mute)')};
+`
+
+const HeaderCopyButton = styled.button<{ $copied?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+
+  &:hover {
+    opacity: 1;
+    background-color: var(--color-background-soft);
+  }
+
+  ${(props) => props.$copied && 'opacity: 1;'}
 `
 
 const SplitViewWrapper = styled.div<{ $isSpecialView: boolean; $isSplitView: boolean }>`

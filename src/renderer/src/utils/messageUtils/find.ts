@@ -9,6 +9,7 @@ import type {
   Message,
   MessageBlock,
   ThinkingMessageBlock,
+  ToolMessageBlock,
   TranslationMessageBlock
 } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
@@ -160,6 +161,21 @@ export const getFileContent = (message: Message): FileMetadata[] => {
     }
   }
   return files
+}
+
+export const findToolBlocks = (message: Message): ToolMessageBlock[] => {
+  if (!message || !message.blocks || message.blocks.length === 0) {
+    return []
+  }
+  const state = store.getState()
+  const toolBlocks: ToolMessageBlock[] = []
+  for (const blockId of message.blocks) {
+    const block = messageBlocksSelectors.selectById(state, blockId)
+    if (block && block.type === MessageBlockType.TOOL) {
+      toolBlocks.push(block as ToolMessageBlock)
+    }
+  }
+  return toolBlocks
 }
 
 /**

@@ -116,9 +116,58 @@ export const containsSupportedVariables = (userSystemPrompt: string): boolean =>
   return supportedVariables.some((variable) => userSystemPrompt.includes(variable))
 }
 
+let cachedSystemType: string | undefined
+let cachedArch: string | undefined
+let systemTypePromise: Promise<string> | null = null
+let archPromise: Promise<string> | null = null
+
+async function getCachedSystemType(): Promise<string> {
+  if (cachedSystemType !== undefined) return cachedSystemType
+  if (!systemTypePromise) {
+    systemTypePromise = window.api.system
+      .getDeviceType()
+      .then((value) => {
+        cachedSystemType = value || 'Unknown System'
+        return cachedSystemType as string
+      })
+      .catch((error) => {
+        logger.error('Failed to get system type:', error as Error)
+        return 'Unknown System'
+      })
+      .finally(() => {
+        systemTypePromise = null
+      })
+  }
+  return systemTypePromise ?? Promise.resolve('Unknown System')
+}
+
+async function getCachedArch(): Promise<string> {
+  if (cachedArch !== undefined) return cachedArch
+  if (!archPromise) {
+    archPromise = window.api
+      .getAppInfo()
+      .then((appInfo) => {
+        cachedArch = appInfo.arch || 'Unknown Architecture'
+        return cachedArch as string
+      })
+      .catch((error) => {
+        logger.error('Failed to get architecture:', error as Error)
+        return 'Unknown Architecture'
+      })
+      .finally(() => {
+        archPromise = null
+      })
+  }
+  return archPromise ?? Promise.resolve('Unknown Architecture')
+}
+
 export const replacePromptVariables = async (userSystemPrompt: string, modelName?: string): Promise<string> => {
   if (typeof userSystemPrompt !== 'string') {
     logger.warn('User system prompt is not a string:', userSystemPrompt)
+    return userSystemPrompt
+  }
+
+  if (!containsSupportedVariables(userSystemPrompt)) {
     return userSystemPrompt
   }
 
@@ -161,14 +210,14 @@ export const replacePromptVariables = async (userSystemPrompt: string, modelName
     }
   }
 
+  const asyncTasks: Array<Promise<void>> = []
+
   if (userSystemPrompt.includes('{{system}}')) {
-    try {
-      const systemType = await window.api.system.getDeviceType()
-      userSystemPrompt = userSystemPrompt.replace(/{{system}}/g, systemType)
-    } catch (error) {
-      logger.error('Failed to get system type:', error as Error)
-      userSystemPrompt = userSystemPrompt.replace(/{{system}}/g, 'Unknown System')
-    }
+    asyncTasks.push(
+      getCachedSystemType().then((systemType) => {
+        userSystemPrompt = userSystemPrompt.replace(/{{system}}/g, systemType)
+      })
+    )
   }
 
   if (userSystemPrompt.includes('{{language}}')) {
@@ -182,13 +231,11 @@ export const replacePromptVariables = async (userSystemPrompt: string, modelName
   }
 
   if (userSystemPrompt.includes('{{arch}}')) {
-    try {
-      const appInfo = await window.api.getAppInfo()
-      userSystemPrompt = userSystemPrompt.replace(/{{arch}}/g, appInfo.arch)
-    } catch (error) {
-      logger.error('Failed to get architecture:', error as Error)
-      userSystemPrompt = userSystemPrompt.replace(/{{arch}}/g, 'Unknown Architecture')
-    }
+    asyncTasks.push(
+      getCachedArch().then((arch) => {
+        userSystemPrompt = userSystemPrompt.replace(/{{arch}}/g, arch)
+      })
+    )
   }
 
   if (userSystemPrompt.includes('{{model_name}}')) {
@@ -199,6 +246,10 @@ export const replacePromptVariables = async (userSystemPrompt: string, modelName
       logger.error('Failed to get model name:', error as Error)
       userSystemPrompt = userSystemPrompt.replace(/{{model_name}}/g, 'Unknown Model')
     }
+  }
+
+  if (asyncTasks.length > 0) {
+    await Promise.all(asyncTasks)
   }
 
   return userSystemPrompt

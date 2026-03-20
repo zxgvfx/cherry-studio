@@ -394,6 +394,70 @@ describe('promptToolUsePlugin', () => {
       expect(result.some((chunk) => chunk.type === 'text-end')).toBe(false)
     })
 
+    it('should hide pure tool_use_result output from the visible text stream', async () => {
+      const plugin = createPromptToolUsePlugin()
+      const context = createMockContext()
+      context.mcpTools = {
+        builtin_web_search: createMockTool('builtin_web_search')
+      }
+
+      const inputChunks = [
+        { type: 'text-start' as const, id: 't1' },
+        {
+          type: 'text-delta' as const,
+          id: 't1',
+          text: '<tool_use_result>\n  <name>builtin_web_search</name>\n  <result>{"ok":true}</result>\n</tool_use_result>'
+        },
+        { type: 'text-end' as const, id: 't1' }
+      ]
+
+      const inputStream = simulateReadableStream<TextStreamPart<ToolSet>>({
+        chunks: inputChunks as TextStreamPart<ToolSet>[],
+        initialDelayInMs: 0,
+        chunkDelayInMs: 0
+      })
+
+      const transform = plugin.transformStream!(createMockStreamParams(), context)()
+      const result = await convertReadableStreamToArray(inputStream.pipeThrough(transform))
+
+      expect(result).toEqual([])
+    })
+
+    it('should keep visible text while stripping echoed tool_use_result across chunks', async () => {
+      const plugin = createPromptToolUsePlugin()
+      const context = createMockContext()
+      context.mcpTools = {
+        builtin_web_search: createMockTool('builtin_web_search')
+      }
+
+      const inputChunks = [
+        { type: 'text-start' as const, id: 't2' },
+        { type: 'text-delta' as const, id: 't2', text: '开始搜索。' },
+        { type: 'text-delta' as const, id: 't2', text: '<tool_use_result>\n  <name>builtin_' },
+        { type: 'text-delta' as const, id: 't2', text: 'web_search</name>\n  <result>{"query":"test"}' },
+        { type: 'text-delta' as const, id: 't2', text: '</result>\n</tool_use_result>' },
+        { type: 'text-delta' as const, id: 't2', text: '搜索完成。' },
+        { type: 'text-end' as const, id: 't2' }
+      ]
+
+      const inputStream = simulateReadableStream<TextStreamPart<ToolSet>>({
+        chunks: inputChunks as TextStreamPart<ToolSet>[],
+        initialDelayInMs: 0,
+        chunkDelayInMs: 0
+      })
+
+      const transform = plugin.transformStream!(createMockStreamParams(), context)()
+      const result = await convertReadableStreamToArray(inputStream.pipeThrough(transform))
+      const textChunks = result.filter((chunk) => chunk.type === 'text-delta')
+      const visibleText = textChunks.map((chunk) => ('text' in chunk ? chunk.text : '')).join('')
+
+      expect(result[0]).toEqual({ type: 'text-start', id: 't2' })
+      expect(visibleText).toBe('开始搜索。\n搜索完成。')
+      expect(visibleText).not.toContain('tool_use_result')
+      expect(visibleText).not.toContain('builtin_web_search')
+      expect(result.at(-1)).toEqual({ type: 'text-end', id: 't2' })
+    })
+
     it('should send text-start when non-tag content appears', async () => {
       const plugin = createPromptToolUsePlugin()
       const context = createMockContext()

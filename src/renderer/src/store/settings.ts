@@ -248,6 +248,8 @@ export interface SettingsState {
   // API Server
   apiServer: ApiServerConfig
   showMessageOutline: boolean
+  contextSummaryEnabled: boolean
+  contextSummaryFullTurns: number
 }
 
 export type MultiModelMessageStyle = 'horizontal' | 'vertical' | 'fold' | 'grid'
@@ -449,7 +451,9 @@ export const initialState: SettingsState = {
     port: API_SERVER_DEFAULTS.PORT,
     apiKey: `cs-sk-${uuid()}`
   },
-  showMessageOutline: false
+  showMessageOutline: false,
+  contextSummaryEnabled: false,
+  contextSummaryFullTurns: 2
 }
 
 const settingsSlice = createSlice({
@@ -899,6 +903,12 @@ const settingsSlice = createSlice({
     },
     setShowMessageOutline: (state, action: PayloadAction<boolean>) => {
       state.showMessageOutline = action.payload
+    },
+    setContextSummaryEnabled: (state, action: PayloadAction<boolean>) => {
+      state.contextSummaryEnabled = action.payload
+    },
+    setContextSummaryFullTurns: (state, action: PayloadAction<number>) => {
+      state.contextSummaryFullTurns = Math.max(1, Math.floor(action.payload))
     }
   }
 })
@@ -1030,6 +1040,8 @@ export const {
   setEnableDeveloperMode,
   setNavbarPosition,
   setShowMessageOutline,
+  setContextSummaryEnabled,
+  setContextSummaryFullTurns,
   // API Server actions
   setApiServerEnabled,
   setApiServerPort,
