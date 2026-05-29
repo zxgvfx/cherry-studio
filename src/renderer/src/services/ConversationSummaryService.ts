@@ -1,9 +1,11 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import store from '@renderer/store'
+import { formatCitationsFromBlock } from '@renderer/store/messageBlock'
 import type { Message } from '@renderer/types'
 import type { MainTextMessageBlock, ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
+import { findCitationBlocks, findFileBlocks, findImageBlocks } from '@renderer/utils/messageUtils/find'
 
 import AiProviderNew from '../aiCore/index_new'
 import { getDefaultAssistant, getProviderByModel, getQuickModel } from './AssistantService'
@@ -36,6 +38,29 @@ export function getContextSummaryFullTurns(): number {
   return store.getState().settings.contextSummaryFullTurns ?? 2
 }
 
+/**
+ * Builds a compact note describing non-text signals of a turn (uploaded images,
+ * cited/searched sources) so that this information survives summarization instead
+ * of being silently dropped. Kept in English to match the other summary markers.
+ */
+function extractTurnSignals(userMessage: Message, assistantMessage: Message): string {
+  const signals: string[] = []
+
+  const imageCount = findImageBlocks(userMessage).length
+  if (imageCount > 0) signals.push(`${imageCount} user image(s)`)
+
+  const fileCount = findFileBlocks(userMessage).length
+  if (fileCount > 0) signals.push(`${fileCount} attached file(s)`)
+
+  const citationCount = findCitationBlocks(assistantMessage).reduce(
+    (sum, block) => sum + formatCitationsFromBlock(block).length,
+    0
+  )
+  if (citationCount > 0) signals.push(`${citationCount} cited source(s)`)
+
+  return signals.length > 0 ? ` [turn included: ${signals.join(', ')}]` : ''
+}
+
 function extractToolInfo(message: Message): { toolName: string; resultSummary: string }[] {
   const state = store.getState()
   const blocks = Object.values(state.messageBlocks.entities).filter(
@@ -62,6 +87,18 @@ function extractToolInfo(message: Message): { toolName: string; resultSummary: s
 }
 
 export class ConversationSummaryService {
+  /**
+   * Decides whether it's worth spending a quick-model call to summarize a turn.
+   * Skips entirely when the feature is off, and avoids summarizing short
+   * conversations that are sent verbatim anyway (history below the always-kept
+   * full window). Turns completed once this threshold is reached get summarized
+   * as they complete; earlier (verbatim) turns simply fall back to full content.
+   */
+  static shouldGenerateSummary(topicMessageCount: number): boolean {
+    if (!getContextSummaryEnabled()) return false
+    return topicMessageCount >= getContextSummaryFullTurns() * 2
+  }
+
   /**
    * Read a stored summary from the main text block metadata of an assistant message.
    */
@@ -231,9 +268,13 @@ export class ConversationSummaryService {
         .trim()
       const parsed = JSON.parse(jsonStr) as ConversationSummary
 
+      // Preserve non-text signals (images / searched sources) that the text-only
+      // summarizer would otherwise lose.
+      const turnSignals = extractTurnSignals(userMessage, assistantMessage)
+
       return {
         userQuery: parsed.userQuery ?? '',
-        assistantResult: parsed.assistantResult ?? '',
+        assistantResult: (parsed.assistantResult ?? '') + turnSignals,
         toolCalls: Array.isArray(parsed.toolCalls) ? parsed.toolCalls : [],
         generatedAt: new Date().toISOString(),
         modelId: model.id

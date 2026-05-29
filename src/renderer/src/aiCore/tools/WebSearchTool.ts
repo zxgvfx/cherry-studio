@@ -8,6 +8,92 @@ import * as z from 'zod'
 import type { BuiltinTool, BuiltinToolContext } from './BuiltinToolRegistry'
 
 /**
+ * Per-result content cap (characters). A single web page can easily contain
+ * 4k-8k+ tokens; without a cap the full content of every result is serialized
+ * into the tool output and silently bloats the context window.
+ */
+const MAX_CHARS_PER_RESULT = 4000
+
+/**
+ * Overall budget (characters) shared across all results in a single search.
+ * Roughly mirrors Open WebUI's hard cap strategy so that a handful of large
+ * pages can't dominate the whole context window.
+ */
+const MAX_TOTAL_CONTENT_CHARS = 24_000
+
+function truncateContent(text: string, max: number): string {
+  if (!text || text.length <= max) return text || ''
+  if (max <= 0) return ''
+  return `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]`
+}
+
+/**
+ * Builds the citation-formatted tool output shared by both the direct and the
+ * pre-extracted web search tools, applying per-result and total content caps.
+ */
+function buildWebSearchModelOutput(
+  results: WebSearchProviderResponse,
+  emptySummary: string
+): { type: 'content'; value: Array<{ type: 'text'; text: string }> } {
+  let summary = emptySummary
+  if (results.query && results.results.length > 0) {
+    summary = `Found ${results.results.length} relevant sources. Use [number] format to cite specific information.`
+  }
+
+  const imageUrlPattern = /!\[.*?\]\((https?:\/\/[^)]+)\)/g
+  const allImageUrls: string[] = []
+  let remainingBudget = MAX_TOTAL_CONTENT_CHARS
+
+  const citationData = results.results.map((result, index) => {
+    const imgs: string[] = []
+    let match: RegExpExecArray | null
+    imageUrlPattern.lastIndex = 0
+    while ((match = imageUrlPattern.exec(result.content || '')) !== null) {
+      imgs.push(match[1])
+    }
+    allImageUrls.push(...imgs)
+
+    // Image URLs are already extracted above, so truncating the raw content is safe.
+    const perResultLimit = Math.min(MAX_CHARS_PER_RESULT, remainingBudget)
+    const content = truncateContent(result.content || '', perResultLimit)
+    remainingBudget = Math.max(0, remainingBudget - content.length)
+
+    return {
+      number: index + 1,
+      title: result.title,
+      content,
+      url: result.url,
+      ...(imgs.length > 0 ? { images: imgs } : {})
+    }
+  })
+
+  const hasImages = allImageUrls.length > 0
+
+  const referenceContent = `\`\`\`json\n${JSON.stringify(citationData, null, 2)}\n\`\`\``
+  const fullInstructions = REFERENCE_PROMPT.replace(
+    '{question}',
+    "Based on the search results, please answer the user's question with proper citations."
+  ).replace('{references}', referenceContent)
+
+  const value: Array<{ type: 'text'; text: string }> = [
+    { type: 'text', text: summary },
+    { type: 'text', text: fullInstructions }
+  ]
+
+  if (hasImages) {
+    value.push({
+      type: 'text',
+      text:
+        'IMPORTANT: The search results contain real image URLs in the "images" field. ' +
+        'When the user asks for reference images/photos/pictures, you MUST display them using markdown image syntax: ![description](url). ' +
+        'Show the most relevant images directly in your response. Do NOT just provide text links — render images inline.'
+    })
+  }
+
+  return { type: 'content', value }
+}
+
+/**
  * 使用预提取关键词的网络搜索工具
  * 这个工具直接使用插件阶段分析的搜索意图，避免重复分析
  */
@@ -72,69 +158,8 @@ You can use this tool as-is to search with the prepared queries, or provide addi
 
       return searchResults
     },
-    toModelOutput: ({ output: results }) => {
-      let summary = 'No search needed based on the query analysis.'
-      if (results.query && results.results.length > 0) {
-        summary = `Found ${results.results.length} relevant sources. Use [number] format to cite specific information.`
-      }
-
-      const imageUrlPattern = /!\[.*?\]\((https?:\/\/[^)]+)\)/g
-      const allImageUrls: string[] = []
-      const citationData = results.results.map((result, index) => {
-        const imgs: string[] = []
-        let match: RegExpExecArray | null
-        imageUrlPattern.lastIndex = 0
-        while ((match = imageUrlPattern.exec(result.content || '')) !== null) {
-          imgs.push(match[1])
-        }
-        allImageUrls.push(...imgs)
-        return {
-          number: index + 1,
-          title: result.title,
-          content: result.content,
-          url: result.url,
-          ...(imgs.length > 0 ? { images: imgs } : {})
-        }
-      })
-
-      const hasImages = allImageUrls.length > 0
-
-      const referenceContent = `\`\`\`json\n${JSON.stringify(citationData, null, 2)}\n\`\`\``
-      const fullInstructions = REFERENCE_PROMPT.replace(
-        '{question}',
-        "Based on the search results, please answer the user's question with proper citations."
-      ).replace('{references}', referenceContent)
-
-      const value: Array<{ type: 'text'; text: string }> = [
-        {
-          type: 'text',
-          text: 'This tool searches for relevant information and formats results for easy citation. The returned sources should be cited using [1], [2], etc. format in your response.'
-        },
-        {
-          type: 'text',
-          text: summary
-        },
-        {
-          type: 'text',
-          text: fullInstructions
-        }
-      ]
-
-      if (hasImages) {
-        value.push({
-          type: 'text',
-          text:
-            'IMPORTANT: The search results contain real image URLs in the "images" field. ' +
-            'When the user asks for reference images/photos/pictures, you MUST display them using markdown image syntax: ![description](url). ' +
-            'Show the most relevant images directly in your response. Do NOT just provide text links — render images inline.'
-        })
-      }
-
-      return {
-        type: 'content',
-        value
-      }
-    }
+    toModelOutput: ({ output: results }) =>
+      buildWebSearchModelOutput(results, 'No search needed based on the query analysis.')
   })
 }
 
@@ -261,56 +286,7 @@ export const webSearchToolDirect = (webSearchProviderId: WebSearchProvider['id']
       }
       return await WebSearchService.processWebsearch(webSearchProvider!, extractResults, requestId)
     },
-    toModelOutput: ({ output: results }) => {
-      let summary = 'No results found.'
-      if (results.query && results.results.length > 0) {
-        summary = `Found ${results.results.length} relevant sources. Use [number] format to cite specific information.`
-      }
-
-      const imageUrlPattern = /!\[.*?\]\((https?:\/\/[^)]+)\)/g
-      const allImageUrls: string[] = []
-      const citationData = results.results.map((result, index) => {
-        const imgs: string[] = []
-        let match: RegExpExecArray | null
-        imageUrlPattern.lastIndex = 0
-        while ((match = imageUrlPattern.exec(result.content || '')) !== null) {
-          imgs.push(match[1])
-        }
-        allImageUrls.push(...imgs)
-        return {
-          number: index + 1,
-          title: result.title,
-          content: result.content,
-          url: result.url,
-          ...(imgs.length > 0 ? { images: imgs } : {})
-        }
-      })
-
-      const hasImages = allImageUrls.length > 0
-
-      const referenceContent = `\`\`\`json\n${JSON.stringify(citationData, null, 2)}\n\`\`\``
-      const fullInstructions = REFERENCE_PROMPT.replace(
-        '{question}',
-        "Based on the search results, please answer the user's question with proper citations."
-      ).replace('{references}', referenceContent)
-
-      const value: Array<{ type: 'text'; text: string }> = [
-        { type: 'text', text: summary },
-        { type: 'text', text: fullInstructions }
-      ]
-
-      if (hasImages) {
-        value.push({
-          type: 'text',
-          text:
-            'IMPORTANT: The search results contain real image URLs in the "images" field. ' +
-            'When the user asks for reference images/photos/pictures, you MUST display them using markdown image syntax: ![description](url). ' +
-            'Show the most relevant images directly in your response. Do NOT just provide text links — render images inline.'
-        })
-      }
-
-      return { type: 'content', value }
-    }
+    toModelOutput: ({ output: results }) => buildWebSearchModelOutput(results, 'No results found.')
   })
 }
 

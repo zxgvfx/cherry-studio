@@ -25,6 +25,7 @@ import {
   findToolBlocks,
   getMainTextContent
 } from '@renderer/utils/messageUtils/find'
+import { audioExts as AUDIO_EXTS_CONFIG } from '@shared/config/constant'
 import { parseDataUrl } from '@shared/utils'
 import type {
   AssistantModelMessage,
@@ -49,6 +50,31 @@ export interface SummaryOptions {
 const logger = loggerService.withContext('messageConverter')
 
 /**
+ * In-memory cache for decoded image files. File contents are content-addressed
+ * (immutable per id), so caching by id+ext is safe and avoids re-reading the same
+ * image from disk on every turn / re-send. Bounded by total base64 bytes with
+ * FIFO eviction so long conversations with many images can't grow unbounded.
+ */
+const MAX_IMAGE_CACHE_BYTES = 64 * 1024 * 1024
+const imageBase64Cache = new Map<string, { base64: string; mime: string }>()
+let imageCacheBytes = 0
+
+function setCachedImage(key: string, value: { base64: string; mime: string }): void {
+  const size = value.base64.length
+  // Skip caching images that exceed the whole budget on their own.
+  if (size > MAX_IMAGE_CACHE_BYTES) return
+  // Map preserves insertion order; evict oldest entries until there is room.
+  while (imageCacheBytes + size > MAX_IMAGE_CACHE_BYTES && imageBase64Cache.size > 0) {
+    const oldestKey = imageBase64Cache.keys().next().value as string
+    const oldest = imageBase64Cache.get(oldestKey)
+    if (oldest) imageCacheBytes -= oldest.base64.length
+    imageBase64Cache.delete(oldestKey)
+  }
+  imageBase64Cache.set(key, value)
+  imageCacheBytes += size
+}
+
+/**
  * 转换消息为 AI SDK 参数格式
  * 基于 OpenAI 格式的通用转换，支持文本、图片和文件
  */
@@ -67,6 +93,7 @@ export async function convertMessageToSdkParam(
     return convertMessageToUserModelMessage(content, fileBlocks, imageBlocks, isVisionModel, model)
   } else {
     return convertAssistantWithToolBlocks(
+      message,
       content,
       fileBlocks,
       imageBlocks,
@@ -83,7 +110,13 @@ async function convertImageBlockToImagePart(imageBlocks: ImageMessageBlock[]): P
   for (const imageBlock of imageBlocks) {
     if (imageBlock.file) {
       try {
-        const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
+        const cacheKey = imageBlock.file.id + imageBlock.file.ext
+        let image = imageBase64Cache.get(cacheKey)
+        if (!image) {
+          const loaded = await window.api.file.base64Image(cacheKey)
+          image = { base64: loaded.base64, mime: loaded.mime }
+          setCachedImage(cacheKey, image)
+        }
         parts.push({
           type: 'image',
           image: image.base64,
@@ -214,12 +247,32 @@ async function convertMessageToUserModelMessage(
 
     // 非 PDF 文件，或 PDF 特殊处理未成功 → 通用文本提取（含 OCR 回退）
     if (!processed) {
-      const textPart = await convertFileBlockToTextPart(fileBlock)
-      if (textPart) {
-        parts.push(textPart)
-        logger.debug(`File ${file.origin_name} processed as text content`)
+      const lowerExt = file.ext?.toLowerCase() ?? ''
+      const isAudio = file.type === FILE_TYPE.AUDIO || AUDIO_EXTS_CONFIG.includes(lowerExt)
+
+      if (isAudio) {
+        // 音频文件无法做文本提取，跳过并提示（避免去 OCR）
+        logger.warn(
+          `Audio file ${file.origin_name} could not be sent natively to current model. ` +
+            `Either the model is not vision-capable, the provider does not support audio, ` +
+            `or the audio failed to transcode (see prior [audioTranscode]/[fileProcessor] logs).`
+        )
+        parts.push({
+          type: 'text',
+          text:
+            `[音频文件 ${file.origin_name} 未能发送给当前模型。常见原因：` +
+            `(1) 该文件编码不被 Electron 内置解码器支持（多见于 .m4a/AAC）；` +
+            `(2) 当前模型/Provider 不支持音频输入。` +
+            `建议将音频转换为 .mp3 或 .wav 后再上传。]`
+        })
       } else {
-        logger.warn(`File ${file.origin_name} could not be processed in any format`)
+        const textPart = await convertFileBlockToTextPart(fileBlock)
+        if (textPart) {
+          parts.push(textPart)
+          logger.debug(`File ${file.origin_name} processed as text content`)
+        } else {
+          logger.warn(`File ${file.origin_name} could not be processed in any format`)
+        }
       }
     }
   }
@@ -302,6 +355,60 @@ async function convertMessageToAssistantModelMessage(
 }
 
 /**
+ * Splits MAIN_TEXT blocks into "before first tool block" vs "from first tool block onward"
+ * using message.blocks order. This matches how the UI stores MCP flows: tool blocks then the
+ * final assistant answer — replaying everything before tool-call parts would violate AI SDK
+ * message ordering and trigger InvalidPromptError on the next user turn.
+ */
+function splitMainTextBlocksByToolRange(
+  message: Message,
+  mainTextBlocks: MainTextMessageBlock[],
+  completedToolBlocks: ToolMessageBlock[]
+): { pre: MainTextMessageBlock[]; post: MainTextMessageBlock[] } {
+  if (completedToolBlocks.length === 0) {
+    return { pre: mainTextBlocks, post: [] }
+  }
+
+  const toolIds = new Set(completedToolBlocks.map((b) => b.id))
+  let firstToolIndex = -1
+  for (let i = 0; i < message.blocks.length; i++) {
+    if (toolIds.has(message.blocks[i])) {
+      if (firstToolIndex === -1) {
+        firstToolIndex = i
+        break
+      }
+    }
+  }
+
+  if (firstToolIndex === -1) {
+    logger.warn(
+      'Tool blocks present but ids not found in message.blocks; using legacy ordering (all text before tool calls)'
+    )
+    return { pre: mainTextBlocks, post: [] }
+  }
+
+  const pre: MainTextMessageBlock[] = []
+  const post: MainTextMessageBlock[] = []
+  for (const block of mainTextBlocks) {
+    const idx = message.blocks.indexOf(block.id)
+    if (idx === -1) {
+      post.push(block)
+      continue
+    }
+    if (idx < firstToolIndex) {
+      pre.push(block)
+    } else {
+      post.push(block)
+    }
+  }
+  return { pre, post }
+}
+
+function joinMainTextContents(blocks: MainTextMessageBlock[]): string {
+  return blocks.map((b) => b.content).join('\n\n')
+}
+
+/**
  * Wraps assistant message conversion with tool block handling.
  * When an assistant message contains completed TOOL blocks, it produces:
  * 1. An AssistantModelMessage with ToolCallPart entries appended
@@ -309,6 +416,7 @@ async function convertMessageToAssistantModelMessage(
  * This preserves multi-turn tool-calling context for the LLM.
  */
 async function convertAssistantWithToolBlocks(
+  message: Message,
   content: string,
   fileBlocks: FileMessageBlock[],
   imageBlocks: ImageMessageBlock[],
@@ -317,27 +425,42 @@ async function convertAssistantWithToolBlocks(
   toolBlocks: ToolMessageBlock[],
   model?: Model
 ): Promise<ModelMessage | ModelMessage[]> {
-  const assistantMsg = await convertMessageToAssistantModelMessage(
-    content,
-    fileBlocks,
-    imageBlocks,
-    thinkingBlocks,
-    mainTextBlocks,
-    model
-  )
-
   const completedToolBlocks = toolBlocks.filter(
     (tb) => tb.status === MessageBlockStatus.SUCCESS || tb.status === MessageBlockStatus.ERROR
   )
 
   if (completedToolBlocks.length === 0) {
-    return assistantMsg
+    return convertMessageToAssistantModelMessage(
+      content,
+      fileBlocks,
+      imageBlocks,
+      thinkingBlocks,
+      mainTextBlocks,
+      model
+    )
   }
 
-  const assistantParts = Array.isArray(assistantMsg.content)
-    ? [...assistantMsg.content]
-    : assistantMsg.content
-      ? [{ type: 'text' as const, text: assistantMsg.content }]
+  const { pre: preMainTextBlocks, post: postMainTextBlocks } = splitMainTextBlocksByToolRange(
+    message,
+    mainTextBlocks,
+    completedToolBlocks
+  )
+  const preContent = joinMainTextContents(preMainTextBlocks)
+  const postContent = joinMainTextContents(postMainTextBlocks)
+
+  const firstAssistantCore = await convertMessageToAssistantModelMessage(
+    preContent,
+    fileBlocks,
+    imageBlocks,
+    thinkingBlocks,
+    preMainTextBlocks,
+    model
+  )
+
+  const assistantParts = Array.isArray(firstAssistantCore.content)
+    ? [...firstAssistantCore.content]
+    : firstAssistantCore.content
+      ? [{ type: 'text' as const, text: firstAssistantCore.content }]
       : []
 
   const toolResultParts: ToolResultPart[] = []
@@ -391,7 +514,14 @@ async function convertAssistantWithToolBlocks(
 
   logger.debug(`Converted ${completedToolBlocks.length} tool blocks for multi-turn context`)
 
-  return [enrichedAssistant, toolMessage]
+  const postTrimmed = postContent.trim()
+  if (!postTrimmed) {
+    return [enrichedAssistant, toolMessage]
+  }
+
+  const postAssistant = await convertMessageToAssistantModelMessage(postTrimmed, [], [], [], postMainTextBlocks, model)
+
+  return [enrichedAssistant, toolMessage, postAssistant]
 }
 
 /**

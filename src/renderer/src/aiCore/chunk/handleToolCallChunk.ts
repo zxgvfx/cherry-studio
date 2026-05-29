@@ -7,7 +7,8 @@
 import { loggerService } from '@logger'
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { processKnowledgeReferences } from '@renderer/services/KnowledgeService'
-import type { BaseTool, MCPTool, MCPToolResponse, NormalToolResponse } from '@renderer/types'
+import type { BaseTool, MCPTool, MCPToolResponse, NormalToolResponse, WebSearchProviderResponse } from '@renderer/types'
+import { WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { Chunk } from '@renderer/types/chunk'
 import { ChunkType } from '@renderer/types/chunk'
 import type { ProviderMetadata, ToolSet, TypedToolCall, TypedToolError, TypedToolResult } from 'ai'
@@ -351,6 +352,22 @@ export class ToolCallChunkHandler {
     switch (toolResponse.tool.name) {
       case 'builtin_knowledge_search': {
         processKnowledgeReferences(toolResponse.response, this.onChunk)
+        break
+      }
+      case 'builtin_web_search': {
+        // External provider web search returns a WebSearchProviderResponse. Route it
+        // through the same citation path as model-native web search so the sources
+        // render as a CitationBlock ([1][2]…) instead of being buried in the tool block.
+        const webSearchResult = toolResponse.response as WebSearchProviderResponse | undefined
+        if (this.onChunk && webSearchResult?.results?.length) {
+          this.onChunk({
+            type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
+            llm_web_search: {
+              results: webSearchResult,
+              source: WEB_SEARCH_SOURCE.WEBSEARCH
+            }
+          })
+        }
         break
       }
       // 未来可以在这里添加其他工具的后处理逻辑

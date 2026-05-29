@@ -1,7 +1,13 @@
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
 import { messageBlocksSlice } from '@renderer/store/messageBlock'
+import { FILE_TYPE } from '@renderer/types'
 import { MessageBlockStatus } from '@renderer/types/newMessage'
-import { createErrorBlock, createMainTextBlock, createMessage } from '@renderer/utils/messageUtils/create'
+import {
+  createErrorBlock,
+  createImageBlock,
+  createMainTextBlock,
+  createMessage
+} from '@renderer/utils/messageUtils/create'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ConversationService } from '../ConversationService'
@@ -162,5 +168,47 @@ describe('ConversationService.filterMessagesPipeline', () => {
     expect(filtered.find((m) => m.id === 'user-2')).toBeUndefined()
     expect(filtered[0].role).toBe('user')
     expect(filtered[filtered.length - 1].role).toBe('user')
+  })
+})
+
+describe('ConversationService.estimateMessageTokens', () => {
+  beforeEach(() => {
+    mockStore = createMockStore()
+    vi.clearAllMocks()
+  })
+
+  it('counts inline image tokens in addition to main text', () => {
+    const topicId = 'topic-img'
+    const assistantId = 'assistant-img'
+
+    const textBlock = createMainTextBlock('user-img', 'Look at this image', { status: MessageBlockStatus.SUCCESS })
+    // 200KB image → estimateImageTokens = size / 100 = 2000 tokens
+    const imageBlock = createImageBlock('user-img', {
+      status: MessageBlockStatus.SUCCESS,
+      file: {
+        id: 'file-img',
+        name: 'photo.png',
+        origin_name: 'photo.png',
+        path: '/tmp/photo.png',
+        size: 200_000,
+        ext: '.png',
+        type: FILE_TYPE.IMAGE,
+        created_at: new Date().toISOString(),
+        count: 1
+      }
+    })
+    const message = createMessage('user', topicId, assistantId, {
+      id: 'user-img',
+      blocks: [textBlock.id, imageBlock.id]
+    })
+
+    mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(textBlock))
+    mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(imageBlock))
+
+    const tokens = ConversationService.estimateMessageTokens(message)
+
+    // Image alone contributes ~2000 tokens; the previous text-only estimate would
+    // have been a handful of tokens.
+    expect(tokens).toBeGreaterThan(1900)
   })
 })

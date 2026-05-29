@@ -7,6 +7,7 @@ import { createErrorBlock, createMainTextBlock, createMessage } from '../create'
 import {
   filterAdjacentUserMessaegs,
   filterAfterContextClearMessages,
+  filterContextMessages,
   filterEmptyMessages,
   filterErrorOnlyMessagesWithRelated,
   filterLastAssistantMessage,
@@ -528,6 +529,46 @@ describe('Message Filter Utils', () => {
       // Should have user1, assistant1, and user3 (user2 and errorAssistant filtered out)
       expect(result).toHaveLength(3)
       expect(result.map((m) => m.id)).toEqual([user1Id, assistant1Id, user3Id])
+    })
+  })
+
+  describe('filterContextMessages (unified UI count)', () => {
+    it('drops error-only assistant replies together with their user message, matching the send pipeline', () => {
+      const user1Block = createMainTextBlock('user-1', 'First question', { status: MessageBlockStatus.SUCCESS })
+      const user1 = createMessage('user', 'topic-1', 'assistant-1', { id: 'user-1', blocks: [user1Block.id] })
+
+      const assistant1Block = createMainTextBlock('assistant-1', 'First answer', {
+        status: MessageBlockStatus.SUCCESS
+      })
+      const assistant1 = createMessage('assistant', 'topic-1', 'assistant-1', {
+        id: 'assistant-1',
+        askId: 'user-1',
+        blocks: [assistant1Block.id]
+      })
+
+      const user2Block = createMainTextBlock('user-2', 'Second question', { status: MessageBlockStatus.SUCCESS })
+      const user2 = createMessage('user', 'topic-1', 'assistant-1', { id: 'user-2', blocks: [user2Block.id] })
+
+      const errorBlock = createErrorBlock(
+        'assistant-2',
+        { message: 'Error occurred', name: 'Error', stack: null },
+        { status: MessageBlockStatus.ERROR }
+      )
+      const assistantError = createMessage('assistant', 'topic-1', 'assistant-1', {
+        id: 'assistant-2',
+        askId: 'user-2',
+        blocks: [errorBlock.id]
+      })
+
+      mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(user1Block))
+      mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(assistant1Block))
+      mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(user2Block))
+      mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(errorBlock))
+
+      const result = filterContextMessages([user1, assistant1, user2, assistantError], 10)
+
+      // The error-only pair (user-2 + assistant-2) must be excluded from the count.
+      expect(result.map((m) => m.id)).toEqual(['user-1', 'assistant-1'])
     })
   })
 })

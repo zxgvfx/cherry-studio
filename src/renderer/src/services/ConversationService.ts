@@ -1,10 +1,17 @@
 import { loggerService } from '@logger'
 import { convertMessagesToSdkMessages } from '@renderer/aiCore/prepareParams'
 import type { Assistant, Message } from '@renderer/types'
-import { filterAdjacentUserMessaegs, filterLastAssistantMessage } from '@renderer/utils/messageUtils/filters'
-import { getMainTextContent } from '@renderer/utils/messageUtils/find'
+import { FILE_TYPE } from '@renderer/types'
+import { applyContextFilters } from '@renderer/utils/messageUtils/filters'
+import {
+  findFileBlocks,
+  findImageBlocks,
+  findToolBlocks,
+  getMainTextContent,
+  getThinkingContent
+} from '@renderer/utils/messageUtils/find'
 import type { ModelMessage } from 'ai'
-import { findLast, isEmpty, takeRight } from 'lodash'
+import { findLast, isEmpty } from 'lodash'
 import { approximateTokenSize } from 'tokenx'
 
 import { getAssistantSettings, getDefaultModel } from './AssistantService'
@@ -14,13 +21,7 @@ import {
   getContextSummaryEnabled,
   getContextSummaryFullTurns
 } from './ConversationSummaryService'
-import {
-  filterAfterContextClearMessages,
-  filterEmptyMessages,
-  filterErrorOnlyMessagesWithRelated,
-  filterUsefulMessages,
-  filterUserRoleStartMessages
-} from './MessagesService'
+import { estimateImageTokens } from './TokenService'
 
 const logger = loggerService.withContext('ConversationService')
 
@@ -38,23 +39,75 @@ const SUMMARY_CONTEXT_MULTIPLIER = 5
  */
 const MAX_SAFE_CONTEXT_TOKENS = 120_000
 
+/**
+ * Rough bytes-per-token ratio used to estimate the cost of attached text files
+ * whose extracted content is not available synchronously.
+ */
+const TEXT_FILE_BYTES_PER_TOKEN = 4
+
 export class ConversationService {
+  /**
+   * Estimates the token footprint of a full message, including every block that
+   * actually reaches the model: main text, thinking, images, attached files and
+   * tool-call results. The previous implementation only counted main text, which
+   * made the budget blind to images / search results / tool outputs and routinely
+   * under-estimated the real payload by a large margin.
+   */
+  static estimateMessageTokens(message: Message): number {
+    let tokens = 0
+
+    const text = getMainTextContent(message)
+    if (text) tokens += approximateTokenSize(text)
+
+    const thinking = getThinkingContent(message)
+    if (thinking) tokens += approximateTokenSize(thinking)
+
+    // Inline images (vision input)
+    for (const block of findImageBlocks(message)) {
+      if (block.file) tokens += estimateImageTokens(block.file)
+    }
+
+    // Attached files (text extraction / native file parts)
+    for (const block of findFileBlocks(message)) {
+      const file = block.file
+      if (!file) continue
+      if (file.type === FILE_TYPE.IMAGE) {
+        tokens += estimateImageTokens(file)
+      } else if (file.type === FILE_TYPE.TEXT) {
+        tokens += Math.floor((file.size ?? 0) / TEXT_FILE_BYTES_PER_TOKEN)
+      } else {
+        // PDFs / docs / audio etc. — rough heuristic, only to keep the budget honest.
+        tokens += Math.floor((file.size ?? 0) / 100)
+      }
+    }
+
+    // Tool-call results (web search / knowledge base JSON, etc.) — these can be
+    // large and are otherwise invisible to the context budget.
+    for (const block of findToolBlocks(message)) {
+      const raw = block.metadata?.rawMcpToolResponse
+      if (!raw) continue
+      try {
+        tokens += approximateTokenSize(JSON.stringify(raw.response ?? raw))
+      } catch {
+        // Non-serializable response; ignore for estimation purposes.
+      }
+    }
+
+    return tokens
+  }
   /**
    * Applies the filtering pipeline that prepares UI messages for model consumption.
    * This keeps the logic testable and prevents future regressions when the pipeline changes.
    */
   static filterMessagesPipeline(messages: Message[], contextCount: number): Message[] {
-    const messagesAfterContextClear = filterAfterContextClearMessages(messages)
-    const usefulMessages = filterUsefulMessages(messagesAfterContextClear)
-    // Run the error-only filter before trimming trailing assistant responses so the pair is removed together.
-    const withoutErrorOnlyPairs = filterErrorOnlyMessagesWithRelated(usefulMessages)
-    const withoutTrailingAssistant = filterLastAssistantMessage(withoutErrorOnlyPairs)
-    const withoutAdjacentUsers = filterAdjacentUserMessaegs(withoutTrailingAssistant)
-    const limitedByContext = takeRight(withoutAdjacentUsers, contextCount + 2)
-    const contextClearFiltered = filterAfterContextClearMessages(limitedByContext)
-    const nonEmptyMessages = filterEmptyMessages(contextClearFiltered)
-    const userRoleStartMessages = filterUserRoleStartMessages(nonEmptyMessages)
-    return userRoleStartMessages
+    // Delegates to the shared context filter (the same one backing the UI count)
+    // with the send-only steps enabled: reserve 2 slots for the in-flight
+    // user/assistant pair and drop the trailing assistant placeholder.
+    return applyContextFilters(messages, contextCount, {
+      reservedSlots: 2,
+      dropTrailingAssistant: true,
+      dropErrorOnlyPairs: true
+    })
   }
 
   /**
@@ -65,10 +118,7 @@ export class ConversationService {
     if (messages.length <= 1) return messages
 
     let totalTokens = systemPromptTokens
-    const tokenPerMessage: number[] = messages.map((msg) => {
-      const text = getMainTextContent(msg)
-      return approximateTokenSize(text)
-    })
+    const tokenPerMessage: number[] = messages.map((msg) => ConversationService.estimateMessageTokens(msg))
     totalTokens += tokenPerMessage.reduce((sum, t) => sum + t, 0)
 
     if (totalTokens <= MAX_SAFE_CONTEXT_TOKENS) return messages

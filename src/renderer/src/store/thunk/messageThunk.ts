@@ -697,7 +697,7 @@ const fetchAndProcessAgentResponseImpl = async (
     const adapter = new AiSdkToChunkAdapter(
       streamProcessorCallbacks,
       [],
-      false,
+      true,
       false,
       (sessionId) => {
         persistAgentSessionId(sessionId)
@@ -789,9 +789,16 @@ function triggerAsyncSummaryGeneration(
     const state = getState()
     const userMsg = state.messages.entities[userMessageId]
     const assistantMsg = state.messages.entities[assistantMsgId]
-    if (userMsg && assistantMsg) {
-      ConversationSummaryService.generateAndStoreSummaryAsync(userMsg, assistantMsg)
-    }
+    if (!userMsg || !assistantMsg) return
+
+    // Only spend a quick-model call when summaries are enabled and the
+    // conversation is long enough to actually use them. Short conversations are
+    // sent verbatim, so summarizing every turn there is pure waste.
+    const topicId = assistantMsg.topicId
+    const topicMessageCount = topicId ? selectMessagesForTopic(state, topicId).length : 0
+    if (!ConversationSummaryService.shouldGenerateSummary(topicMessageCount)) return
+
+    ConversationSummaryService.generateAndStoreSummaryAsync(userMsg, assistantMsg)
   } catch (error) {
     logger.error('Error triggering summary generation:', error as Error)
   }

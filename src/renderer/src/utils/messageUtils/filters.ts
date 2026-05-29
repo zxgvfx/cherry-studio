@@ -212,25 +212,62 @@ export function filterErrorOnlyMessagesWithRelated(messages: Message[]): Message
 // }
 
 /**
- * Filters and processes messages based on context requirements
- * @param messages - Array of messages to be filtered
- * @param contextCount - Number of messages to keep in context (excluding new user and assistant messages)
- * @returns Filtered array of messages that:
- * 1. Only includes messages after the last context clear
- * 2. Only includes useful message in a group (based on useful flag)
- * 3. Limited to contextCount + 2 messages (including space for new user/assistant messages)
- * 4. Starts from first user message
- * 5. Excludes empty messages
+ * Options that distinguish the "display" context filter (UI badge) from the
+ * "send" context filter (the real payload prepared for the model).
+ */
+export interface ContextFilterOptions {
+  /**
+   * Extra message slots reserved for the in-flight user/assistant pair.
+   * Only the send path needs this (it works on messages that already include
+   * the current user message plus an assistant placeholder).
+   */
+  reservedSlots?: number
+  /** Drop the trailing assistant message (send path only — it's the placeholder). */
+  dropTrailingAssistant?: boolean
+  /** Drop assistant replies that contain only an error, together with their user message. */
+  dropErrorOnlyPairs?: boolean
+}
+
+/**
+ * Single source of truth for context filtering. Both the UI context count and
+ * the model send pipeline funnel through here so the two can no longer drift.
+ *
+ * Steps:
+ * 1. Only keep messages after the last context clear
+ * 2. Only keep the useful message in each group (based on useful flag)
+ * 3. (optional) Drop error-only assistant replies with their user message
+ * 4. (optional) Drop the trailing assistant placeholder
+ * 5. Collapse adjacent user messages (keep the latest)
+ * 6. Limit to contextCount (+ reservedSlots) most recent messages
+ * 7. Re-apply context clear, drop empty messages, start from a user message
+ */
+export function applyContextFilters(
+  messages: Message[],
+  contextCount: number,
+  options: ContextFilterOptions = {}
+): Message[] {
+  const { reservedSlots = 0, dropTrailingAssistant = false, dropErrorOnlyPairs = false } = options
+
+  let result = filterAfterContextClearMessages(messages)
+  result = filterUsefulMessages(result)
+  // Run the error-only filter before trimming trailing assistants so the pair is removed together.
+  if (dropErrorOnlyPairs) result = filterErrorOnlyMessagesWithRelated(result)
+  if (dropTrailingAssistant) result = filterLastAssistantMessage(result)
+  result = filterAdjacentUserMessaegs(result)
+  result = takeRight(result, contextCount + reservedSlots)
+  result = filterAfterContextClearMessages(result)
+  result = filterEmptyMessages(result)
+  result = filterUserRoleStartMessages(result)
+
+  return result
+}
+
+/**
+ * Filters and processes messages for the UI context count (the boundary badge).
+ * Mirrors the model send pipeline minus the request-only steps (reserved slots
+ * and trailing-assistant removal), so the displayed count stays consistent with
+ * what is actually sent.
  */
 export function filterContextMessages(messages: Message[], contextCount: number): Message[] {
-  // NOTE: 和 fetchCompletions 中过滤消息的逻辑相同。
-  // 按理说 fetchCompletions 也可以复用这个函数，不过 fetchCompletions 不敢随便乱改，后面再考虑重构吧
-  const afterContextClearMsgs = filterAfterContextClearMessages(messages)
-  const usefulMsgs = filterUsefulMessages(afterContextClearMsgs)
-  const adjacentRemovedMsgs = filterAdjacentUserMessaegs(usefulMsgs)
-  const filteredMessages = filterUserRoleStartMessages(
-    filterEmptyMessages(takeRight(adjacentRemovedMsgs, contextCount))
-  )
-
-  return filteredMessages
+  return applyContextFilters(messages, contextCount, { dropErrorOnlyPairs: true })
 }
