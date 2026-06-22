@@ -79,6 +79,7 @@ describe('file', () => {
       expect(getFileType('.mp4')).toBe(FILE_TYPE.VIDEO)
       expect(getFileType('.avi')).toBe(FILE_TYPE.VIDEO)
       expect(getFileType('.mov')).toBe(FILE_TYPE.VIDEO)
+      expect(getFileType('.wmv')).toBe(FILE_TYPE.VIDEO)
       expect(getFileType('.mkv')).toBe(FILE_TYPE.VIDEO)
       expect(getFileType('.flv')).toBe(FILE_TYPE.VIDEO)
     })
@@ -89,6 +90,7 @@ describe('file', () => {
       expect(getFileType('.ogg')).toBe(FILE_TYPE.AUDIO)
       expect(getFileType('.flac')).toBe(FILE_TYPE.AUDIO)
       expect(getFileType('.aac')).toBe(FILE_TYPE.AUDIO)
+      expect(getFileType('.m4a')).toBe(FILE_TYPE.AUDIO)
     })
 
     it('should return TEXT for text extensions', () => {

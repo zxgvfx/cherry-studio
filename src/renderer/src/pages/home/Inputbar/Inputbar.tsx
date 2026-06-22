@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { getSupportedAudioExts } from '@renderer/aiCore/prepareParams/modelCapabilities'
 import {
   isDedicatedImageModel,
   isGenerateImageModel,
@@ -8,7 +9,7 @@ import {
   isVisionModels,
   isWebSearchModel
 } from '@renderer/config/models'
-import { isGenerate3DModel } from '@renderer/config/models/vision'
+import { isGenerate3DModel, isGenerateMotionModel, isGenerateVideoModel } from '@renderer/config/models/vision'
 import db from '@renderer/databases'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useInputText } from '@renderer/hooks/useInputText'
@@ -44,7 +45,7 @@ import {
 import type { MessageInputBaseParams } from '@renderer/types/newMessage'
 import { delay } from '@renderer/utils'
 import { getSendMessageShortcutLabel } from '@renderer/utils/input'
-import { documentExts, imageExts, textExts } from '@shared/config/constant'
+import { documentExts, imageExts, textExts, videoExts } from '@shared/config/constant'
 import { debounce } from 'lodash'
 import type { FC } from 'react'
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
@@ -170,6 +171,8 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   const isVisionAssistant = useMemo(() => isVisionModel(model), [model])
   const isGenerateImageAssistant = useMemo(() => isGenerateImageModel(model), [model])
   const is3DModelAssistant = useMemo(() => isGenerate3DModel(model), [model])
+  const isMotionModelAssistant = useMemo(() => isGenerateMotionModel(model), [model])
+  const isVideoModelAssistant = useMemo(() => isGenerateVideoModel(model), [model])
   const { setTimeoutTimer } = useTimer()
   const isMultiSelectMode = useAppSelector((state) => state.runtime.chat.isMultiSelectMode)
 
@@ -188,28 +191,43 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   )
 
   const canAddImageFile = useMemo(() => {
-    return isVisionSupported || isGenerateImageSupported || is3DModelAssistant
-  }, [isGenerateImageSupported, isVisionSupported, is3DModelAssistant])
+    return (
+      isVisionSupported ||
+      isGenerateImageSupported ||
+      is3DModelAssistant ||
+      isVideoModelAssistant ||
+      isMotionModelAssistant
+    )
+  }, [isGenerateImageSupported, isVisionSupported, is3DModelAssistant, isVideoModelAssistant, isMotionModelAssistant])
 
   const canAddTextFile = useMemo(() => {
     return isVisionSupported || (!isVisionSupported && !isGenerateImageSupported)
   }, [isGenerateImageSupported, isVisionSupported])
 
+  const supportedAudioExts = useMemo(() => {
+    if (!isVisionSupported) return []
+    const target = mentionedModels.length > 0 ? mentionedModels : [model]
+    // 取所有目标模型支持的音频扩展名的交集
+    const lists = target.map((m) => getSupportedAudioExts(m))
+    if (lists.length === 0) return []
+    return lists.reduce((acc, cur) => acc.filter((ext) => cur.includes(ext)), lists[0])
+  }, [isVisionSupported, mentionedModels, model])
+
   const supportedExts = useMemo(() => {
     if (canAddImageFile && canAddTextFile) {
-      return [...imageExts, ...documentExts, ...textExts]
+      return [...imageExts, ...videoExts, ...documentExts, ...textExts, ...supportedAudioExts]
     }
 
     if (canAddImageFile) {
-      return [...imageExts]
+      return [...imageExts, ...videoExts]
     }
 
     if (canAddTextFile) {
-      return [...documentExts, ...textExts]
+      return [...documentExts, ...textExts, ...supportedAudioExts]
     }
 
     return []
-  }, [canAddImageFile, canAddTextFile])
+  }, [canAddImageFile, canAddTextFile, supportedAudioExts])
 
   useEffect(() => {
     setCouldAddImageFile(canAddImageFile)
@@ -500,7 +518,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       leftToolbar={leftToolbar}
       rightToolbar={rightToolbar}
       topContent={topContent}
-      textInputDisabled={is3DModelAssistant}
+      textInputDisabled={is3DModelAssistant && !isMotionModelAssistant}
     />
   )
 }

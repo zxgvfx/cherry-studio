@@ -59,6 +59,9 @@ export interface StreamProcessorCallbacks {
   onModel3DCreated?: () => void
   onModel3DProgress?: (progressText: string) => void
   onModel3DComplete?: (fileData: any, format: string) => void
+  onVideoGenCreated?: () => void
+  onVideoGenProgress?: (progressText: string) => void
+  onVideoGenComplete?: (url: string, metadata?: Record<string, any>) => void
   // Called when a block is created
   onBlockCreated?: () => void
   // Called when raw data is received (e.g., session_id updates from Agent SDK)
@@ -251,6 +254,18 @@ export function createStreamProcessor(callbacks: StreamProcessorCallbacks = {}) 
         }
         case ChunkType.MODEL_3D_COMPLETE: {
           if (callbacks.onModel3DComplete) callbacks.onModel3DComplete(data.file, data.format)
+          break
+        }
+        case ChunkType.VIDEO_GEN_CREATED: {
+          if (callbacks.onVideoGenCreated) callbacks.onVideoGenCreated()
+          break
+        }
+        case ChunkType.VIDEO_GEN_PROGRESS: {
+          if (callbacks.onVideoGenProgress) callbacks.onVideoGenProgress(data.progressText)
+          break
+        }
+        case ChunkType.VIDEO_GEN_COMPLETE: {
+          if (callbacks.onVideoGenComplete) callbacks.onVideoGenComplete(data.url, data.metadata)
           break
         }
         case ChunkType.BLOCK_CREATED: {

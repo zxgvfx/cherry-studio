@@ -9,6 +9,7 @@ import {
   MessageBlockStatus,
   MessageBlockType,
   type ThinkingMessageBlock,
+  type ToolMessageBlock,
   UserMessageStatus
 } from '@renderer/types/newMessage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -28,7 +29,8 @@ const imageEnhancementModelIds = new Set(['qwen-image-edit'])
 
 vi.mock('@renderer/config/models', () => ({
   isVisionModel: (model: Model) => visionModelIds.has(model.id),
-  isImageEnhancementModel: (model: Model) => imageEnhancementModelIds.has(model.id)
+  isImageEnhancementModel: (model: Model) => imageEnhancementModelIds.has(model.id),
+  getModelPrimaryModality: (model: Model) => (imageEnhancementModelIds.has(model.id) ? 'image' : 'text')
 }))
 
 type MockableMessage = Message & {
@@ -37,6 +39,7 @@ type MockableMessage = Message & {
   __mockImageBlocks?: ImageMessageBlock[]
   __mockThinkingBlocks?: ThinkingMessageBlock[]
   __mockMainTextBlocks?: MainTextMessageBlock[]
+  __mockToolBlocks?: ToolMessageBlock[]
 }
 
 vi.mock('@renderer/utils/messageUtils/find', () => ({
@@ -44,10 +47,11 @@ vi.mock('@renderer/utils/messageUtils/find', () => ({
   findFileBlocks: (message: Message) => (message as MockableMessage).__mockFileBlocks ?? [],
   findImageBlocks: (message: Message) => (message as MockableMessage).__mockImageBlocks ?? [],
   findThinkingBlocks: (message: Message) => (message as MockableMessage).__mockThinkingBlocks ?? [],
-  findMainTextBlocks: (message: Message) => (message as MockableMessage).__mockMainTextBlocks ?? []
+  findMainTextBlocks: (message: Message) => (message as MockableMessage).__mockMainTextBlocks ?? [],
+  findToolBlocks: (message: Message) => (message as MockableMessage).__mockToolBlocks ?? []
 }))
 
-import { convertMessagesToSdkMessages, convertMessageToSdkParam } from '../messageConverter'
+import { convertMessagesToSdkMessages, convertMessageToSdkParam, sanitizeModelMessages } from '../messageConverter'
 
 let messageCounter = 0
 let blockCounter = 0
@@ -136,6 +140,22 @@ const createMainTextBlock = (
   createdAt: overrides.createdAt ?? new Date(2024, 0, 1, 0, 0, blockCounter).toISOString(),
   status: overrides.status ?? MessageBlockStatus.SUCCESS,
   content: overrides.content ?? '',
+  ...overrides
+})
+
+const createToolBlock = (
+  messageId: string,
+  overrides: Partial<Omit<ToolMessageBlock, 'type' | 'messageId'>> = {}
+): ToolMessageBlock => ({
+  id: overrides.id ?? `tool-block-${++blockCounter}`,
+  messageId,
+  type: MessageBlockType.TOOL,
+  createdAt: overrides.createdAt ?? new Date(2024, 0, 1, 0, 0, blockCounter).toISOString(),
+  status: overrides.status ?? MessageBlockStatus.SUCCESS,
+  toolId: overrides.toolId ?? 'tool-call-1',
+  toolName: overrides.toolName ?? 'fetch_page',
+  arguments: overrides.arguments ?? { url: 'https://example.com' },
+  content: overrides.content ?? 'page body',
   ...overrides
 })
 
@@ -424,6 +444,101 @@ describe('messageConverter', () => {
           }
         ]
       })
+    })
+
+    it('places main text after tool blocks in a follow-up assistant message (MCP replay)', async () => {
+      const model = createModel()
+      const message = createMessage('assistant')
+      const toolBlock = createToolBlock(message.id, {
+        id: 'block-tool-1',
+        toolId: 'call-abc',
+        toolName: 'fetch_url',
+        arguments: { url: 'https://wiki.example/x' },
+        content: '<html>...</html>'
+      })
+      const answerBlock = createMainTextBlock(message.id, {
+        id: 'block-answer',
+        content: 'According to the wiki, the answer is 42.'
+      })
+      message.blocks = ['block-tool-1', 'block-answer']
+      message.__mockToolBlocks = [toolBlock]
+      message.__mockMainTextBlocks = [answerBlock]
+      message.__mockContent = 'According to the wiki, the answer is 42.'
+
+      const result = await convertMessageToSdkParam(message, false, model)
+
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool-call',
+              toolCallId: 'call-abc',
+              toolName: 'fetch_url',
+              input: { url: 'https://wiki.example/x' }
+            }
+          ]
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'call-abc',
+              toolName: 'fetch_url',
+              output: { type: 'text', value: '<html>...</html>' }
+            }
+          ]
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'According to the wiki, the answer is 42.' }]
+        }
+      ])
+    })
+
+    it('keeps pre-tool main text on the first assistant before tool-call parts', async () => {
+      const model = createModel()
+      const message = createMessage('assistant')
+      const preText = createMainTextBlock(message.id, { id: 'pre-t', content: 'I will fetch the page.' })
+      const toolBlock = createToolBlock(message.id, { id: 't1', toolId: 'c1', toolName: 'fetch' })
+      const postText = createMainTextBlock(message.id, { id: 'post-t', content: 'Done: summary.' })
+      message.blocks = ['pre-t', 't1', 'post-t']
+      message.__mockToolBlocks = [toolBlock]
+      message.__mockMainTextBlocks = [preText, postText]
+      message.__mockContent = 'I will fetch the page.\n\nDone: summary.'
+
+      const result = await convertMessageToSdkParam(message, false, model)
+
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'I will fetch the page.' },
+            {
+              type: 'tool-call',
+              toolCallId: 'c1',
+              toolName: 'fetch',
+              input: { url: 'https://example.com' }
+            }
+          ]
+        },
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 'c1',
+              toolName: 'fetch',
+              output: { type: 'text', value: 'page body' }
+            }
+          ]
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Done: summary.' }]
+        }
+      ])
     })
   })
 
@@ -721,5 +836,77 @@ describe('messageConverter', () => {
         }
       ])
     })
+  })
+})
+
+describe('sanitizeModelMessages', () => {
+  it('drops assistant tool-call parts with a missing toolCallId and the dangling tool result', () => {
+    const input = [
+      { role: 'user', content: 'hi' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'searching' },
+          { type: 'tool-call', toolCallId: '', toolName: 'builtin_web_search', input: {} }
+        ]
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: '', toolName: 'builtin_web_search', output: { type: 'text', value: 'r' } }
+        ]
+      }
+    ] as any
+
+    const out = sanitizeModelMessages(input)
+
+    expect(out).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: [{ type: 'text', text: 'searching' }] }
+    ])
+  })
+
+  it('keeps valid tool-call / tool-result pairs intact', () => {
+    const input = [
+      { role: 'user', content: 'q' },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call_1', toolName: 'builtin_web_search', input: { q: 'x' } }]
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_1',
+            toolName: 'builtin_web_search',
+            output: { type: 'text', value: 'ok' }
+          }
+        ]
+      }
+    ] as any
+
+    expect(sanitizeModelMessages(input)).toEqual(input)
+  })
+
+  it('drops messages whose content is an empty array', () => {
+    const input = [
+      { role: 'user', content: [] },
+      { role: 'user', content: 'real question' }
+    ] as any
+
+    expect(sanitizeModelMessages(input)).toEqual([{ role: 'user', content: 'real question' }])
+  })
+
+  it('drops tool results that have no matching preceding tool-call', () => {
+    const input = [
+      { role: 'user', content: 'q' },
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'orphan', toolName: 't', output: { type: 'text', value: 'v' } }]
+      }
+    ] as any
+
+    expect(sanitizeModelMessages(input)).toEqual([{ role: 'user', content: 'q' }])
   })
 })

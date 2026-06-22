@@ -9,11 +9,13 @@ export type InputBarToolType =
   | 'knowledge_base'
   | 'mcp_tools'
   | 'generate_image'
+  | 'gpt_image_settings'
   | 'mention_models'
   | 'quick_phrases'
   | 'clear_topic'
   | 'toggle_expand'
   | 'new_context'
+  | 'motion_settings'
   // Agent Session tools
   | 'create_session'
   | 'slash_commands'

@@ -57,7 +57,13 @@ export const DEFAULT_ASSISTANT_SETTINGS = {
   // It would gracefully fallback to prompt if not supported by model.
   toolUseMode: 'function',
   maxToolCalls: 20,
-  enableMaxToolCalls: true
+  enableMaxToolCalls: true,
+  gptImage: {
+    size: 'auto',
+    aspectRatio: 'auto',
+    resolutionTier: 'auto',
+    quality: 'auto'
+  }
 } as const satisfies AssistantSettings
 
 /**
@@ -213,6 +219,25 @@ export function getProviderByModelId(modelId?: string) {
   const providers = getStoreProviders()
   const _modelId = modelId || getDefaultModel().id
   return providers.find((p) => p.models.find((m) => m.id === _modelId)) as Provider
+}
+
+/**
+ * Reconcile a (possibly stale, persisted) model snapshot with the latest model
+ * definition from the llm store, matched by provider + id.
+ *
+ * Assistants persist their own copy of the selected model. When centralized
+ * config later adds fields like `modality`, the persisted snapshot does
+ * not pick them up, which breaks routing decisions (e.g. motion/3d/video
+ * dispatch). Refreshing from the store keeps centralized fields authoritative
+ * so adding a new generative model only requires a config change, not a code
+ * change.
+ */
+export function getLiveModel(model?: Model): Model | undefined {
+  if (!model) return model
+  const providers = getStoreProviders()
+  const provider = providers.find((p) => p.id === model.provider)
+  const fresh = provider?.models.find((m) => m.id === model.id)
+  return fresh ? { ...model, ...fresh } : model
 }
 
 /**

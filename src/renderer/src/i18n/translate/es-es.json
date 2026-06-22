@@ -833,6 +833,64 @@
       "file_not_supported_count": "{{count}} archivos no soportados",
       "generate_image": "Generar imagen",
       "generate_image_not_supported": "El modelo no soporta la generación de imágenes",
+      "gpt_image": {
+        "aspect_ratio": {
+          "16_9_description": "[to be translated]:Widescreen landscape (wallpapers, thumbnails)",
+          "1_1_description": "[to be translated]:Square (avatars, products)",
+          "2_3_description": "[to be translated]:DSLR portrait",
+          "3_2_description": "[to be translated]:DSLR landscape",
+          "3_4_description": "[to be translated]:Classic portrait (book covers)",
+          "4_3_description": "[to be translated]:Classic landscape (slides, cameras)",
+          "9_16_description": "[to be translated]:Widescreen portrait (mobile, Reels)",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Aspect ratio"
+        },
+        "input_images": {
+          "max": "[to be translated]:Image editing supports up to {{count}} input images"
+        },
+        "label": "[to be translated]:Image gen params",
+        "output_count": {
+          "label": "[to be translated]:Output count",
+          "value": "[to be translated]:{{count}} images"
+        },
+        "preview": {
+          "auto": "[to be translated]:auto size",
+          "auto_quality": "[to be translated]:auto quality",
+          "text": "[to be translated]:Generate at {{size}} · {{quality}}",
+          "text_with_count": "[to be translated]:Generate at {{size}} · {{quality}} · {{imageCount}}"
+        },
+        "quality": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model choose (usually high)",
+          "high": "[to be translated]:High",
+          "high_description": "[to be translated]:More detail, slower and more expensive",
+          "label": "[to be translated]:Image quality",
+          "low": "[to be translated]:Low",
+          "low_description": "[to be translated]:Fastest and cheapest output",
+          "medium": "[to be translated]:Medium",
+          "medium_description": "[to be translated]:Balanced speed and quality"
+        },
+        "resolution": {
+          "1k": "[to be translated]:1K",
+          "1k_description": "[to be translated]:Long edge 1024px, fastest & cheapest",
+          "2k": "[to be translated]:2K",
+          "2k_description": "[to be translated]:Long edge 2048px, common quality",
+          "3k": "[to be translated]:3K",
+          "3k_description": "[to be translated]:Long edge 3072px, high definition",
+          "4k": "[to be translated]:4K",
+          "4k_description": "[to be translated]:Long edge 3840px (max), highest detail",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Resolution"
+        },
+        "size": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Decided by model or source image",
+          "fixed_description": "[to be translated]:Generate at {{size}}",
+          "label": "[to be translated]:Image size"
+        }
+      },
       "knowledge_base": "Base de conocimientos",
       "new": {
         "context": "Limpiar contexto {{Command}}"
@@ -1598,7 +1656,10 @@
     "name": "Nombre del archivo",
     "open": "Abrir",
     "preview": {
-      "error": "No se pudo abrir el archivo"
+      "coming_soon": "[to be translated]:{{type}} preview is coming soon",
+      "error": "No se pudo abrir el archivo",
+      "model_3d": "[to be translated]:3D Model",
+      "point_cloud": "[to be translated]:Point Cloud"
     },
     "size": "Tamaño",
     "text": "Texto",
@@ -2122,6 +2183,7 @@
       "video": {
         "error": {
           "local_file_missing": "Ruta del archivo de video local no encontrada",
+          "playback_failed": "[to be translated]:Unable to play video: the local file may have been removed, or the remote link has expired",
           "unsupported_type": "Tipo de video no soportado",
           "youtube_url_missing": "URL del video de YouTube no encontrada"
         }
@@ -2370,6 +2432,30 @@
       "pin": "Fijar en la parte superior"
     }
   },
+  "model3d": {
+    "download": "[to be translated]:Download model",
+    "exit_fullscreen": "[to be translated]:Exit fullscreen",
+    "fullscreen": "[to be translated]:Fullscreen",
+    "generating": "[to be translated]:Generating 3D model (image-to-3D, may take a few seconds)...",
+    "hint": "[to be translated]:Drag to rotate · Scroll to zoom · Right-click to pan",
+    "import_failed": "[to be translated]:Import to DCC failed",
+    "import_success": "[to be translated]:Imported to DCC",
+    "import_to_dcc": "[to be translated]:Import to DCC",
+    "importing": "[to be translated]:Importing...",
+    "load_error": "[to be translated]:Failed to load 3D model",
+    "no_file": "[to be translated]:No 3D model file available",
+    "no_image": "[to be translated]:Please upload an image (PNG with transparent background recommended) to generate a 3D model",
+    "progress_downloading": "[to be translated]:Downloading model file...",
+    "progress_failed": "[to be translated]:Generation failed",
+    "progress_processing": "[to be translated]:Generating 3D model...",
+    "progress_retry": "[to be translated]:retrying...",
+    "progress_saving": "[to be translated]:Saving model...",
+    "progress_submitted": "[to be translated]:Task submitted, waiting...",
+    "progress_waiting": "[to be translated]:Queued, waiting...",
+    "reset_camera": "[to be translated]:Reset camera",
+    "toggle_material": "[to be translated]:Toggle material",
+    "wireframe": "[to be translated]:Wireframe"
+  },
   "models": {
     "add_parameter": "Agregar parámetro",
     "all": "Todo",
@@ -2429,6 +2515,24 @@
       "vision": "Imagen",
       "websearch": "Búsqueda en línea"
     }
+  },
+  "motion": {
+    "downloading": "[to be translated]:Downloading animation files...",
+    "focus": "[to be translated]:Focus all",
+    "load_error": "[to be translated]:Failed to load FBX animation",
+    "loading": "[to be translated]:Loading animation...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate motion animation",
+    "pause": "[to be translated]:Pause",
+    "play": "[to be translated]:Play",
+    "processing": "[to be translated]:Generating motion animation...",
+    "retrying": "[to be translated]:retrying...",
+    "settings": {
+      "duration": "[to be translated]:Duration (s)",
+      "title": "[to be translated]:Motion Settings",
+      "variant_count": "[to be translated]:Variants"
+    },
+    "speed": "[to be translated]:Playback speed",
+    "submitted": "[to be translated]:Motion task submitted, waiting..."
   },
   "navbar": {
     "expand": "Expandir cuadro de diálogo",
@@ -3038,6 +3142,7 @@
       "stars": "Estrellas"
     },
     "standalone_plugins": "Complementos Independientes",
+    "title": "[to be translated]:Plugin Tools",
     "try_different_search": "Por favor, intenta ajustar la búsqueda o los filtros de categoría.",
     "type": "tipo",
     "uninstall": "Desinstalar",
@@ -3367,6 +3472,19 @@
       "undo": "Revocar"
     }
   },
+  "sam3": {
+    "complete": "[to be translated]:3D model generation complete",
+    "confirm_generate": "[to be translated]:Generate 3D Model",
+    "generating": "[to be translated]:Generating 3D model...",
+    "launch_error": "[to be translated]:Failed to launch SAM3 annotation window",
+    "manual_mode": "[to be translated]:SAM3 Manual Annotation",
+    "need_image": "[to be translated]:Please attach an image first for SAM3 annotation",
+    "need_image_auto": "[to be translated]:Auto mode requires an attached image",
+    "need_mcp": "[to be translated]:Auto mode requires MCP tools. Please enable MCP (auto or manual mode) in assistant settings.",
+    "retry": "[to be translated]:Retry",
+    "server_unavailable": "[to be translated]:SAM3 server is unavailable",
+    "waiting_annotation": "[to be translated]:Waiting for annotation in SAM3 window..."
+  },
   "selection": {
     "action": {
       "builtin": {
@@ -3620,6 +3738,8 @@
       "model_params": "Parámetros del modelo",
       "title": "Asistente predeterminado"
     },
+    "centralized": "[to be translated]:Managed",
+    "centralized_config_readonly": "[to be translated]:Managed by Administrator",
     "data": {
       "app_data": {
         "copy_data_option": "Copiar datos: se reiniciará automáticamente y se copiarán los datos del directorio original al nuevo directorio",
@@ -4236,7 +4356,11 @@
     "developer": {
       "enable_developer_mode": "Habilitar modo de desarrollador",
       "help": "Una vez habilitado el modo de desarrollador, se podrá utilizar la función de cadena de llamadas para ver el flujo de datos del proceso de invocación del modelo.",
-      "title": "Modo de Desarrollador"
+      "password_incorrect": "[to be translated]:Incorrect password, please try again",
+      "password_placeholder": "[to be translated]:Developer password",
+      "password_required": "[to be translated]:Enter Developer Password",
+      "title": "Modo de Desarrollador",
+      "user_not_allowed": "[to be translated]:Current system user is not authorized for developer mode"
     },
     "display": {
       "assistant": {
@@ -4760,6 +4884,10 @@
           "placeholder": "Por ejemplo, GPT-3.5",
           "tooltip": "Por ejemplo, GPT-4"
         },
+        "stream_output": {
+          "label": "[to be translated]:Stream Output",
+          "tooltip": "[to be translated]:When enabled, this model streams output token-by-token; when disabled, it waits for the full result and returns it at once. Takes priority over the assistant setting."
+        },
         "supported_text_delta": {
           "label": "salida de texto incremental",
           "tooltip": "Cuando el modelo no sea compatible, desactive este botón."
@@ -4790,6 +4918,13 @@
         "timeout": "Tiempo de espera agotado",
         "title": "Verificación de salud del modelo",
         "use_all_keys": "Usar todas las claves"
+      },
+      "context_summary": {
+        "enable": "[to be translated]:Enable context summary compression",
+        "enable_tooltip": "[to be translated]:When enabled, earlier conversation turns are compressed into summaries using the Quick Model above, reducing token usage. The model can retrieve full details via a tool.",
+        "full_turns": "[to be translated]:Full content turns",
+        "full_turns_tooltip": "[to be translated]:Number of recent turns to keep full content. Earlier turns use summaries.",
+        "label": "[to be translated]:Context Summary"
       },
       "default_assistant_model": "Modelo predeterminado del asistente",
       "default_assistant_model_description": "Modelo utilizado al crear nuevos asistentes, si el asistente no tiene un modelo asignado, se utiliza este modelo",
@@ -5222,6 +5357,26 @@
       "zoom_out": "Reducir interfaz",
       "zoom_reset": "Restablecer zoom"
     },
+    "skills": {
+      "add": "[to be translated]:Add Skill",
+      "contentLabel": "[to be translated]:Content",
+      "contentPlaceholder": "[to be translated]:Enter skill instructions in Markdown",
+      "delete": "[to be translated]:Delete Skill",
+      "deleteConfirm": "[to be translated]:This skill will be permanently deleted. Continue?",
+      "descriptionLabel": "[to be translated]:Description",
+      "descriptionPlaceholder": "[to be translated]:Describe what this skill does",
+      "edit": "[to be translated]:Edit Skill",
+      "empty": "[to be translated]:No skills configured yet",
+      "filePathLabel": "[to be translated]:File Path",
+      "filePathPlaceholder": "[to be translated]:Path to a local .md file",
+      "nameLabel": "[to be translated]:Name",
+      "namePlaceholder": "[to be translated]:Enter skill name",
+      "selectFile": "[to be translated]:Browse",
+      "sourceFile": "[to be translated]:File Reference",
+      "sourceInline": "[to be translated]:Inline Content",
+      "sourceLabel": "[to be translated]:Content Source",
+      "title": "[to be translated]:Skills"
+    },
     "theme": {
       "color_primary": "Color del tema",
       "dark": "Oscuro",
@@ -5328,6 +5483,13 @@
             }
           },
           "title": "Compresión de resultados de búsqueda"
+        },
+        "content_fetch_mode": {
+          "full": "[to be translated]:Fetch Full Content",
+          "help": "[to be translated]:Use 'Snippet Only' mode for internal networks that cannot access external websites to avoid freezing",
+          "label": "[to be translated]:Content Fetch Mode",
+          "snippet": "[to be translated]:Snippet Only (Recommended for Intranet)",
+          "tip": "[to be translated]:Choose how to fetch search result content. 'Snippet Only' uses short summaries returned by the search engine without accessing target websites; 'Fetch Full Content' visits each search result page to get complete content"
         },
         "content_limit": "Límite de longitud del contenido",
         "content_limit_tooltip": "Limita la longitud del contenido en los resultados de búsqueda; el contenido que exceda el límite será truncado",
@@ -5626,6 +5788,15 @@
     "noReleaseNotes": "Sin notas de la versión",
     "saveDataError": "Error al guardar los datos, inténtalo de nuevo",
     "title": "Actualización"
+  },
+  "video": {
+    "download": "[to be translated]:Download video",
+    "downloading": "[to be translated]:Downloading video...",
+    "generating": "[to be translated]:Generating video...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate a video",
+    "processing": "[to be translated]:Generating video...",
+    "retrying": "[to be translated]:retrying...",
+    "submitted": "[to be translated]:Video task submitted, waiting..."
   },
   "warning": {
     "missing_provider": "El proveedor no existe, se ha revertido al proveedor predeterminado {{provider}}. Esto podría causar problemas."

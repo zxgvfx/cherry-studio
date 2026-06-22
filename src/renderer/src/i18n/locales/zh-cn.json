@@ -833,6 +833,64 @@
       "file_not_supported_count": "{{count}} 个文件不被支持",
       "generate_image": "生成图片",
       "generate_image_not_supported": "模型不支持生成图片",
+      "gpt_image": {
+        "aspect_ratio": {
+          "16_9_description": "宽屏横版（壁纸、视频缩略图）",
+          "1_1_description": "方图（社交头像、产品图）",
+          "2_3_description": "相机竖版（人像摄影）",
+          "3_2_description": "相机横版（DSLR 默认）",
+          "3_4_description": "传统竖版（书籍封面）",
+          "4_3_description": "传统横版（PPT、相机）",
+          "9_16_description": "宽屏竖版（手机壁纸、Reels）",
+          "auto": "自动",
+          "auto_description": "由模型或原图决定比例",
+          "label": "宽高比"
+        },
+        "input_images": {
+          "max": "图生图最多支持 {{count}} 张输入图片"
+        },
+        "label": "生图参数",
+        "output_count": {
+          "label": "输出数量",
+          "value": "{{count}} 张"
+        },
+        "preview": {
+          "auto": "自动尺寸",
+          "auto_quality": "自动质量",
+          "text": "将以 {{size}} · {{quality}} 生成",
+          "text_with_count": "将以 {{size}} · {{quality}} · {{imageCount}} 生成"
+        },
+        "quality": {
+          "auto": "自动",
+          "auto_description": "由模型自动选择（通常等同于高质量）",
+          "high": "高",
+          "high_description": "细节更丰富，速度更慢、价格更高",
+          "label": "图片质量",
+          "low": "低",
+          "low_description": "出图最快、价格最便宜",
+          "medium": "中",
+          "medium_description": "速度与画质平衡"
+        },
+        "resolution": {
+          "1k": "1K",
+          "1k_description": "长边 1024px，最快最便宜",
+          "2k": "2K",
+          "2k_description": "长边 2048px，常用画质",
+          "3k": "3K",
+          "3k_description": "长边 3072px，高清",
+          "4k": "4K",
+          "4k_description": "长边 3840px（上限），细节最强",
+          "auto": "自动",
+          "auto_description": "由模型或原图决定档位",
+          "label": "分辨率档位"
+        },
+        "size": {
+          "auto": "自动",
+          "auto_description": "由模型或原图决定",
+          "fixed_description": "按 {{size}} 生成",
+          "label": "图片尺寸"
+        }
+      },
       "knowledge_base": "知识库",
       "new": {
         "context": "清除上下文 {{Command}}"
@@ -2125,6 +2183,7 @@
       "video": {
         "error": {
           "local_file_missing": "本地视频文件路径不存在",
+          "playback_failed": "视频无法播放：本地文件可能已被清理，或远端链接已过期",
           "unsupported_type": "不支持的视频类型",
           "youtube_url_missing": "YouTube 视频链接不存在"
         }
@@ -2373,6 +2432,30 @@
       "pin": "窗口置顶"
     }
   },
+  "model3d": {
+    "download": "下载模型",
+    "exit_fullscreen": "退出全屏",
+    "fullscreen": "全屏",
+    "generating": "正在生成 3D 模型（图片转3D，可能需要数秒到十多秒）...",
+    "hint": "拖拽旋转 · 滚轮缩放 · 右键平移",
+    "import_failed": "导入到 DCC 失败",
+    "import_success": "已导入到 DCC",
+    "import_to_dcc": "导入到 DCC",
+    "importing": "导入中...",
+    "load_error": "加载 3D 模型失败",
+    "no_file": "没有可用的 3D 模型文件",
+    "no_image": "请上传一张图片（建议PNG透明背景）以生成3D模型",
+    "progress_downloading": "正在下载模型文件...",
+    "progress_failed": "生成失败",
+    "progress_processing": "3D模型生成中...",
+    "progress_retry": "重试中...",
+    "progress_saving": "正在保存模型...",
+    "progress_submitted": "任务已提交，等待处理...",
+    "progress_waiting": "排队等待中...",
+    "reset_camera": "重置相机",
+    "toggle_material": "显示/隐藏材质",
+    "wireframe": "线框模式"
+  },
   "models": {
     "add_parameter": "添加参数",
     "all": "全部",
@@ -2432,6 +2515,24 @@
       "vision": "视觉",
       "websearch": "联网"
     }
+  },
+  "motion": {
+    "downloading": "正在下载动画文件...",
+    "focus": "聚焦全部",
+    "load_error": "加载 FBX 动画失败",
+    "loading": "正在加载动画...",
+    "no_prompt": "请输入文本描述以生成动作动画",
+    "pause": "暂停",
+    "play": "播放",
+    "processing": "正在生成动画...",
+    "retrying": "重试中...",
+    "settings": {
+      "duration": "时长 (秒)",
+      "title": "动画设置",
+      "variant_count": "生成数量"
+    },
+    "speed": "播放速度",
+    "submitted": "动画生成任务已提交，等待处理..."
   },
   "navbar": {
     "expand": "伸缩对话框",
@@ -3041,11 +3142,11 @@
       "stars": "星标"
     },
     "standalone_plugins": "独立插件",
+    "title": "插件工具",
     "try_different_search": "请尝试调整搜索或类别筛选",
     "type": "类型",
     "uninstall": "卸载",
     "uninstall_package": "卸载插件包",
-    "title": "插件工具",
     "uninstalling": "卸载中..."
   },
   "preview": {
@@ -3371,6 +3472,19 @@
       "undo": "撤销"
     }
   },
+  "sam3": {
+    "complete": "3D 模型生成完成",
+    "confirm_generate": "生成 3D 模型",
+    "generating": "正在生成 3D 模型...",
+    "launch_error": "无法启动 SAM3 标注窗口",
+    "manual_mode": "SAM3 手动标注",
+    "need_image": "请先添加一张图片作为 SAM3 标注来源",
+    "need_image_auto": "自动模式需要先添加一张图片",
+    "need_mcp": "自动模式需要启用 MCP 工具。请在助手设置中开启 MCP（自动或手动模式）。",
+    "retry": "重试",
+    "server_unavailable": "SAM3 服务器不可用",
+    "waiting_annotation": "等待在 SAM3 窗口中完成标注..."
+  },
   "selection": {
     "action": {
       "builtin": {
@@ -3563,8 +3677,6 @@
     }
   },
   "settings": {
-    "centralized": "已托管",
-    "centralized_config_readonly": "由管理员托管",
     "about": {
       "careers": {
         "button": "查看",
@@ -3626,6 +3738,8 @@
       "model_params": "模型参数",
       "title": "默认助手"
     },
+    "centralized": "已托管",
+    "centralized_config_readonly": "由管理员托管",
     "data": {
       "app_data": {
         "copy_data_option": "复制数据，会自动重启后将原始目录数据复制到新目录",
@@ -4242,10 +4356,10 @@
     "developer": {
       "enable_developer_mode": "启用开发者模式",
       "help": "启用开发者模式后，将可以使用调用链功能查看模型调用过程的数据流，以及访问 OpenClaw 等开发者工具。",
-      "title": "开发者模式",
-      "password_required": "请输入开发者密码",
-      "password_placeholder": "开发者密码",
       "password_incorrect": "密码错误，请重试",
+      "password_placeholder": "开发者密码",
+      "password_required": "请输入开发者密码",
+      "title": "开发者模式",
       "user_not_allowed": "当前系统用户无开发者权限"
     },
     "display": {
@@ -4770,6 +4884,10 @@
           "placeholder": "例如 GPT-4",
           "tooltip": "例如 GPT-4"
         },
+        "stream_output": {
+          "label": "流式输出",
+          "tooltip": "开启后该模型逐字流式返回；关闭则等待生成完整结果后一次性返回。优先级高于助手设置。"
+        },
         "supported_text_delta": {
           "label": "支持增量文本输出",
           "tooltip": "模型每次返回文本增量，而不是一次性返回所有文本，默认开启，如果模型不支持，请关闭"
@@ -4800,6 +4918,13 @@
         "timeout": "超时",
         "title": "模型健康检测",
         "use_all_keys": "使用密钥"
+      },
+      "context_summary": {
+        "enable": "启用上下文摘要压缩",
+        "enable_tooltip": "开启后，早期的对话轮次会使用上方的快速模型压缩为摘要，减少 token 消耗。模型可通过工具查看详细内容。",
+        "full_turns": "保留完整内容的轮数",
+        "full_turns_tooltip": "最近 N 轮对话保留完整内容，更早的轮次使用摘要替代",
+        "label": "对话摘要"
       },
       "default_assistant_model": "默认助手模型",
       "default_assistant_model_description": "创建新助手时使用的模型，如果助手未设置模型，则使用此模型",
@@ -4839,13 +4964,6 @@
         "auto": "话题自动重命名",
         "label": "话题命名",
         "prompt": "话题命名提示词"
-      },
-      "context_summary": {
-        "label": "对话摘要",
-        "enable": "启用上下文摘要压缩",
-        "enable_tooltip": "开启后，早期的对话轮次会使用上方的快速模型压缩为摘要，减少 token 消耗。模型可通过工具查看详细内容。",
-        "full_turns": "保留完整内容的轮数",
-        "full_turns_tooltip": "最近 N 轮对话保留完整内容，更早的轮次使用摘要替代"
       },
       "translate_model": "翻译模型",
       "translate_model_description": "翻译服务使用的模型",
@@ -5207,26 +5325,6 @@
       "titleLabel": "标题",
       "titlePlaceholder": "请输入短语标题"
     },
-    "skills": {
-      "title": "技能",
-      "add": "添加技能",
-      "edit": "编辑技能",
-      "delete": "删除技能",
-      "deleteConfirm": "技能删除后无法恢复，是否继续？",
-      "nameLabel": "名称",
-      "namePlaceholder": "输入技能名称",
-      "descriptionLabel": "描述",
-      "descriptionPlaceholder": "描述这个技能的用途",
-      "sourceLabel": "内容来源",
-      "sourceInline": "内联内容",
-      "sourceFile": "文件引用",
-      "contentLabel": "内容",
-      "contentPlaceholder": "输入 Markdown 格式的技能指令",
-      "filePathLabel": "文件路径",
-      "filePathPlaceholder": "本地 .md 文件路径",
-      "selectFile": "浏览",
-      "empty": "暂未配置任何技能"
-    },
     "shortcuts": {
       "action": "操作",
       "actions": "操作",
@@ -5258,6 +5356,26 @@
       "zoom_in": "放大界面",
       "zoom_out": "缩小界面",
       "zoom_reset": "重置缩放"
+    },
+    "skills": {
+      "add": "添加技能",
+      "contentLabel": "内容",
+      "contentPlaceholder": "输入 Markdown 格式的技能指令",
+      "delete": "删除技能",
+      "deleteConfirm": "技能删除后无法恢复，是否继续？",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "描述这个技能的用途",
+      "edit": "编辑技能",
+      "empty": "暂未配置任何技能",
+      "filePathLabel": "文件路径",
+      "filePathPlaceholder": "本地 .md 文件路径",
+      "nameLabel": "名称",
+      "namePlaceholder": "输入技能名称",
+      "selectFile": "浏览",
+      "sourceFile": "文件引用",
+      "sourceInline": "内联内容",
+      "sourceLabel": "内容来源",
+      "title": "技能"
     },
     "theme": {
       "color_primary": "主题颜色",
@@ -5671,6 +5789,15 @@
     "saveDataError": "保存数据失败，请重试",
     "title": "更新提示"
   },
+  "video": {
+    "download": "下载视频",
+    "downloading": "正在下载视频...",
+    "generating": "正在生成视频...",
+    "no_prompt": "请输入文本描述以生成视频",
+    "processing": "正在生成视频...",
+    "retrying": "重试中...",
+    "submitted": "视频任务已提交，等待中..."
+  },
   "warning": {
     "missing_provider": "供应商不存在，已回退到默认供应商 {{provider}}。这可能导致问题。"
   },
@@ -5679,38 +5806,5 @@
     "quit": "退出",
     "show_window": "显示窗口",
     "visualization": "可视化"
-  },
-  "model3d": {
-    "download": "下载模型",
-    "exit_fullscreen": "退出全屏",
-    "fullscreen": "全屏",
-    "generating": "正在生成 3D 模型（图片转3D，可能需要数秒到十多秒）...",
-    "hint": "拖拽旋转 · 滚轮缩放 · 右键平移",
-    "load_error": "加载 3D 模型失败",
-    "no_file": "没有可用的 3D 模型文件",
-    "no_image": "请上传一张图片（建议PNG透明背景）以生成3D模型",
-    "reset_camera": "重置相机",
-    "wireframe": "线框模式",
-    "toggle_material": "显示/隐藏材质",
-    "progress_submitted": "任务已提交，等待处理...",
-    "progress_waiting": "排队等待中...",
-    "progress_processing": "3D模型生成中...",
-    "progress_downloading": "正在下载模型文件...",
-    "progress_saving": "正在保存模型...",
-    "progress_failed": "生成失败",
-    "progress_retry": "重试中..."
-  },
-  "sam3": {
-    "complete": "3D 模型生成完成",
-    "confirm_generate": "生成 3D 模型",
-    "generating": "正在生成 3D 模型...",
-    "launch_error": "无法启动 SAM3 标注窗口",
-    "manual_mode": "SAM3 手动标注",
-    "need_image": "请先添加一张图片作为 SAM3 标注来源",
-    "need_image_auto": "自动模式需要先添加一张图片",
-    "need_mcp": "自动模式需要启用 MCP 工具。请在助手设置中开启 MCP（自动或手动模式）。",
-    "retry": "重试",
-    "server_unavailable": "SAM3 服务器不可用",
-    "waiting_annotation": "等待在 SAM3 窗口中完成标注..."
   }
 }

@@ -1,3 +1,4 @@
+import '@renderer/utils/abortSignalPolyfill'
 import '@ant-design/v5-patch-for-react-19'
 
 import { loggerService } from '@logger'

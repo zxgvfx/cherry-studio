@@ -1,3 +1,5 @@
+import '@renderer/utils/abortSignalPolyfill'
+
 import KeyvStorage from '@kangfenmao/keyv-storage'
 import { loggerService } from '@logger'
 

@@ -159,11 +159,15 @@ export interface Model3DMessageBlock extends BaseMessageBlock {
   type: MessageBlockType.MODEL_3D
   file: FileMetadata
   metadata?: BaseMessageBlock['metadata'] & {
-    format: 'glb' | 'gltf' | 'usd' | 'ply' | 'obj'
+    format: 'glb' | 'gltf' | 'usd' | 'ply' | 'obj' | 'fbx'
     source_plugin?: string
     source_image?: string
     progressText?: string
     taskId?: string
+    seed?: number
+    duration?: number
+    prompt?: string
+    extraFiles?: FileMetadata[]
   }
 }
 

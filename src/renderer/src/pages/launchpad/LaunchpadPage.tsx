@@ -3,12 +3,29 @@ import App from '@renderer/components/MinApp/MinApp'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { useEnableDeveloperMode, useSettings } from '@renderer/hooks/useSettings'
-import { Code, FileSearch, Folder, Languages, LayoutGrid, NotepadText, Palette, Sparkle } from 'lucide-react'
+import { Box, Code, FileSearch, Folder, Languages, LayoutGrid, NotepadText, Palette, Sparkle } from 'lucide-react'
 import type { FC } from 'react'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
+
+type GuiPluginLauncher = {
+  enabled?: boolean
+  label?: string
+  entry?: {
+    action?: 'api' | 'route'
+    endpoint?: string
+    url?: string
+  }
+}
+
+type GuiPluginManifest = {
+  id: string
+  name: string
+  description?: string
+  launcher?: GuiPluginLauncher
+}
 
 const LaunchpadPage: FC = () => {
   const navigate = useNavigate()
@@ -17,6 +34,7 @@ const LaunchpadPage: FC = () => {
   const { enableDeveloperMode } = useEnableDeveloperMode()
   const { pinned } = useMinapps()
   const { openedKeepAliveMinapps } = useRuntime()
+  const [guiPlugins, setGuiPlugins] = useState<GuiPluginManifest[]>([])
 
   const appMenuItems = [
     {
@@ -90,6 +108,68 @@ const LaunchpadPage: FC = () => {
     return result
   }, [openedKeepAliveMinapps, pinned])
 
+  useEffect(() => {
+    let cancelled = false
+
+    const loadGuiPlugins = async () => {
+      try {
+        const response = await fetch('/api/v1/plugins/list')
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(result?.error || 'Failed to load plugins')
+        }
+
+        const plugins = Array.isArray(result?.plugins) ? result.plugins : []
+        const launchablePlugins = plugins.filter((plugin: GuiPluginManifest) => plugin.launcher?.enabled)
+        if (!cancelled) {
+          setGuiPlugins(launchablePlugins)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGuiPlugins([])
+        }
+      }
+    }
+
+    loadGuiPlugins()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleGuiPluginClick = async (plugin: GuiPluginManifest) => {
+    const entry = plugin.launcher?.entry
+    if (!entry) return
+
+    try {
+      if (entry.action === 'route' && entry.url) {
+        navigate(entry.url)
+        return
+      }
+
+      if (entry.action === 'api' && entry.endpoint) {
+        const response = await fetch(entry.endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({})
+        })
+        const result = await response.json()
+        if (!response.ok || result?.error) {
+          throw new Error(result?.error || `Failed to launch ${plugin.name}`)
+        }
+
+        if (result?.open_url) {
+          navigate(result.open_url)
+        }
+      }
+    } catch (error) {
+      window.toast.error(error instanceof Error ? error.message : `Failed to launch ${plugin.name}`)
+    }
+  }
+
   return (
     <Container>
       <Content>
@@ -99,15 +179,33 @@ const LaunchpadPage: FC = () => {
             {appMenuItems
               .filter((item) => item.path !== '/openclaw' || enableDeveloperMode)
               .map((item) => (
-              <AppIcon key={item.path} onClick={() => navigate(item.path)}>
-                <IconContainer>
-                  <IconWrapper bgColor={item.bgColor}>{item.icon}</IconWrapper>
-                </IconContainer>
-                <AppName>{item.text}</AppName>
-              </AppIcon>
-            ))}
-            </Grid>
+                <AppIcon key={item.path} onClick={() => navigate(item.path)}>
+                  <IconContainer>
+                    <IconWrapper bgColor={item.bgColor}>{item.icon}</IconWrapper>
+                  </IconContainer>
+                  <AppName>{item.text}</AppName>
+                </AppIcon>
+              ))}
+          </Grid>
         </Section>
+
+        {guiPlugins.length > 0 && (
+          <Section>
+            <SectionTitle>{t('plugins.standalone_plugins')}</SectionTitle>
+            <Grid>
+              {guiPlugins.map((plugin) => (
+                <AppIcon key={plugin.id} onClick={() => handleGuiPluginClick(plugin)}>
+                  <IconContainer>
+                    <IconWrapper bgColor="linear-gradient(135deg, #0EA5E9, #2563EB)">
+                      <Box size={32} className="icon" />
+                    </IconWrapper>
+                  </IconContainer>
+                  <AppName>{plugin.launcher?.label || plugin.name}</AppName>
+                </AppIcon>
+              ))}
+            </Grid>
+          </Section>
+        )}
 
         {sortedMinapps.length > 0 && (
           <Section>

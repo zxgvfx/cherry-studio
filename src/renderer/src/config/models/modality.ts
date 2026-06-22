@@ -1,21 +1,29 @@
-import type { Model, ModelPrimaryModality } from '@renderer/types'
+import type { Model, ModelModality } from '@renderer/types'
 
 import { isEmbeddingModel, isRerankModel } from './embedding'
-import { isDedicatedImageGenerationModel, isGenerate3DModel, isPureGenerateImageModel, isVisionModel } from './vision'
+import {
+  isDedicatedImageGenerationModel,
+  isGenerate3DModel,
+  isGenerateVideoModel,
+  isPureGenerateImageModel,
+  isVisionModel
+} from './vision'
 
 /**
  * Centralized model modality classification with explicit-field priority.
- * Prefer model.primaryModality from centralized config; fallback to existing detectors.
+ * Prefer model.modality from centralized config; fallback to existing detectors.
  */
-export function getModelPrimaryModality(model?: Model): ModelPrimaryModality {
+export function getModelPrimaryModality(model?: Model): ModelModality {
   if (!model) return 'text'
 
-  if (model.primaryModality) {
-    return model.primaryModality
+  if (model.modality) {
+    return model.modality
   }
 
   if (isEmbeddingModel(model)) return 'embedding'
   if (isRerankModel(model)) return 'rerank'
+
+  if (isGenerateVideoModel(model)) return 'video'
 
   if (isGenerate3DModel(model)) return 'model_3d'
 
@@ -32,4 +40,3 @@ export function isTextChatModel(model?: Model): boolean {
   const modality = getModelPrimaryModality(model)
   return modality === 'text' || modality === 'multimodal'
 }
-

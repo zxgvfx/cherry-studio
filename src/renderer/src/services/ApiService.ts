@@ -11,7 +11,7 @@ import {
   isFunctionCallingModel,
   isTextChatModel
 } from '@renderer/config/models'
-import { isGenerate3DModel } from '@renderer/config/models/vision'
+import { isGenerate3DModel, isGenerateMotionModel, isGenerateVideoModel } from '@renderer/config/models/vision'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
@@ -41,6 +41,7 @@ import {
   // getAssistantSettings,
   getDefaultAssistant,
   getDefaultModel,
+  getLiveModel,
   getProviderByModel,
   getQuickModel
 } from './AssistantService'
@@ -395,6 +396,16 @@ export async function fetchChatCompletion({
   hasSummaries
 }: FetchChatCompletionParams) {
   const _fc0 = performance.now()
+
+  // Refresh the assistant's persisted model snapshot from the llm store so that
+  // centralized-config fields (e.g. modality) stay authoritative for
+  // routing. This lets new generative models be added via config alone, without
+  // touching frontend detection code.
+  const liveModel = getLiveModel(assistant.model)
+  if (liveModel && liveModel !== assistant.model) {
+    assistant = { ...assistant, model: liveModel }
+  }
+
   logger.info('fetchChatCompletion called with detailed context', {
     messageCount: messages?.length || 0,
     prompt: prompt,
@@ -405,8 +416,18 @@ export async function fetchChatCompletion({
     modelName: assistant.model?.name
   })
 
+  if (isGenerateMotionModel(assistant.model)) {
+    await handleMotionGeneration(assistant, onChunkReceived, requestOptions, uiMessages)
+    return
+  }
+
   if (isGenerate3DModel(assistant.model)) {
     await handle3DGeneration(assistant, onChunkReceived, requestOptions, uiMessages)
+    return
+  }
+
+  if (isGenerateVideoModel(assistant.model)) {
+    await handleVideoGeneration(assistant, onChunkReceived, requestOptions, uiMessages)
     return
   }
 
@@ -471,7 +492,8 @@ export async function fetchChatCompletion({
     isPromptToolUse(assistant) || (isToolUseModeFunction(assistant) && !isFunctionCallingModel(assistant.model))
 
   const middlewareConfig: AiSdkMiddlewareConfig = {
-    streamOutput: assistant.settings?.streamOutput ?? true,
+    // 单模型级别的流式开关优先级最高；未设置时回退到助手设置（默认开启）
+    streamOutput: assistant.model?.streamOutput ?? assistant.settings?.streamOutput ?? true,
     onChunk: onChunkReceived,
     enableReasoning: capabilities.enableReasoning,
     isPromptToolUse: usePromptToolUse,
@@ -1035,6 +1057,7 @@ async function handle3DGeneration(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             task_id: taskId,
+            model: assistant.model?.id || assistant.model?.name || 'MiniMax-Hailuo-2.3',
             apiHost: provider?.apiHost,
             apiKey: provider?.apiKey
           }),
@@ -1129,5 +1152,438 @@ async function handle3DGeneration(
   } catch (error: any) {
     if (error?.name === 'AbortError') return
     onChunkReceived({ type: ChunkType.ERROR, error: { message: error?.message || 'Unknown 3D generation error' } })
+  }
+}
+
+async function handleMotionGeneration(
+  assistant: Assistant,
+  onChunkReceived: (chunk: Chunk) => void,
+  requestOptions?: { signal?: AbortSignal },
+  uiMessages?: Message[]
+) {
+  const lastUserMsg = uiMessages ? [...uiMessages].reverse().find((m) => m.role === 'user') : undefined
+
+  if (!lastUserMsg) {
+    onChunkReceived({ type: ChunkType.ERROR, error: { message: 'No user message found for motion generation' } })
+    return
+  }
+
+  const prompt = getMainTextContent(lastUserMsg)
+
+  // 视频→动作（如 promptHMR）：取用户消息里的视频附件，以 base64 data URL 传给后端，
+  // 后端再以 multipart 转发给上游。无视频则走文生动作（如 hy-motion）。
+  const videoFiles = findFileBlocks(lastUserMsg)
+    .filter((b) => b.file?.type === 'video')
+    .map((b) => b.file!)
+  let videoData = ''
+  if (videoFiles.length > 0) {
+    try {
+      const v = await window.api.file.base64File(videoFiles[0].id + videoFiles[0].ext)
+      if (v?.data) {
+        videoData = v.mime ? `data:${v.mime};base64,${v.data}` : v.data
+      }
+    } catch (e) {
+      logger.warn('Failed to read video for motion generation:', e as any)
+    }
+  }
+
+  if ((!prompt || !prompt.trim()) && !videoData) {
+    onChunkReceived({
+      type: ChunkType.ERROR,
+      error: {
+        message: i18n.t('motion.no_input', 'Please enter a text description or upload a video to generate motion')
+      }
+    })
+    return
+  }
+
+  onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
+  onChunkReceived({ type: ChunkType.MODEL_3D_CREATED } as any)
+  onChunkReceived({
+    type: ChunkType.MODEL_3D_PROGRESS,
+    progressText: i18n.t('motion.submitted', 'Motion task submitted, waiting...')
+  } as any)
+
+  const provider = getProviderByModel(assistant.model || getDefaultModel())
+
+  try {
+    const submitResp = await fetch('/api/v1/generate-motion/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: (prompt || '').trim(),
+        video_data: videoData || undefined,
+        n: assistant.motionCount ?? 4,
+        duration: assistant.motionDuration ?? 2.0,
+        model: assistant.model?.id || assistant.model?.name || 'hy-motion-1.0',
+        apiHost: provider?.apiHost,
+        apiKey: provider?.apiKey
+      }),
+      signal: requestOptions?.signal
+    })
+
+    const submitResult = await submitResp.json()
+    if (submitResult.error) {
+      onChunkReceived({ type: ChunkType.ERROR, error: { message: submitResult.error } })
+      return
+    }
+
+    const taskId = submitResult.task_id
+    onChunkReceived({
+      type: ChunkType.MODEL_3D_PROGRESS,
+      progressText: i18n.t('motion.processing', 'Generating motion animation...')
+    } as any)
+
+    const pollStart = Date.now()
+    let pollInterval = 3000
+    let consecutiveErrors = 0
+
+    while (true) {
+      if (requestOptions?.signal?.aborted) return
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval))
+      pollInterval = Math.min(pollInterval * 1.2, 10000)
+
+      if (requestOptions?.signal?.aborted) return
+
+      let pollResult: any
+      try {
+        const pollResp = await fetch('/api/v1/generate-motion/poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_id: taskId,
+            apiHost: provider?.apiHost,
+            apiKey: provider?.apiKey
+          }),
+          signal: requestOptions?.signal
+        })
+        pollResult = await pollResp.json()
+        consecutiveErrors = 0
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError') return
+        consecutiveErrors++
+        const elapsed = Math.round((Date.now() - pollStart) / 1000)
+        onChunkReceived({
+          type: ChunkType.MODEL_3D_PROGRESS,
+          progressText: `${i18n.t('motion.processing', 'Generating motion animation...')} (${elapsed}s) — ${i18n.t('motion.retrying', 'retrying...')}`
+        } as any)
+        continue
+      }
+
+      if (pollResult.error) {
+        consecutiveErrors++
+        const elapsed = Math.round((Date.now() - pollStart) / 1000)
+        onChunkReceived({
+          type: ChunkType.MODEL_3D_PROGRESS,
+          progressText: `${i18n.t('motion.processing', 'Generating motion animation...')} (${elapsed}s) — ${i18n.t('motion.retrying', 'retrying...')}`
+        } as any)
+        continue
+      }
+
+      const status = pollResult.status || 'pending'
+      const elapsed = Math.round((Date.now() - pollStart) / 1000)
+
+      if (status === 'completed') {
+        const motionFiles: string[] = pollResult.files || []
+
+        if (motionFiles.length === 0) {
+          onChunkReceived({ type: ChunkType.ERROR, error: { message: 'No motion files generated' } })
+          return
+        }
+
+        onChunkReceived({
+          type: ChunkType.MODEL_3D_PROGRESS,
+          progressText: i18n.t('motion.downloading', 'Downloading animation files...')
+        } as any)
+
+        const savedFiles: any[] = []
+        for (let i = 0; i < motionFiles.length; i++) {
+          if (requestOptions?.signal?.aborted) return
+
+          const filename = motionFiles[i]
+          onChunkReceived({
+            type: ChunkType.MODEL_3D_PROGRESS,
+            progressText: `${i18n.t('motion.downloading', 'Downloading animation files...')} (${i + 1}/${motionFiles.length})`
+          } as any)
+
+          const saveResp = await fetch('/api/v1/generate-motion/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              task_id: taskId,
+              filename,
+              apiHost: provider?.apiHost,
+              apiKey: provider?.apiKey
+            }),
+            signal: requestOptions?.signal
+          })
+
+          const saveResult = await saveResp.json()
+
+          if (saveResult.error) {
+            logger.warn(`Failed to save motion file ${filename}:`, saveResult.error)
+            continue
+          }
+
+          if (saveResult.ok && saveResult.file) {
+            savedFiles.push(saveResult.file)
+          }
+        }
+
+        if (savedFiles.length > 0) {
+          const primaryFile = {
+            ...savedFiles[0],
+            extraFiles: savedFiles.length > 1 ? savedFiles.slice(1) : undefined,
+            prompt: prompt.trim()
+          }
+          // Derive the real format from the saved file extension (fbx | glb).
+          const primaryFormat = (primaryFile.ext || '').replace('.', '').toLowerCase() || 'fbx'
+          onChunkReceived({
+            type: ChunkType.MODEL_3D_COMPLETE,
+            file: primaryFile,
+            format: primaryFormat
+          } as any)
+        } else {
+          onChunkReceived({ type: ChunkType.ERROR, error: { message: 'All motion file downloads failed' } })
+          return
+        }
+
+        const modelName = assistant.model?.name || assistant.model?.id || 'hy-motion'
+        onChunkReceived({
+          type: ChunkType.BLOCK_COMPLETE,
+          response: { text: `[Text-to-Motion] ${modelName}: ${prompt.slice(0, 60)}` }
+        } as any)
+        return
+      }
+
+      if (status === 'failed') {
+        onChunkReceived({
+          type: ChunkType.ERROR,
+          error: { message: pollResult.error_message || 'Motion generation failed' }
+        })
+        return
+      }
+
+      let progressKey = 'motion.processing'
+      if (status === 'pending') {
+        progressKey = 'motion.submitted'
+      }
+
+      onChunkReceived({
+        type: ChunkType.MODEL_3D_PROGRESS,
+        progressText: `${i18n.t(progressKey, 'Generating motion animation...')} (${elapsed}s)`
+      } as any)
+    }
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return
+    onChunkReceived({
+      type: ChunkType.ERROR,
+      error: { message: error?.message || 'Unknown motion generation error' }
+    })
+  }
+}
+
+async function handleVideoGeneration(
+  assistant: Assistant,
+  onChunkReceived: (chunk: Chunk) => void,
+  requestOptions?: { signal?: AbortSignal },
+  uiMessages?: Message[]
+) {
+  const lastUserMsg = uiMessages ? [...uiMessages].reverse().find((m) => m.role === 'user') : undefined
+
+  if (!lastUserMsg) {
+    onChunkReceived({ type: ChunkType.ERROR, error: { message: 'No user message found for video generation' } })
+    return
+  }
+
+  const prompt = getMainTextContent(lastUserMsg)
+
+  // 图生视频：取最后一条用户消息里的首帧图片（可选）。有图则走图生视频，无图则文生视频。
+  const imageBlocks = findImageBlocks(lastUserMsg)
+  const fileBlocks = findFileBlocks(lastUserMsg)
+  const imageFiles = [
+    ...imageBlocks.filter((b) => b.file).map((b) => b.file!),
+    ...fileBlocks.filter((b) => b.file?.type === 'image').map((b) => b.file!)
+  ]
+  let firstFrameImage = ''
+  if (imageFiles.length > 0) {
+    try {
+      const imageData = await window.api.file.base64Image(imageFiles[0].id + imageFiles[0].ext)
+      if (imageData?.data) {
+        firstFrameImage = imageData.data
+      }
+    } catch (e) {
+      logger.warn('Failed to read first-frame image for video generation:', e as any)
+    }
+  }
+
+  if ((!prompt || !prompt.trim()) && !firstFrameImage) {
+    onChunkReceived({
+      type: ChunkType.ERROR,
+      error: { message: i18n.t('video.no_prompt', 'Please enter a text description to generate a video') }
+    })
+    return
+  }
+
+  onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
+  onChunkReceived({ type: ChunkType.VIDEO_GEN_CREATED } as any)
+  onChunkReceived({
+    type: ChunkType.VIDEO_GEN_PROGRESS,
+    progressText: i18n.t('video.submitted', 'Video task submitted, waiting...')
+  } as any)
+
+  const provider = getProviderByModel(assistant.model || getDefaultModel())
+
+  try {
+    const submitResp = await fetch('/api/v1/generate-video/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: (prompt || '').trim(),
+        first_frame_image: firstFrameImage || undefined,
+        model: assistant.model?.id || assistant.model?.name || 'MiniMax-Hailuo-2.3',
+        apiHost: provider?.apiHost,
+        apiKey: provider?.apiKey
+      }),
+      signal: requestOptions?.signal
+    })
+
+    const submitResult = await submitResp.json()
+    if (submitResult.error) {
+      onChunkReceived({ type: ChunkType.ERROR, error: { message: submitResult.error } })
+      return
+    }
+
+    const taskId = submitResult.task_id
+    onChunkReceived({
+      type: ChunkType.VIDEO_GEN_PROGRESS,
+      progressText: i18n.t('video.processing', 'Generating video...')
+    } as any)
+
+    const pollStart = Date.now()
+    let pollInterval = 5000
+
+    while (true) {
+      if (requestOptions?.signal?.aborted) return
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval))
+      pollInterval = Math.min(pollInterval * 1.2, 15000)
+
+      if (requestOptions?.signal?.aborted) return
+
+      let pollResult: any
+      try {
+        const pollResp = await fetch('/api/v1/generate-video/poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            task_id: taskId,
+            apiHost: provider?.apiHost,
+            apiKey: provider?.apiKey
+          }),
+          signal: requestOptions?.signal
+        })
+        pollResult = await pollResp.json()
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError') return
+        const elapsed = Math.round((Date.now() - pollStart) / 1000)
+        onChunkReceived({
+          type: ChunkType.VIDEO_GEN_PROGRESS,
+          progressText: `${i18n.t('video.processing', 'Generating video...')} (${elapsed}s) — ${i18n.t('video.retrying', 'retrying...')}`
+        } as any)
+        continue
+      }
+
+      if (pollResult.error) {
+        const elapsed = Math.round((Date.now() - pollStart) / 1000)
+        onChunkReceived({
+          type: ChunkType.VIDEO_GEN_PROGRESS,
+          progressText: `${i18n.t('video.processing', 'Generating video...')} (${elapsed}s) — ${i18n.t('video.retrying', 'retrying...')}`
+        } as any)
+        continue
+      }
+
+      const status = pollResult.status || 'processing'
+      const elapsed = Math.round((Date.now() - pollStart) / 1000)
+
+      if (status === 'completed') {
+        const videoUrl: string = pollResult.video_url || ''
+        if (!videoUrl) {
+          onChunkReceived({ type: ChunkType.ERROR, error: { message: 'No video url in completed task' } })
+          return
+        }
+
+        onChunkReceived({
+          type: ChunkType.VIDEO_GEN_PROGRESS,
+          progressText: i18n.t('video.downloading', 'Downloading video...')
+        } as any)
+
+        // 下载到本地并通过后端文件服务播放（更稳定、可下载）；失败时回退到远端直链
+        let playableUrl = videoUrl
+        let originName: string | undefined
+        let downloadUrl: string | undefined
+        try {
+          const saveResp = await fetch('/api/v1/generate-video/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              video_url: videoUrl,
+              apiHost: provider?.apiHost,
+              apiKey: provider?.apiKey
+            }),
+            signal: requestOptions?.signal
+          })
+          const saveResult = await saveResp.json()
+          if (saveResult.ok && saveResult.file?.name) {
+            // 存相对路径而非带端口的绝对地址：后端端口每次启动可能变，
+            // 浏览器会按当前 origin 解析相对路径，保证历史视频重启后仍可播放。
+            // name 是预览用文件（QtWebEngine 不支持 H.264 mp4，后端会转成 webm）；
+            // download_name 始终是原始 mp4，下载按钮用它。
+            playableUrl = `/api/v1/files/serve?name=${encodeURIComponent(saveResult.file.name)}`
+            const downloadName = saveResult.file.download_name || saveResult.file.name
+            downloadUrl = `/api/v1/files/serve?name=${encodeURIComponent(downloadName)}`
+            originName = downloadName
+          } else {
+            logger.warn('Failed to save generated video, falling back to remote url:', saveResult.error)
+          }
+        } catch (saveErr: any) {
+          if (saveErr?.name === 'AbortError') return
+          logger.warn('Save generated video failed, falling back to remote url:', saveErr)
+        }
+
+        onChunkReceived({
+          type: ChunkType.VIDEO_GEN_COMPLETE,
+          url: playableUrl,
+          metadata: { prompt: prompt.trim(), origin_name: originName, download_url: downloadUrl }
+        } as any)
+
+        const modelName = assistant.model?.name || assistant.model?.id || 'video'
+        onChunkReceived({
+          type: ChunkType.BLOCK_COMPLETE,
+          response: { text: `[Text-to-Video] ${modelName}: ${prompt.slice(0, 60)}` }
+        } as any)
+        return
+      }
+
+      if (status === 'failed') {
+        onChunkReceived({
+          type: ChunkType.ERROR,
+          error: { message: pollResult.error_message || 'Video generation failed' }
+        })
+        return
+      }
+
+      onChunkReceived({
+        type: ChunkType.VIDEO_GEN_PROGRESS,
+        progressText: `${i18n.t('video.processing', 'Generating video...')} (${elapsed}s)`
+      } as any)
+    }
+  } catch (error: any) {
+    if (error?.name === 'AbortError') return
+    onChunkReceived({
+      type: ChunkType.ERROR,
+      error: { message: error?.message || 'Unknown video generation error' }
+    })
   }
 }

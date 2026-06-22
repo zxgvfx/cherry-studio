@@ -3359,6 +3359,34 @@ const migrateConfig = {
       logger.error('migrate 203 error', error as Error)
       return state
     }
+  },
+  '204': (state: RootState) => {
+    try {
+      if (state.settings && state.settings.sidebarIcons) {
+        const hasPlugins =
+          state.settings.sidebarIcons.visible.includes('plugins' as any) ||
+          state.settings.sidebarIcons.disabled.includes('plugins' as any)
+
+        if (!hasPlugins) {
+          const agentsIndex = state.settings.sidebarIcons.visible.indexOf('agents' as any)
+          if (agentsIndex !== -1) {
+            state.settings.sidebarIcons.visible = [
+              ...state.settings.sidebarIcons.visible.slice(0, agentsIndex + 1),
+              'plugins' as any,
+              ...state.settings.sidebarIcons.visible.slice(agentsIndex + 1)
+            ]
+          } else {
+            state.settings.sidebarIcons.visible = [...state.settings.sidebarIcons.visible, 'plugins' as any]
+          }
+        }
+      }
+
+      logger.info('migrate 204 success')
+      return state
+    } catch (error) {
+      logger.error('migrate 204 error', error as Error)
+      return state
+    }
   }
 }
 

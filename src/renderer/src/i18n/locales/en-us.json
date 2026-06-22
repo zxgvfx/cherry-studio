@@ -833,6 +833,64 @@
       "file_not_supported_count": "{{count}} files are not supported",
       "generate_image": "Generate image",
       "generate_image_not_supported": "The model does not support generating images.",
+      "gpt_image": {
+        "aspect_ratio": {
+          "16_9_description": "Widescreen landscape (wallpapers, thumbnails)",
+          "1_1_description": "Square (avatars, products)",
+          "2_3_description": "DSLR portrait",
+          "3_2_description": "DSLR landscape",
+          "3_4_description": "Classic portrait (book covers)",
+          "4_3_description": "Classic landscape (slides, cameras)",
+          "9_16_description": "Widescreen portrait (mobile, Reels)",
+          "auto": "Auto",
+          "auto_description": "Let the model or source image decide",
+          "label": "Aspect ratio"
+        },
+        "input_images": {
+          "max": "Image editing supports up to {{count}} input images"
+        },
+        "label": "Image gen params",
+        "output_count": {
+          "label": "Output count",
+          "value": "{{count}} images"
+        },
+        "preview": {
+          "auto": "auto size",
+          "auto_quality": "auto quality",
+          "text": "Generate at {{size}} · {{quality}}",
+          "text_with_count": "Generate at {{size}} · {{quality}} · {{imageCount}}"
+        },
+        "quality": {
+          "auto": "Auto",
+          "auto_description": "Let the model choose (usually high)",
+          "high": "High",
+          "high_description": "More detail, slower and more expensive",
+          "label": "Image quality",
+          "low": "Low",
+          "low_description": "Fastest and cheapest output",
+          "medium": "Medium",
+          "medium_description": "Balanced speed and quality"
+        },
+        "resolution": {
+          "1k": "1K",
+          "1k_description": "Long edge 1024px, fastest & cheapest",
+          "2k": "2K",
+          "2k_description": "Long edge 2048px, common quality",
+          "3k": "3K",
+          "3k_description": "Long edge 3072px, high definition",
+          "4k": "4K",
+          "4k_description": "Long edge 3840px (max), highest detail",
+          "auto": "Auto",
+          "auto_description": "Let the model or source image decide",
+          "label": "Resolution"
+        },
+        "size": {
+          "auto": "Auto",
+          "auto_description": "Decided by model or source image",
+          "fixed_description": "Generate at {{size}}",
+          "label": "Image size"
+        }
+      },
       "knowledge_base": "Knowledge Base",
       "new": {
         "context": "Clear Context {{Command}}"
@@ -2125,6 +2183,7 @@
       "video": {
         "error": {
           "local_file_missing": "Local video file path not found",
+          "playback_failed": "Unable to play video: the local file may have been removed, or the remote link has expired",
           "unsupported_type": "Unsupported video type",
           "youtube_url_missing": "YouTube video URL not found"
         }
@@ -2373,6 +2432,30 @@
       "pin": "Keep Window on Top"
     }
   },
+  "model3d": {
+    "download": "Download model",
+    "exit_fullscreen": "Exit fullscreen",
+    "fullscreen": "Fullscreen",
+    "generating": "Generating 3D model (image-to-3D, may take a few seconds)...",
+    "hint": "Drag to rotate · Scroll to zoom · Right-click to pan",
+    "import_failed": "Import to DCC failed",
+    "import_success": "Imported to DCC",
+    "import_to_dcc": "Import to DCC",
+    "importing": "Importing...",
+    "load_error": "Failed to load 3D model",
+    "no_file": "No 3D model file available",
+    "no_image": "Please upload an image (PNG with transparent background recommended) to generate a 3D model",
+    "progress_downloading": "Downloading model file...",
+    "progress_failed": "Generation failed",
+    "progress_processing": "Generating 3D model...",
+    "progress_retry": "retrying...",
+    "progress_saving": "Saving model...",
+    "progress_submitted": "Task submitted, waiting...",
+    "progress_waiting": "Queued, waiting...",
+    "reset_camera": "Reset camera",
+    "toggle_material": "Toggle material",
+    "wireframe": "Wireframe"
+  },
   "models": {
     "add_parameter": "Add Parameter",
     "all": "All",
@@ -2432,6 +2515,24 @@
       "vision": "Vision",
       "websearch": "WebSearch"
     }
+  },
+  "motion": {
+    "downloading": "Downloading animation files...",
+    "focus": "Focus all",
+    "load_error": "Failed to load FBX animation",
+    "loading": "Loading animation...",
+    "no_prompt": "Please enter a text description to generate motion animation",
+    "pause": "Pause",
+    "play": "Play",
+    "processing": "Generating motion animation...",
+    "retrying": "retrying...",
+    "settings": {
+      "duration": "Duration (s)",
+      "title": "Motion Settings",
+      "variant_count": "Variants"
+    },
+    "speed": "Playback speed",
+    "submitted": "Motion task submitted, waiting..."
   },
   "navbar": {
     "expand": "Expand Dialog",
@@ -3041,11 +3142,11 @@
       "stars": "Stars"
     },
     "standalone_plugins": "Standalone Plugins",
+    "title": "Plugin Tools",
     "try_different_search": "Try adjusting your search or category filters",
     "type": "Type",
     "uninstall": "Uninstall",
     "uninstall_package": "Uninstall Package",
-    "title": "Plugin Tools",
     "uninstalling": "Uninstalling..."
   },
   "preview": {
@@ -3371,6 +3472,19 @@
       "undo": "Undo"
     }
   },
+  "sam3": {
+    "complete": "3D model generation complete",
+    "confirm_generate": "Generate 3D Model",
+    "generating": "Generating 3D model...",
+    "launch_error": "Failed to launch SAM3 annotation window",
+    "manual_mode": "SAM3 Manual Annotation",
+    "need_image": "Please attach an image first for SAM3 annotation",
+    "need_image_auto": "Auto mode requires an attached image",
+    "need_mcp": "Auto mode requires MCP tools. Please enable MCP (auto or manual mode) in assistant settings.",
+    "retry": "Retry",
+    "server_unavailable": "SAM3 server is unavailable",
+    "waiting_annotation": "Waiting for annotation in SAM3 window..."
+  },
   "selection": {
     "action": {
       "builtin": {
@@ -3563,8 +3677,6 @@
     }
   },
   "settings": {
-    "centralized": "Managed",
-    "centralized_config_readonly": "Managed by Administrator",
     "about": {
       "careers": {
         "button": "View",
@@ -3626,6 +3738,8 @@
       "model_params": "Model Parameters",
       "title": "Default Assistant"
     },
+    "centralized": "Managed",
+    "centralized_config_readonly": "Managed by Administrator",
     "data": {
       "app_data": {
         "copy_data_option": "Copy data, will automatically restart after copying the original directory data to the new directory",
@@ -4242,10 +4356,10 @@
     "developer": {
       "enable_developer_mode": "Enable Developer Mode",
       "help": "After enabling developer mode, you can use the trace feature to view the data flow during model invocation, and access developer tools like OpenClaw.",
-      "title": "Developer Mode",
-      "password_required": "Enter Developer Password",
-      "password_placeholder": "Developer password",
       "password_incorrect": "Incorrect password, please try again",
+      "password_placeholder": "Developer password",
+      "password_required": "Enter Developer Password",
+      "title": "Developer Mode",
       "user_not_allowed": "Current system user is not authorized for developer mode"
     },
     "display": {
@@ -4770,6 +4884,10 @@
           "placeholder": "Optional e.g. GPT-4",
           "tooltip": "Optional e.g. GPT-4"
         },
+        "stream_output": {
+          "label": "Stream Output",
+          "tooltip": "When enabled, this model streams output token-by-token; when disabled, it waits for the full result and returns it at once. Takes priority over the assistant setting."
+        },
         "supported_text_delta": {
           "label": "Support incremental text output",
           "tooltip": "The model returns text incrementally, rather than all at once. Enabled by default, if the model does not support it, please disable this option"
@@ -4800,6 +4918,13 @@
         "timeout": "Timeout",
         "title": "Model health check",
         "use_all_keys": "Key(s)"
+      },
+      "context_summary": {
+        "enable": "Enable context summary compression",
+        "enable_tooltip": "When enabled, earlier conversation turns are compressed into summaries using the Quick Model above, reducing token usage. The model can retrieve full details via a tool.",
+        "full_turns": "Full content turns",
+        "full_turns_tooltip": "Number of recent turns to keep full content. Earlier turns use summaries.",
+        "label": "Context Summary"
       },
       "default_assistant_model": "Default Assistant Model",
       "default_assistant_model_description": "Model used when creating a new assistant, if the assistant is not set, this model will be used",
@@ -4839,13 +4964,6 @@
         "auto": "Topic Auto Naming",
         "label": "Topic naming",
         "prompt": "Topic Naming Prompt"
-      },
-      "context_summary": {
-        "label": "Context Summary",
-        "enable": "Enable context summary compression",
-        "enable_tooltip": "When enabled, earlier conversation turns are compressed into summaries using the Quick Model above, reducing token usage. The model can retrieve full details via a tool.",
-        "full_turns": "Full content turns",
-        "full_turns_tooltip": "Number of recent turns to keep full content. Earlier turns use summaries."
       },
       "translate_model": "Translate Model",
       "translate_model_description": "Model used for translation service",
@@ -5207,26 +5325,6 @@
       "titleLabel": "Title",
       "titlePlaceholder": "Please enter phrase title"
     },
-    "skills": {
-      "title": "Skills",
-      "add": "Add Skill",
-      "edit": "Edit Skill",
-      "delete": "Delete Skill",
-      "deleteConfirm": "This skill will be permanently deleted. Continue?",
-      "nameLabel": "Name",
-      "namePlaceholder": "Enter skill name",
-      "descriptionLabel": "Description",
-      "descriptionPlaceholder": "Describe what this skill does",
-      "sourceLabel": "Content Source",
-      "sourceInline": "Inline Content",
-      "sourceFile": "File Reference",
-      "contentLabel": "Content",
-      "contentPlaceholder": "Enter skill instructions in Markdown",
-      "filePathLabel": "File Path",
-      "filePathPlaceholder": "Path to a local .md file",
-      "selectFile": "Browse",
-      "empty": "No skills configured yet"
-    },
     "shortcuts": {
       "action": "Action",
       "actions": "operation",
@@ -5258,6 +5356,26 @@
       "zoom_in": "Zoom In",
       "zoom_out": "Zoom Out",
       "zoom_reset": "Reset Zoom"
+    },
+    "skills": {
+      "add": "Add Skill",
+      "contentLabel": "Content",
+      "contentPlaceholder": "Enter skill instructions in Markdown",
+      "delete": "Delete Skill",
+      "deleteConfirm": "This skill will be permanently deleted. Continue?",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Describe what this skill does",
+      "edit": "Edit Skill",
+      "empty": "No skills configured yet",
+      "filePathLabel": "File Path",
+      "filePathPlaceholder": "Path to a local .md file",
+      "nameLabel": "Name",
+      "namePlaceholder": "Enter skill name",
+      "selectFile": "Browse",
+      "sourceFile": "File Reference",
+      "sourceInline": "Inline Content",
+      "sourceLabel": "Content Source",
+      "title": "Skills"
     },
     "theme": {
       "color_primary": "Primary Color",
@@ -5671,6 +5789,15 @@
     "saveDataError": "Failed to save data, please try again.",
     "title": "Update"
   },
+  "video": {
+    "download": "Download video",
+    "downloading": "Downloading video...",
+    "generating": "Generating video...",
+    "no_prompt": "Please enter a text description to generate a video",
+    "processing": "Generating video...",
+    "retrying": "retrying...",
+    "submitted": "Video task submitted, waiting..."
+  },
   "warning": {
     "missing_provider": "The supplier does not exist; reverted to the default supplier {{provider}}. This may cause issues."
   },
@@ -5679,38 +5806,5 @@
     "quit": "Quit",
     "show_window": "Show Window",
     "visualization": "Visualization"
-  },
-  "model3d": {
-    "download": "Download model",
-    "exit_fullscreen": "Exit fullscreen",
-    "fullscreen": "Fullscreen",
-    "generating": "Generating 3D model (image-to-3D, may take a few seconds)...",
-    "hint": "Drag to rotate · Scroll to zoom · Right-click to pan",
-    "load_error": "Failed to load 3D model",
-    "no_file": "No 3D model file available",
-    "no_image": "Please upload an image (PNG with transparent background recommended) to generate a 3D model",
-    "reset_camera": "Reset camera",
-    "wireframe": "Wireframe",
-    "toggle_material": "Toggle material",
-    "progress_submitted": "Task submitted, waiting...",
-    "progress_waiting": "Queued, waiting...",
-    "progress_processing": "Generating 3D model...",
-    "progress_downloading": "Downloading model file...",
-    "progress_saving": "Saving model...",
-    "progress_failed": "Generation failed",
-    "progress_retry": "retrying..."
-  },
-  "sam3": {
-    "complete": "3D model generation complete",
-    "confirm_generate": "Generate 3D Model",
-    "generating": "Generating 3D model...",
-    "launch_error": "Failed to launch SAM3 annotation window",
-    "manual_mode": "SAM3 Manual Annotation",
-    "need_image": "Please attach an image first for SAM3 annotation",
-    "need_image_auto": "Auto mode requires an attached image",
-    "need_mcp": "Auto mode requires MCP tools. Please enable MCP (auto or manual mode) in assistant settings.",
-    "retry": "Retry",
-    "server_unavailable": "SAM3 server is unavailable",
-    "waiting_annotation": "Waiting for annotation in SAM3 window..."
   }
 }

@@ -139,6 +139,7 @@ const titleKeyMap = {
   // TODO: update i18n key
   store: 'title.store',
   apps: 'title.apps',
+  plugins: 'plugins.title',
   code: 'title.code',
   files: 'title.files',
   home: 'title.home',
@@ -183,6 +184,7 @@ export const getThemeModeLabel = (key: string): string => {
 const sidebarIconKeyMap = {
   assistants: 'assistants.title',
   agents: 'agent.sidebar_title',
+  plugins: 'plugins.title',
   store: 'assistants.presets.title',
   paintings: 'paintings.title',
   translate: 'translate.title',

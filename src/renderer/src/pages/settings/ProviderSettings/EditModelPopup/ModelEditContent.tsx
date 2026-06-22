@@ -22,7 +22,7 @@ import type { Model, ModelCapability, ModelType, Provider } from '@renderer/type
 import { getDefaultGroupName, getDifference, getUnion, uniqueObjectArray } from '@renderer/utils'
 import { isNewApiProvider } from '@renderer/utils/provider'
 import type { ModalProps } from 'antd'
-import { Button, Divider, Flex, Form, Input, InputNumber, message, Modal, Select, Switch, Tooltip, Tag } from 'antd'
+import { Button, Divider, Flex, Form, Input, InputNumber, message, Modal, Select, Switch, Tag, Tooltip } from 'antd'
 import { cloneDeep } from 'lodash'
 import { ChevronDown, ChevronUp, RotateCcw, SaveIcon } from 'lucide-react'
 import type { FC } from 'react'
@@ -46,6 +46,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   const [modelCapabilities, setModelCapabilities] = useState(model.capabilities || [])
   const originalModelCapabilities = cloneDeep(model.capabilities || [])
   const [supportedTextDelta, setSupportedTextDelta] = useState(model.supported_text_delta)
+  const [streamOutput, setStreamOutput] = useState(model.streamOutput ?? true)
   const [hasUserModified, setHasUserModified] = useState(false)
 
   const labelWidth = useDynamicLabelWidth([t('settings.models.add.endpoint_type.label')])
@@ -54,6 +55,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   const autoSave = (overrides?: {
     capabilities?: ModelCapability[]
     supported_text_delta?: boolean
+    streamOutput?: boolean
     currencySymbol?: string
     isCustomCurrency?: boolean
   }) => {
@@ -71,6 +73,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       endpoint_type: isNewApiProvider(provider) ? formValues.endpointType : model.endpoint_type,
       capabilities: overrides?.capabilities ?? modelCapabilities,
       supported_text_delta: overrides?.supported_text_delta ?? supportedTextDelta,
+      streamOutput: overrides?.streamOutput ?? streamOutput,
       pricing: {
         input_per_million_tokens: Number(formValues.input_per_million_tokens) || 0,
         output_per_million_tokens: Number(formValues.output_per_million_tokens) || 0,
@@ -90,6 +93,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       endpoint_type: isNewApiProvider(provider) ? values.endpointType : model.endpoint_type,
       capabilities: modelCapabilities,
       supported_text_delta: supportedTextDelta,
+      streamOutput: streamOutput,
       pricing: {
         input_per_million_tokens: Number(values.input_per_million_tokens) || 0,
         output_per_million_tokens: Number(values.output_per_million_tokens) || 0,
@@ -362,6 +366,24 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
                   setSupportedTextDelta(checked)
                   // 直接传递新值给autoSave
                   autoSave({ supported_text_delta: checked })
+                }}
+              />
+            </Form.Item>
+            <Form.Item
+              style={{ marginBottom: 10 }}
+              labelCol={{ flex: 1 }}
+              label={t('settings.models.add.stream_output.label', '流式输出')}
+              tooltip={t(
+                'settings.models.add.stream_output.tooltip',
+                '开启后该模型逐字流式返回；关闭则等待生成完整结果后一次性返回。优先级高于助手设置。'
+              )}>
+              <Switch
+                checked={streamOutput}
+                style={{ marginLeft: 'auto' }}
+                size="small"
+                onChange={(checked) => {
+                  setStreamOutput(checked)
+                  autoSave({ streamOutput: checked })
                 }}
               />
             </Form.Item>

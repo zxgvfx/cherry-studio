@@ -205,6 +205,8 @@ export enum IpcChannel {
   File_Copy = 'file:copy',
   File_BinaryImage = 'file:binaryImage',
   File_Base64File = 'file:base64File',
+  File_TranscodeAudioToWav = 'file:transcodeAudioToWav',
+  File_TranscodeAudio = 'file:transcodeAudio',
   File_GetPdfInfo = 'file:getPdfInfo',
   Fs_Read = 'fs:read',
   Fs_ReadText = 'fs:readText',

@@ -2,12 +2,14 @@ import { CloseOutlined } from '@ant-design/icons'
 import type { DraggableProvided, DroppableProvided, DropResult } from '@hello-pangea/dnd'
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd'
 import { OpenClawSidebarIcon } from '@renderer/components/Icons/SVGIcon'
+import { useEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import { getSidebarIconLabel } from '@renderer/i18n/label'
 import { useAppDispatch } from '@renderer/store'
 import { setSidebarIcons } from '@renderer/store/settings'
 import type { SidebarIcon } from '@renderer/types'
 import { message } from 'antd'
 import {
+  Box,
   Code,
   FileSearch,
   Folder,
@@ -19,7 +21,6 @@ import {
   Palette,
   Sparkle
 } from 'lucide-react'
-import { useEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import type { FC, ReactNode } from 'react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -121,6 +122,7 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
       ({
         assistants: <MessageSquareQuote size={16} />,
         agents: <MousePointerClick size={16} />,
+        plugins: <Box size={16} />,
         store: <Sparkle size={16} />,
         paintings: <Palette size={16} />,
         translate: <Languages size={16} />,
@@ -147,22 +149,22 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
                 {visibleIcons
                   .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
                   .map((icon, index) => (
-                  <Draggable key={icon} draggableId={icon} index={index}>
-                    {(provided: DraggableProvided) => (
-                      <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                        <IconContent>
-                          {renderIcon(icon)}
-                          <span>{getSidebarIconLabel(icon)}</span>
-                        </IconContent>
-                        {icon !== 'assistants' && (
-                          <CloseButton onClick={() => onMoveIcon(icon, 'visible')}>
-                            <CloseOutlined />
-                          </CloseButton>
-                        )}
-                      </IconItem>
-                    )}
-                  </Draggable>
-                ))}
+                    <Draggable key={icon} draggableId={icon} index={index}>
+                      {(provided: DraggableProvided) => (
+                        <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                          <IconContent>
+                            {renderIcon(icon)}
+                            <span>{getSidebarIconLabel(icon)}</span>
+                          </IconContent>
+                          {icon !== 'assistants' && (
+                            <CloseButton onClick={() => onMoveIcon(icon, 'visible')}>
+                              <CloseOutlined />
+                            </CloseButton>
+                          )}
+                        </IconItem>
+                      )}
+                    </Draggable>
+                  ))}
                 {provided.placeholder}
               </IconList>
             )}
@@ -179,20 +181,20 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
                   disabledIcons
                     .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
                     .map((icon, index) => (
-                    <Draggable key={icon} draggableId={icon} index={index}>
-                      {(provided: DraggableProvided) => (
-                        <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                          <IconContent>
-                            {renderIcon(icon)}
-                            <span>{getSidebarIconLabel(icon)}</span>
-                          </IconContent>
-                          <CloseButton onClick={() => onMoveIcon(icon, 'disabled')}>
-                            <CloseOutlined />
-                          </CloseButton>
-                        </IconItem>
-                      )}
-                    </Draggable>
-                  ))
+                      <Draggable key={icon} draggableId={icon} index={index}>
+                        {(provided: DraggableProvided) => (
+                          <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                            <IconContent>
+                              {renderIcon(icon)}
+                              <span>{getSidebarIconLabel(icon)}</span>
+                            </IconContent>
+                            <CloseButton onClick={() => onMoveIcon(icon, 'disabled')}>
+                              <CloseOutlined />
+                            </CloseButton>
+                          </IconItem>
+                        )}
+                      </Draggable>
+                    ))
                 )}
                 {provided.placeholder}
               </IconList>

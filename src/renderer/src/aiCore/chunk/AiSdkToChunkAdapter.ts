@@ -4,7 +4,13 @@
  */
 
 import { loggerService } from '@logger'
-import type { AISDKWebSearchResult, GenerateImageResponse, MCPTool, WebSearchResults, WebSearchSource } from '@renderer/types'
+import type {
+  AISDKWebSearchResult,
+  GenerateImageResponse,
+  MCPTool,
+  WebSearchResults,
+  WebSearchSource
+} from '@renderer/types'
 import { WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { Chunk, ProviderMetadata } from '@renderer/types/chunk'
 import { ChunkType } from '@renderer/types/chunk'
@@ -607,6 +613,15 @@ export class AiSdkToChunkAdapter {
         }
         if (finishReason === 'tool-calls') {
           this.onChunk({ type: ChunkType.LLM_RESPONSE_CREATED })
+        }
+
+        // Surface truncation for diagnosis: when a step ends due to the output
+        // token cap (e.g. Gemini thinking budget consuming the answer), the user
+        // sees a search/tool step but little or no final text.
+        if (finishReason === 'length') {
+          logger.warn('Step finished with finishReason "length" (output truncated by max tokens).', {
+            providerId: this.providerId
+          })
         }
 
         final.webSearchResults = []

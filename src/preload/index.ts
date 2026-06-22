@@ -316,6 +316,13 @@ const api = {
       ipcRenderer.invoke(IpcChannel.File_Download, url, isUseContentType),
     copy: (fileId: string, destPath: string) => ipcRenderer.invoke(IpcChannel.File_Copy, fileId, destPath),
     base64File: (fileId: string) => ipcRenderer.invoke(IpcChannel.File_Base64File, fileId),
+    transcodeAudioToWav: (fileId: string): Promise<{ base64: string }> =>
+      ipcRenderer.invoke(IpcChannel.File_TranscodeAudioToWav, fileId),
+    transcodeAudio: (
+      fileId: string,
+      format: 'mp3' | 'wav' = 'mp3'
+    ): Promise<{ base64: string; mime: string; ext: string }> =>
+      ipcRenderer.invoke(IpcChannel.File_TranscodeAudio, fileId, format),
     pdfInfo: (fileId: string) => ipcRenderer.invoke(IpcChannel.File_GetPdfInfo, fileId),
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     openFileWithRelativePath: (file: FileMetadata) => ipcRenderer.invoke(IpcChannel.File_OpenWithRelativePath, file),

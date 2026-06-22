@@ -13,6 +13,7 @@ import { getSidebarIconLabel } from '@renderer/i18n/label'
 import { isEmoji } from '@renderer/utils'
 import { Avatar, Tooltip } from 'antd'
 import {
+  Box,
   Code,
   FileSearch,
   Folder,
@@ -131,6 +132,7 @@ const MainMenus: FC = () => {
   const iconMap = {
     assistants: <MessageSquare size={18} className="icon" />,
     agents: <MousePointerClick size={18} className="icon" />,
+    plugins: <Box size={18} className="icon" />,
     store: <Sparkle size={18} className="icon" />,
     paintings: <Palette size={18} className="icon" />,
     translate: <Languages size={18} className="icon" />,
@@ -145,6 +147,7 @@ const MainMenus: FC = () => {
   const pathMap = {
     assistants: '/',
     agents: '/agents',
+    plugins: '/plugins',
     store: '/store',
     paintings: `/paintings/${defaultPaintingProvider}`,
     translate: '/translate',
@@ -159,24 +162,24 @@ const MainMenus: FC = () => {
   return sidebarIcons.visible
     .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
     .map((icon) => {
-    const path = pathMap[icon]
-    const isActive = path === '/' ? isRoute(path) : isRoutes(path)
+      const path = pathMap[icon]
+      const isActive = path === '/' ? isRoute(path) : isRoutes(path)
 
-    return (
-      <Tooltip key={icon} title={getSidebarIconLabel(icon)} mouseEnterDelay={0.8} placement="right">
-        <StyledLink
-          onClick={async () => {
-            hideMinappPopup()
-            await modelGenerating()
-            navigate(path)
-          }}>
-          <Icon theme={theme} className={isActive}>
-            {iconMap[icon]}
-          </Icon>
-        </StyledLink>
-      </Tooltip>
-    )
-  })
+      return (
+        <Tooltip key={icon} title={getSidebarIconLabel(icon)} mouseEnterDelay={0.8} placement="right">
+          <StyledLink
+            onClick={async () => {
+              hideMinappPopup()
+              await modelGenerating()
+              navigate(path)
+            }}>
+            <Icon theme={theme} className={isActive}>
+              {iconMap[icon]}
+            </Icon>
+          </StyledLink>
+        </Tooltip>
+      )
+    })
 }
 
 const Container = styled.div<{ $isFullscreen: boolean }>`

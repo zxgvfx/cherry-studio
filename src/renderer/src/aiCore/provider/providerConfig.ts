@@ -38,6 +38,7 @@ import { defaultAppHeaders } from '@shared/utils'
 import { cloneDeep, isEmpty } from 'lodash'
 
 import type { AiSdkConfig } from '../types'
+import { createAudioCompatFetch } from './audioCompatFetch'
 import { aihubmixProviderCreator, newApiResolverCreator, vertexAnthropicProviderCreator } from './config'
 import { azureAnthropicProviderCreator } from './config/azure-anthropic'
 import { COPILOT_DEFAULT_HEADERS } from './constants'
@@ -364,12 +365,16 @@ export function providerToAiSdkConfig(actualProvider: Provider, model: Model): A
   } else {
     // otherwise, fallback to openai-compatible
     const options = ProviderConfigFactory.createOpenAICompatible(baseConfig.baseURL, baseConfig.apiKey)
+    // 对 openai-compatible 通道（含 Higress / gpt.ge 等以 file 格式接收音频的 Gemini 网关）
+    // 包装 fetch：把 AI SDK 发出的 OpenAI 标准 input_audio 重写成 file 格式
+    const wrappedFetch = createAudioCompatFetch((extraOptions?.fetch as typeof fetch | undefined) ?? fetch)
     return {
       providerId: 'openai-compatible',
       options: {
         ...options,
         name: actualProvider.id,
         ...extraOptions,
+        fetch: wrappedFetch,
         includeUsage
       }
     }

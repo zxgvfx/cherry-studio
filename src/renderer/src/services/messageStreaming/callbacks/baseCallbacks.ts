@@ -89,7 +89,20 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
     onError: async (error: AISDKError) => {
       logger.debug('onError', error)
       if (NoOutputGeneratedError.isInstance(error)) {
-        return
+        // The model finished without producing any output. This commonly happens
+        // with Gemini after a tool/search step when the follow-up step yields only
+        // thinking tokens (or none). If the turn already produced visible text,
+        // treat it as benign and stay silent. Otherwise surface it so the user
+        // isn't left with a silent dead-end (search results but no answer).
+        const currentMessage = getState().messages.entities[assistantMsgId]
+        const hasVisibleContent = currentMessage ? getMainTextContent(currentMessage).trim().length > 0 : false
+        if (hasVisibleContent) {
+          return
+        }
+        logger.warn('Model generated no output (NoOutputGeneratedError); surfacing to user', {
+          assistantMsgId
+        })
+        // fall through to the normal error-surfacing path below
       }
       const isErrorTypeAbort = isAbortError(error)
       const isErrorTypeTimeout = isTimeoutError(error)
@@ -344,7 +357,6 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
       if (status === 'success') {
         trackTokenUsage({ usage: response?.usage, model: assistant?.model })
       }
-
 
       EventEmitter.emit(EVENT_NAMES.MESSAGE_COMPLETE, { id: assistantMsgId, topicId, status })
       logger.debug('onComplete finished')

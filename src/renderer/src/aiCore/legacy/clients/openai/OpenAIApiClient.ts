@@ -6,6 +6,7 @@ import type {
   ChatCompletionTool
 } from '@cherrystudio/openai/resources'
 import { loggerService } from '@logger'
+import { hasMultimodalContent, mcpResultToTextSummary } from '@renderer/aiCore/utils/mcp'
 import { DEFAULT_MAX_TOKENS } from '@renderer/config/constant'
 import {
   findTokenLimit,
@@ -77,7 +78,6 @@ import {
   mcpToolsToOpenAIChatTools,
   openAIToolsToMcpTool
 } from '@renderer/utils/mcp-tools'
-import { hasMultimodalContent, mcpResultToTextSummary } from '@renderer/aiCore/utils/mcp'
 import { findFileBlocks, findImageBlocks } from '@renderer/utils/messageUtils/find'
 import {
   isSupportArrayContentProvider,
@@ -895,7 +895,12 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
      * - 有 finish_reason 时
      * - 无 finish_reason 但是流正常结束时
      */
-    const emitCompletionSignals = (controller: TransformStreamDefaultController<GenericChunk>) => {
+    let accumulatedText = ''
+    const bridgedGlbUrls = new Set<string>()
+    const emitCompletionSignals = async (
+      controller: TransformStreamDefaultController<GenericChunk>,
+      context?: ResponseChunkTransformerContext
+    ) => {
       if (isFinished) return
 
       if (toolCalls.length > 0) {
@@ -903,6 +908,44 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
           type: ChunkType.MCP_TOOL_CREATED,
           tool_calls: toolCalls
         })
+      }
+
+      const glbMatches = accumulatedText.match(/https?:\/\/[^\s\)\]\"]+?\.glb(?:\?[^\s\)\]\"]*)?/gi) || []
+      for (const glbUrl of glbMatches) {
+        if (bridgedGlbUrls.has(glbUrl)) continue
+        bridgedGlbUrls.add(glbUrl)
+        try {
+          const saveResp = await fetch('/api/v1/generate-3d/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              download_url: glbUrl,
+              format: 'glb'
+            })
+          })
+          const saveResult = await saveResp.json()
+          if (saveResult?.ok && saveResult.file) {
+            controller.enqueue({
+              type: ChunkType.MODEL_3D_COMPLETE,
+              file: saveResult.file,
+              format: saveResult.format || 'glb'
+            } as any)
+          } else {
+            logger.warn('[OpenAIChatStream] Failed to bridge GLB URL', {
+              providerId: context?.provider?.id,
+              modelId: (context as any)?.model?.id,
+              glbUrl,
+              error: saveResult?.error
+            })
+          }
+        } catch (error) {
+          logger.warn('[OpenAIChatStream] Failed to bridge GLB URL', {
+            providerId: context?.provider?.id,
+            modelId: (context as any)?.model?.id,
+            glbUrl,
+            error
+          })
+        }
       }
 
       const usage = lastUsageInfo || {
@@ -939,7 +982,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
 
         // if we've already seen finish_reason, emit completion signals. No matter whether we get usage or not.
         if (hasFinishReason && !isFinished) {
-          emitCompletionSignals(controller)
+          await emitCompletionSignals(controller, context)
           return
         }
 
@@ -996,7 +1039,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
                 hasFinishReason = true
                 // If we already have usage info, emit completion signals now
                 if (lastUsageInfo && lastUsageInfo.total_tokens > 0) {
-                  emitCompletionSignals(controller)
+                  await emitCompletionSignals(controller, context)
                 }
               }
               continue
@@ -1041,6 +1084,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
 
             // 处理文本内容
             if (contentSource.content) {
+              accumulatedText += contentSource.content
               // logger.silly('since contentSource.content is trusy, try to enqueue TEXT_START and TEXT_DELTA')
               if (!accumulatingText) {
                 // logger.silly('enqueue TEXT_START')
@@ -1155,7 +1199,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
               hasFinishReason = true
               // If we already have usage info, emit completion signals now
               if (lastUsageInfo && lastUsageInfo.total_tokens > 0) {
-                emitCompletionSignals(controller)
+                await emitCompletionSignals(controller, context)
               }
             }
           }
@@ -1163,11 +1207,11 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
       },
 
       // 流正常结束时，检查是否需要发送完成信号
-      flush(controller) {
+      async flush(controller) {
         if (isFinished) return
 
         logger.debug('Stream ended without finish_reason, emitting fallback completion signals')
-        emitCompletionSignals(controller)
+        await emitCompletionSignals(controller, context)
       }
     })
   }

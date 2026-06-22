@@ -1,38 +1,81 @@
-import '@google/model-viewer'
-
 import {
-  BorderOuterOutlined,
+  CheckCircleOutlined,
   CompressOutlined,
   DownloadOutlined,
   ExpandOutlined,
-  EyeInvisibleOutlined,
-  EyeOutlined,
-  Loading3QuartersOutlined,
-  ReloadOutlined
+  ImportOutlined,
+  Loading3QuartersOutlined
 } from '@ant-design/icons'
-import { Tooltip } from 'antd'
 import FileManager from '@renderer/services/FileManager'
 import type { Model3DMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus } from '@renderer/types/newMessage'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { message, Tooltip } from 'antd'
+import React, { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled, { keyframes } from 'styled-components'
+
+const GLBViewer = lazy(() => import('./GLBViewer'))
+const FBXAnimationViewer = lazy(() => import('./FBXAnimationViewer'))
 
 interface Props {
   block: Model3DMessageBlock
 }
 
+type DccToolPayload = {
+  error?: string
+  ok?: boolean
+  newTopNodes?: string[]
+  [key: string]: unknown
+}
+
+function unwrapDccToolResponse(raw: any): DccToolPayload {
+  if (!raw || typeof raw !== 'object') {
+    return { error: 'Invalid DCC response' }
+  }
+
+  if (typeof raw.error === 'string' && raw.error) {
+    return { error: raw.error }
+  }
+
+  if (raw.isError) {
+    const text = raw.content?.find?.((item: any) => item?.type === 'text')?.text
+    return { error: text || 'DCC tool call failed' }
+  }
+
+  const text = raw.content?.find?.((item: any) => item?.type === 'text')?.text
+  if (typeof text === 'string' && text.trim()) {
+    try {
+      const parsed = JSON.parse(text)
+      if (parsed && typeof parsed === 'object') {
+        return parsed as DccToolPayload
+      }
+    } catch {
+      return { error: text }
+    }
+  }
+
+  return raw as DccToolPayload
+}
+
+const getDCCSessionId = (): string => (window as any).__CHERRY_SESSION_ID || ''
+const getBackendUrl = (): string => (window as any).__CHERRY_BACKEND_URL || window.location.origin
+const getDCCType = (): string => (window as any).__CHERRY_DCC_TYPE || 'standalone'
+
 const Model3DBlock: React.FC<Props> = ({ block }) => {
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [showWireframe, setShowWireframe] = useState(false)
-  const [showMaterial, setShowMaterial] = useState(true)
+  const [importState, setImportState] = useState<'idle' | 'importing' | 'done'>('idle')
   const containerRef = useRef<HTMLDivElement>(null)
-  const viewerRef = useRef<any>(null)
-  const originalMaterialsRef = useRef<Map<any, any>>(new Map())
 
-  const isLoading = block.status === MessageBlockStatus.PROCESSING || block.status === MessageBlockStatus.PENDING
+  const dccSessionId = getDCCSessionId()
+  const dccType = getDCCType()
+  const isDCCEnvironment = !!dccSessionId && dccType !== 'standalone'
+
+  const isLoading =
+    block.status === MessageBlockStatus.PROCESSING ||
+    block.status === MessageBlockStatus.PENDING ||
+    block.status === MessageBlockStatus.STREAMING
 
   const modelUrl = useMemo(() => {
     if (!block.file?.id) return ''
@@ -40,8 +83,7 @@ const Model3DBlock: React.FC<Props> = ({ block }) => {
     return `${window.location.origin}/api/v1/files/serve?name=${encodeURIComponent(fileName)}`
   }, [block.file])
 
-  const formatLabel =
-    block.metadata?.format?.toUpperCase() || block.file?.ext?.replace('.', '').toUpperCase() || '3D'
+  const formatLabel = block.metadata?.format?.toUpperCase() || block.file?.ext?.replace('.', '').toUpperCase() || '3D'
 
   const handleDownload = useCallback(() => {
     if (!modelUrl) return
@@ -53,88 +95,67 @@ const Model3DBlock: React.FC<Props> = ({ block }) => {
     document.body.removeChild(a)
   }, [modelUrl, block.file])
 
+  const handleImportToDCC = useCallback(async () => {
+    if (!block.file?.path || !dccSessionId) return
+    setImportState('importing')
+    try {
+      const backendUrl = getBackendUrl()
+      const resp = await fetch(`${backendUrl}/api/v1/mcp/call-dcc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-Id': dccSessionId
+        },
+        body: JSON.stringify({
+          sessionId: dccSessionId,
+          toolName: 'import_scene_file',
+          arguments: {
+            filePath: block.file.path,
+            format: block.metadata?.format || block.file.ext?.replace('.', '') || 'unknown'
+          }
+        })
+      })
+      const rawResult = await resp.json()
+      const result = unwrapDccToolResponse(rawResult)
+      if (!resp.ok || result.error || result.ok === false) {
+        message.error(result.error || t('model3d.import_failed', 'Import failed'))
+        setImportState('idle')
+      } else {
+        setImportState('done')
+        const importedCount = Array.isArray(result.newTopNodes) ? result.newTopNodes.length : 0
+        message.success(
+          importedCount > 0
+            ? `${t('model3d.import_success', 'Imported to DCC')} (${importedCount})`
+            : t('model3d.import_success', 'Imported to DCC')
+        )
+        setTimeout(() => setImportState('idle'), 3000)
+      }
+    } catch (e: any) {
+      message.error(e.message || t('model3d.import_failed', 'Import failed'))
+      setImportState('idle')
+    }
+  }, [block.file, block.metadata?.format, dccSessionId, t])
+
   const handleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => !prev)
   }, [])
 
-  const handleResetCamera = useCallback(() => {
-    const viewer = viewerRef.current
-    if (viewer) {
-      try {
-        viewer.cameraOrbit = 'auto auto auto'
-        viewer.fieldOfView = 'auto'
-        viewer.cameraTarget = 'auto auto auto'
-      } catch {
-        /* noop */
-      }
-    }
-  }, [])
+  const isFBX = block.metadata?.format === 'fbx' || block.file?.ext === '.fbx'
 
-  const traverseMeshes = useCallback((callback: (mesh: any) => void) => {
-    const viewer = viewerRef.current
-    if (!viewer) return
-    try {
-      const model = (viewer as any).model
-      if (!model) return
-      model.traverse((node: any) => {
-        if (node.isMesh) callback(node)
-      })
-    } catch {
-      /* model-viewer internals may not be available */
-    }
-  }, [])
-
-  const handleToggleWireframe = useCallback(() => {
-    const next = !showWireframe
-    setShowWireframe(next)
-    traverseMeshes((mesh) => {
-      if (mesh.material) {
-        mesh.material.wireframe = next
-        mesh.material.needsUpdate = true
-      }
-    })
-  }, [showWireframe, traverseMeshes])
-
-  const handleToggleMaterial = useCallback(() => {
-    const next = !showMaterial
-    setShowMaterial(next)
-    traverseMeshes((mesh) => {
-      if (!mesh.material) return
-      if (next) {
-        const orig = originalMaterialsRef.current.get(mesh)
-        if (orig) {
-          mesh.material.map = orig.map
-          mesh.material.normalMap = orig.normalMap
-          mesh.material.roughnessMap = orig.roughnessMap
-          mesh.material.metalnessMap = orig.metalnessMap
-          mesh.material.color?.copy(orig.color)
-          mesh.material.needsUpdate = true
+  const fbxUrls = useMemo(() => {
+    if (!isFBX || !modelUrl) return []
+    const urls = [modelUrl]
+    const extraFiles = block.metadata?.extraFiles
+    if (extraFiles && Array.isArray(extraFiles)) {
+      for (const ef of extraFiles) {
+        if (ef?.id && ef?.ext) {
+          const name = `${ef.id}${ef.ext}`
+          urls.push(`${window.location.origin}/api/v1/files/serve?name=${encodeURIComponent(name)}`)
         }
-      } else {
-        if (!originalMaterialsRef.current.has(mesh)) {
-          originalMaterialsRef.current.set(mesh, {
-            map: mesh.material.map,
-            normalMap: mesh.material.normalMap,
-            roughnessMap: mesh.material.roughnessMap,
-            metalnessMap: mesh.material.metalnessMap,
-            color: mesh.material.color?.clone()
-          })
-        }
-        mesh.material.map = null
-        mesh.material.normalMap = null
-        mesh.material.roughnessMap = null
-        mesh.material.metalnessMap = null
-        mesh.material.color?.set(0xcccccc)
-        mesh.material.needsUpdate = true
       }
-    })
-  }, [showMaterial, traverseMeshes])
-
-  useEffect(() => {
-    return () => {
-      originalMaterialsRef.current.clear()
     }
-  }, [modelUrl])
+    return urls.filter(Boolean)
+  }, [isFBX, modelUrl, block.metadata?.extraFiles])
 
   const progressText = block.metadata?.progressText
 
@@ -151,6 +172,46 @@ const Model3DBlock: React.FC<Props> = ({ block }) => {
   }
 
   if (error) {
+    if (isDCCEnvironment) {
+      const dccLabel = dccType === 'houdini' ? 'Houdini' : dccType === 'maya' ? 'Maya' : dccType
+      return (
+        <Container ref={containerRef} $isFullscreen={false}>
+          <DCCPreviewPanel>
+            <DCCIcon>📦</DCCIcon>
+            <DCCTitle>
+              {formatLabel} {t('model3d.ready', 'model ready')}
+            </DCCTitle>
+            <DCCDesc>{block.file?.origin_name || block.file?.name || `model${block.file?.ext || '.glb'}`}</DCCDesc>
+            <DCCActions>
+              <DCCButton onClick={handleImportToDCC} $primary disabled={importState === 'importing'}>
+                {importState === 'done' ? (
+                  <>
+                    <CheckCircleOutlined /> {t('model3d.import_success', 'Imported')}
+                  </>
+                ) : importState === 'importing' ? (
+                  <>
+                    <Loading3QuartersOutlined spin /> {t('model3d.importing', 'Importing...')}
+                  </>
+                ) : (
+                  <>
+                    <ImportOutlined /> {t('model3d.import_to_dcc', 'Import to {{dcc}}', { dcc: dccLabel })}
+                  </>
+                )}
+              </DCCButton>
+              <DCCButton onClick={handleDownload}>
+                <DownloadOutlined /> {t('model3d.download', 'Download')}
+              </DCCButton>
+            </DCCActions>
+            <DCCHint>3D preview unavailable inside {dccLabel}</DCCHint>
+          </DCCPreviewPanel>
+          <InfoBar>
+            <FormatBadge>{formatLabel}</FormatBadge>
+            <FileName>{block.file?.origin_name || block.file?.name || ''}</FileName>
+            {block.file?.size ? <FileSize>{formatFileSize(block.file.size)}</FileSize> : null}
+          </InfoBar>
+        </Container>
+      )
+    }
     return (
       <ErrorContainer>
         <span>
@@ -168,31 +229,64 @@ const Model3DBlock: React.FC<Props> = ({ block }) => {
     )
   }
 
-  const toolbar = (
+  if (isFBX) {
+    const fileCount = fbxUrls.length
+    return (
+      <Container ref={containerRef} $isFullscreen={isFullscreen}>
+        <Suspense
+          fallback={
+            <LoadingWrapper>
+              <SpinIcon />
+              <LoadingText>{t('motion.loading', 'Loading animation...')}</LoadingText>
+            </LoadingWrapper>
+          }>
+          <FBXAnimationViewer
+            urls={fbxUrls}
+            width={isFullscreen ? window.innerWidth : undefined}
+            height={isFullscreen ? window.innerHeight - 48 : undefined}
+          />
+        </Suspense>
+        <InfoBar>
+          <FormatBadge>{formatLabel}</FormatBadge>
+          <FileName>
+            {block.metadata?.prompt
+              ? block.metadata.prompt.slice(0, 40) + (block.metadata.prompt.length > 40 ? '...' : '')
+              : FileManager.formatFileName(block.file)}
+          </FileName>
+          {fileCount > 1 && <SeedBadge>{fileCount} variants</SeedBadge>}
+          {block.metadata?.seed != null && <SeedBadge>seed: {block.metadata.seed}</SeedBadge>}
+          <FbxToolbar>
+            {isDCCEnvironment && (
+              <Tooltip title={t('model3d.import_to_dcc', 'Import to DCC')}>
+                <ToolButton onClick={handleImportToDCC} disabled={importState === 'importing'}>
+                  {importState === 'done' ? <CheckCircleOutlined /> : <ImportOutlined />}
+                </ToolButton>
+              </Tooltip>
+            )}
+            <Tooltip
+              title={
+                isFullscreen ? t('model3d.exit_fullscreen', 'Exit fullscreen') : t('model3d.fullscreen', 'Fullscreen')
+              }>
+              <ToolButton onClick={handleFullscreen}>
+                {isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
+              </ToolButton>
+            </Tooltip>
+            <Tooltip title={t('model3d.download', 'Download model')}>
+              <ToolButton onClick={handleDownload}>
+                <DownloadOutlined />
+              </ToolButton>
+            </Tooltip>
+          </FbxToolbar>
+        </InfoBar>
+      </Container>
+    )
+  }
+
+  const glbToolbar = (
     <ToolbarOverlay>
-      <Tooltip title={t('model3d.wireframe', 'Wireframe')}>
-        <ToolButton onClick={handleToggleWireframe} $active={showWireframe}>
-          <BorderOuterOutlined />
-        </ToolButton>
-      </Tooltip>
-      <Tooltip title={t('model3d.toggle_material', 'Toggle material')}>
-        <ToolButton onClick={handleToggleMaterial} $active={!showMaterial}>
-          {showMaterial ? <EyeOutlined /> : <EyeInvisibleOutlined />}
-        </ToolButton>
-      </Tooltip>
-      <Separator />
-      <Tooltip title={t('model3d.reset_camera', 'Reset camera')}>
-        <ToolButton onClick={handleResetCamera}>
-          <ReloadOutlined />
-        </ToolButton>
-      </Tooltip>
       <Tooltip
-        title={
-          isFullscreen ? t('model3d.exit_fullscreen', 'Exit fullscreen') : t('model3d.fullscreen', 'Fullscreen')
-        }>
-        <ToolButton onClick={handleFullscreen}>
-          {isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}
-        </ToolButton>
+        title={isFullscreen ? t('model3d.exit_fullscreen', 'Exit fullscreen') : t('model3d.fullscreen', 'Fullscreen')}>
+        <ToolButton onClick={handleFullscreen}>{isFullscreen ? <CompressOutlined /> : <ExpandOutlined />}</ToolButton>
       </Tooltip>
       <Separator />
       <Tooltip title={t('model3d.download', 'Download model')}>
@@ -200,41 +294,54 @@ const Model3DBlock: React.FC<Props> = ({ block }) => {
           <DownloadOutlined />
         </ToolButton>
       </Tooltip>
+      {isDCCEnvironment && (
+        <>
+          <Separator />
+          <Tooltip title={t('model3d.import_to_dcc', 'Import to DCC')}>
+            <ToolButton
+              onClick={handleImportToDCC}
+              $active={importState === 'done'}
+              disabled={importState === 'importing'}>
+              {importState === 'done' ? <CheckCircleOutlined /> : <ImportOutlined />}
+            </ToolButton>
+          </Tooltip>
+        </>
+      )}
     </ToolbarOverlay>
-  )
-
-  const hint = (
-    <HintOverlay>{t('model3d.hint', 'Drag to rotate · Scroll to zoom · Right-click to pan')}</HintOverlay>
   )
 
   return (
     <Container ref={containerRef} $isFullscreen={isFullscreen}>
-      <ViewerWrapper $isFullscreen={isFullscreen}>
-        {React.createElement(
-          'model-viewer',
-          {
-            ref: viewerRef,
-            src: modelUrl,
-            alt: FileManager.formatFileName(block.file),
-            'camera-controls': true,
-            'auto-rotate': true,
-            'touch-action': 'pan-y',
-            'shadow-intensity': '1',
-            'environment-image': 'neutral',
-            exposure: '1',
-            loading: 'eager',
-            style: { width: '100%', height: '100%' },
-            onError: () => setError('Model loading failed')
-          },
-          toolbar,
-          hint
-        )}
-      </ViewerWrapper>
+      <Suspense
+        fallback={
+          <LoadingWrapper>
+            <SpinIcon />
+            <LoadingText>{t('model3d.generating', '3D model generating...')}</LoadingText>
+          </LoadingWrapper>
+        }>
+        <GLBViewer
+          src={modelUrl}
+          width={isFullscreen ? window.innerWidth : undefined}
+          height={isFullscreen ? window.innerHeight - 48 : undefined}
+          onError={(msg) => setError(msg)}>
+          {glbToolbar}
+          <HintOverlay>{t('model3d.hint', 'Drag to rotate · Scroll to zoom · Right-click to pan')}</HintOverlay>
+        </GLBViewer>
+      </Suspense>
       <InfoBar>
         <FormatBadge>{formatLabel}</FormatBadge>
         <FileName>{FileManager.formatFileName(block.file)}</FileName>
         {block.file?.size ? <FileSize>{formatFileSize(block.file.size)}</FileSize> : null}
         <DownloadLink onClick={handleDownload}>{t('model3d.download', 'Download model')}</DownloadLink>
+        {isDCCEnvironment && (
+          <ImportLink onClick={handleImportToDCC} $disabled={importState === 'importing'}>
+            {importState === 'done'
+              ? t('model3d.import_success', 'Imported to DCC')
+              : importState === 'importing'
+                ? t('model3d.importing', 'Importing...')
+                : t('model3d.import_to_dcc', 'Import to DCC')}
+          </ImportLink>
+        )}
       </InfoBar>
     </Container>
   )
@@ -270,14 +377,6 @@ const Container = styled.div<{ $isFullscreen?: boolean }>`
     border-radius: 0;
     border: none;
   `}
-`
-
-const ViewerWrapper = styled.div<{ $isFullscreen?: boolean }>`
-  width: 100%;
-  height: ${(props) => (props.$isFullscreen ? 'calc(100vh - 48px)' : '350px')};
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  position: relative;
-  overflow: hidden;
 `
 
 const ToolbarOverlay = styled.div`
@@ -415,6 +514,104 @@ const ProgressText = styled.span`
   font-size: 11px;
   color: rgba(255, 255, 255, 0.45);
   margin-top: -4px;
+`
+
+const SeedBadge = styled.span`
+  background: var(--color-background-mute);
+  color: var(--color-text-3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: monospace;
+  white-space: nowrap;
+`
+
+const ImportLink = styled.span<{ $disabled?: boolean }>`
+  font-size: 11px;
+  color: ${(props) => (props.$disabled ? 'var(--color-text-3)' : 'var(--color-primary)')};
+  cursor: ${(props) => (props.$disabled ? 'not-allowed' : 'pointer')};
+  white-space: nowrap;
+  opacity: ${(props) => (props.$disabled ? 0.6 : 1)};
+
+  &:hover {
+    text-decoration: ${(props) => (props.$disabled ? 'none' : 'underline')};
+  }
+`
+
+const FbxToolbar = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+`
+
+const DCCPreviewPanel = styled.div`
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  border-radius: 8px 8px 0 0;
+  padding: 24px;
+`
+
+const DCCIcon = styled.span`
+  font-size: 36px;
+  line-height: 1;
+`
+
+const DCCTitle = styled.span`
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+`
+
+const DCCDesc = styled.span`
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const DCCActions = styled.div`
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+`
+
+const DCCButton = styled.button<{ $primary?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid
+    ${(props) => (props.$primary ? 'rgba(64, 150, 255, 0.8)' : 'rgba(255,255,255,0.2)')};
+  background: ${(props) => (props.$primary ? 'rgba(64, 150, 255, 0.25)' : 'rgba(255, 255, 255, 0.06)')};
+  color: ${(props) => (props.$primary ? 'rgba(100, 180, 255, 1)' : 'rgba(255,255,255,0.7)')};
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover:not(:disabled) {
+    background: ${(props) => (props.$primary ? 'rgba(64, 150, 255, 0.45)' : 'rgba(255, 255, 255, 0.14)')};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`
+
+const DCCHint = styled.span`
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.22);
+  text-align: center;
+  margin-top: 2px;
 `
 
 export default React.memo(Model3DBlock)

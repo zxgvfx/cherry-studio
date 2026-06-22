@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { CHERRYAI_PROVIDER } from '@renderer/config/providers'
 import { formatAgentServerError } from '@renderer/utils/error'
 import type {
   AddAgentForm,
@@ -60,6 +61,9 @@ export const DEFAULT_SESSION_PAGE_SIZE = 20
 export class AgentApiClient {
   private axios: Axios
   private apiVersion: ApiVersion = 'v1'
+  // @ts-ignore
+  private _isHoudini = typeof window !== 'undefined' && typeof window.api !== 'undefined'
+
   constructor(config: AxiosRequestConfig, apiVersion?: ApiVersion) {
     if (!config.baseURL || !config.headers?.Authorization) {
       throw new Error('Please pass in baseUrl and Authroization header.')
@@ -71,6 +75,26 @@ export class AgentApiClient {
     if (apiVersion) {
       this.apiVersion = apiVersion
     }
+  }
+
+  /**
+   * In Houdini (QtWebEngine), XHR property overrides via Object.defineProperty
+   * are unreliable on native XHR objects, causing Axios promises to never resolve.
+   * This method bypasses Axios/XHR entirely and calls the Qt bridge directly.
+   */
+  private async houdiniRequest(method: string, path: string, body?: unknown): Promise<unknown> {
+    // @ts-ignore
+    const proxy = window.qt?.api?.agentApiProxy
+    if (!proxy) {
+      throw new Error('Qt agent API bridge not available')
+    }
+    const responseStr: string = await proxy(JSON.stringify({ method, path, body: body ?? null }))
+    const data = JSON.parse(responseStr)
+    if (data && typeof data === 'object' && 'error' in data && data.error) {
+      const msg = typeof data.error === 'string' ? data.error : data.error.message || JSON.stringify(data.error)
+      throw new Error(msg)
+    }
+    return data
   }
 
   public agentPaths = {
@@ -104,6 +128,10 @@ export class AgentApiClient {
   public async reorderAgents(orderedIds: string[]): Promise<void> {
     const url = `${this.agentPaths.base}/reorder`
     try {
+      if (this._isHoudini) {
+        await this.houdiniRequest('PUT', url, { ordered_ids: orderedIds })
+        return
+      }
       await this.axios.put(url, { ordered_ids: orderedIds })
     } catch (error) {
       throw processError(error, 'Failed to reorder agents.')
@@ -122,8 +150,14 @@ export class AgentApiClient {
       const queryString = params.toString()
       const fullUrl = queryString ? `${url}?${queryString}` : url
 
-      const response = await this.axios.get(fullUrl)
-      const result = ListAgentsResponseSchema.safeParse(response.data)
+      let responseData: unknown
+      if (this._isHoudini) {
+        responseData = await this.houdiniRequest('GET', fullUrl)
+      } else {
+        const response = await this.axios.get(fullUrl)
+        responseData = response.data
+      }
+      const result = ListAgentsResponseSchema.safeParse(responseData)
       if (!result.success) {
         throw new Error('Not a valid Agents array.')
       }
@@ -137,9 +171,14 @@ export class AgentApiClient {
     const url = this.agentPaths.base
     try {
       const payload = form satisfies CreateAgentRequest
-      const response = await this.axios.post(url, payload)
-      const data = CreateAgentResponseSchema.parse(response.data)
-      return data
+      let responseData: unknown
+      if (this._isHoudini) {
+        responseData = await this.houdiniRequest('POST', url, payload)
+      } else {
+        const response = await this.axios.post(url, payload)
+        responseData = response.data
+      }
+      return CreateAgentResponseSchema.parse(responseData)
     } catch (error) {
       throw processError(error, 'Failed to create agent.')
     }
@@ -148,8 +187,14 @@ export class AgentApiClient {
   public async getAgent(id: string): Promise<GetAgentResponse> {
     const url = this.agentPaths.withId(id)
     try {
-      const response = await this.axios.get(url)
-      const data = GetAgentResponseSchema.parse(response.data)
+      let responseData: unknown
+      if (this._isHoudini) {
+        responseData = await this.houdiniRequest('GET', url)
+      } else {
+        const response = await this.axios.get(url)
+        responseData = response.data
+      }
+      const data = GetAgentResponseSchema.parse(responseData)
       if (data.id !== id) {
         throw new Error('Agent ID mismatch in response')
       }
@@ -162,6 +207,10 @@ export class AgentApiClient {
   public async deleteAgent(id: string): Promise<void> {
     const url = this.agentPaths.withId(id)
     try {
+      if (this._isHoudini) {
+        await this.houdiniRequest('DELETE', url)
+        return
+      }
       await this.axios.delete(url)
     } catch (error) {
       throw processError(error, 'Failed to delete agent.')
@@ -172,8 +221,14 @@ export class AgentApiClient {
     const url = this.agentPaths.withId(form.id)
     try {
       const payload = form satisfies UpdateAgentRequest
-      const response = await this.axios.patch(url, payload)
-      const data = UpdateAgentResponseSchema.parse(response.data)
+      let responseData: unknown
+      if (this._isHoudini) {
+        responseData = await this.houdiniRequest('PATCH', url, payload)
+      } else {
+        const response = await this.axios.patch(url, payload)
+        responseData = response.data
+      }
+      const data = UpdateAgentResponseSchema.parse(responseData)
       if (data.id !== form.id) {
         throw new Error('Agent ID mismatch in response')
       }
@@ -186,6 +241,10 @@ export class AgentApiClient {
   public async reorderSessions(agentId: string, orderedIds: string[]): Promise<void> {
     const url = `${this.getSessionPaths(agentId).base}/reorder`
     try {
+      if (this._isHoudini) {
+        await this.houdiniRequest('PUT', url, { ordered_ids: orderedIds })
+        return
+      }
       await this.axios.put(url, { ordered_ids: orderedIds })
     } catch (error) {
       throw processError(error, 'Failed to reorder sessions.')
@@ -195,8 +254,20 @@ export class AgentApiClient {
   public async listSessions(agentId: string, options?: ListOptions): Promise<ListAgentSessionsResponse> {
     const url = this.getSessionPaths(agentId).base
     try {
-      const response = await this.axios.get(url, { params: options })
-      const result = ListAgentSessionsResponseSchema.safeParse(response.data)
+      let responseData: unknown
+      if (this._isHoudini) {
+        const params = new URLSearchParams()
+        if (options?.limit !== undefined) params.append('limit', String(options.limit))
+        if (options?.offset !== undefined) params.append('offset', String(options.offset))
+        if (options?.sortBy) params.append('sortBy', options.sortBy)
+        if (options?.orderBy) params.append('orderBy', options.orderBy)
+        const qs = params.toString()
+        responseData = await this.houdiniRequest('GET', qs ? `${url}?${qs}` : url)
+      } else {
+        const response = await this.axios.get(url, { params: options })
+        responseData = response.data
+      }
+      const result = ListAgentSessionsResponseSchema.safeParse(responseData)
       if (!result.success) {
         throw new Error('Not a valid Sessions array.')
       }
@@ -210,9 +281,14 @@ export class AgentApiClient {
     const url = this.getSessionPaths(agentId).base
     try {
       const payload = session satisfies CreateSessionRequest
-      const response = await this.axios.post(url, payload)
-      const data = CreateAgentSessionResponseSchema.parse(response.data)
-      return data
+      let responseData: unknown
+      if (this._isHoudini) {
+        responseData = await this.houdiniRequest('POST', url, payload)
+      } else {
+        const response = await this.axios.post(url, payload)
+        responseData = response.data
+      }
+      return CreateAgentSessionResponseSchema.parse(responseData)
     } catch (error) {
       throw processError(error, 'Failed to add session.')
     }
@@ -221,10 +297,13 @@ export class AgentApiClient {
   public async getSession(agentId: string, sessionId: string): Promise<GetAgentSessionResponse> {
     const url = this.getSessionPaths(agentId).withId(sessionId)
     try {
-      const response = await this.axios.get(url)
-      // const data = GetAgentSessionResponseSchema.parse(response.data)
-      // TODO: enable validation
-      const data = response.data
+      let data: any
+      if (this._isHoudini) {
+        data = await this.houdiniRequest('GET', url)
+      } else {
+        const response = await this.axios.get(url)
+        data = response.data
+      }
       if (sessionId !== data.id) {
         throw new Error('Session ID mismatch in response')
       }
@@ -237,6 +316,10 @@ export class AgentApiClient {
   public async deleteSession(agentId: string, sessionId: string): Promise<void> {
     const url = this.getSessionPaths(agentId).withId(sessionId)
     try {
+      if (this._isHoudini) {
+        await this.houdiniRequest('DELETE', url)
+        return
+      }
       await this.axios.delete(url)
     } catch (error) {
       throw processError(error, 'Failed to delete session.')
@@ -246,6 +329,10 @@ export class AgentApiClient {
   public async deleteSessionMessage(agentId: string, sessionId: string, messageId: number): Promise<void> {
     const url = this.getSessionMessagesPaths(agentId, sessionId).withId(messageId)
     try {
+      if (this._isHoudini) {
+        await this.houdiniRequest('DELETE', url)
+        return
+      }
       await this.axios.delete(url)
     } catch (error) {
       throw processError(error, 'Failed to delete session message.')
@@ -256,8 +343,14 @@ export class AgentApiClient {
     const url = this.getSessionPaths(agentId).withId(session.id)
     try {
       const payload = session satisfies UpdateSessionRequest
-      const response = await this.axios.patch(url, payload)
-      const data = GetAgentSessionResponseSchema.parse(response.data)
+      let responseData: unknown
+      if (this._isHoudini) {
+        responseData = await this.houdiniRequest('PATCH', url, payload)
+      } else {
+        const response = await this.axios.patch(url, payload)
+        responseData = response.data
+      }
+      const data = GetAgentSessionResponseSchema.parse(responseData)
       if (session.id !== data.id) {
         throw new Error('Session ID mismatch in response')
       }
@@ -272,68 +365,95 @@ export class AgentApiClient {
     try {
       const response = await this.axios.get(url)
       const data = ApiModelsResponseSchema.parse(response.data)
-      return data
-    } catch (error) {
-      // Houdini environment fix: get models from local Redux store when agent server is not available
-      // @ts-ignore
-      if (window.api) {
-        logger.warn('AgentApiClient getModels failed (Houdini environment). Falling back to local providers. Error details:', [JSON.stringify(error, Object.getOwnPropertyNames(error))])
-        
-        try {
-          // Access Redux store from window (exposed in store/index.ts)
-          // @ts-ignore
-          const store = window.store
-          if (store) {
-            const state = store.getState()
-            const providers = state?.llm?.providers || []
-            
-            // Filter out centralized providers and only use active providers with valid API keys
-            const activeProviders = providers.filter((provider: any) => {
-              // Check if provider has API key (for providers that need it)
-              const needsApiKey = !['ollama', 'openrouter', 'copilot'].includes(provider.id)
-              if (needsApiKey && !provider.apiKey) return false
-              
-              // Check if provider has models
-              return provider.models && provider.models.length > 0
-            })
-            
-            // Convert local providers/models to API format, avoiding duplicates
-            const seenModelIds = new Set<string>()
-            const apiModels = activeProviders.flatMap((provider: any) => {
-              return (provider.models || [])
-                .filter((model: any) => {
-                  // Skip if we've already seen this model ID
-                  if (seenModelIds.has(model.id)) return false
-                  seenModelIds.add(model.id)
-                  return true
-                })
-                .map((model: any) => ({
-                  id: model.id,
-                  name: model.name || model.id,
-                  provider: provider.id,
-                  provider_name: provider.name,
-                  object: 'model' as const,
-                  created: Math.floor(Date.now() / 1000),
-                  owned_by: 'system'
-                }))
-            })
-            
-            logger.info(`[Houdini] Returning ${apiModels.length} models from ${activeProviders.length} active providers`)
-            return { 
-              object: 'list', 
-              data: apiModels, 
-              total: apiModels.length 
-            }
-          } else {
-            logger.error('[Houdini] Redux store not found on window object')
-          }
-        } catch (localError) {
-          logger.error('[Houdini] Failed to get models from local providers:', localError as Error)
-        }
-        
-        return { object: 'list', data: [], total: 0 }
+      if (!this._isHoudini || (data.data && data.data.length > 0)) {
+        return data
       }
-      throw processError(error, 'Failed to get models.')
+      logger.info('[Houdini] Backend returned empty model list, falling back to local Redux providers')
+    } catch (error) {
+      if (!this._isHoudini) {
+        throw processError(error, 'Failed to get models.')
+      }
+      logger.warn(
+        'AgentApiClient getModels failed (Houdini environment). Falling back to local providers.',
+        error as Error
+      )
     }
+
+    try {
+      // @ts-ignore
+      const store = window.store
+      if (store) {
+        const state = store.getState()
+        const providers = state?.llm?.providers || []
+
+        const enabledProviders = providers.filter(
+          (provider: any) => provider?.enabled && Array.isArray(provider.models) && provider.models.length > 0
+        )
+        const localProviders = enabledProviders.some((provider: any) => provider.id === CHERRYAI_PROVIDER.id)
+          ? enabledProviders
+          : enabledProviders.concat(CHERRYAI_PROVIDER)
+
+        const filteredProviders = localProviders.filter((provider: any) => {
+          if (!Array.isArray(provider.models) || provider.models.length === 0) {
+            return false
+          }
+
+          if (!props?.providerType) {
+            return true
+          }
+
+          if (props.providerType === 'anthropic') {
+            return provider.type === 'anthropic' || !!provider.anthropicApiHost?.trim()
+          }
+
+          return provider.type === props.providerType
+        })
+
+        const uniqueModels = new Map<string, any>()
+        for (const provider of filteredProviders) {
+          for (const model of provider.models || []) {
+            const fullModelId = `${provider.id}:${model.id}`
+            if (uniqueModels.has(fullModelId)) {
+              continue
+            }
+
+            uniqueModels.set(fullModelId, {
+              id: fullModelId,
+              name: model.name || model.id,
+              provider: provider.id,
+              provider_name: provider.name,
+              provider_type: provider.type,
+              provider_model_id: model.id,
+              object: 'model' as const,
+              created: Math.floor(Date.now() / 1000),
+              owned_by: model.owned_by || provider.name || provider.id
+            })
+          }
+        }
+
+        const allModels = Array.from(uniqueModels.values())
+        const offset = props?.offset || 0
+        const total = allModels.length
+        const data =
+          props?.limit !== undefined ? allModels.slice(offset, offset + props.limit) : allModels.slice(offset)
+
+        logger.info(
+          `[Houdini] Returning ${data.length} models from ${filteredProviders.length} enabled local providers`
+        )
+        return {
+          object: 'list',
+          data,
+          total,
+          offset,
+          limit: props?.limit
+        }
+      } else {
+        logger.error('[Houdini] Redux store not found on window object')
+      }
+    } catch (localError) {
+      logger.error('[Houdini] Failed to get models from local providers:', localError as Error)
+    }
+
+    return { object: 'list', data: [], total: 0 }
   }
 }

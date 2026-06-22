@@ -19,11 +19,12 @@ import MinAppPage from './pages/minapps/MinAppPage'
 import MinAppsPage from './pages/minapps/MinAppsPage'
 import NotesPage from './pages/notes/NotesPage'
 import OpenClawPage from './pages/openclaw/OpenClawPage'
-import { useAppSelector } from './store'
 import PaintingsRoutePage from './pages/paintings/PaintingsRoutePage'
+import PluginEmbedPage from './pages/plugins/PluginEmbedPage'
 import SettingsPage from './pages/settings/SettingsPage'
 import AssistantPresetsPage from './pages/store/assistants/presets/AssistantPresetsPage'
 import TranslatePage from './pages/translate/TranslatePage'
+import { useAppSelector } from './store'
 
 const Router: FC = () => {
   const { navbarPosition } = useNavbarPosition()
@@ -41,13 +42,12 @@ const Router: FC = () => {
           <Route path="/files" element={<FilesPage />} />
           <Route path="/notes" element={<NotesPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/plugins/:pluginId" element={<PluginEmbedPage />} />
+          <Route path="/plugins" element={<LaunchpadPage />} />
           <Route path="/apps/:appId" element={<MinAppPage />} />
           <Route path="/apps" element={<MinAppsPage />} />
           <Route path="/code" element={<CodeToolsPage />} />
-          <Route
-            path="/openclaw"
-            element={enableDeveloperMode ? <OpenClawPage /> : <Navigate to="/" replace />}
-          />
+          <Route path="/openclaw" element={enableDeveloperMode ? <OpenClawPage /> : <Navigate to="/" replace />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/launchpad" element={<LaunchpadPage />} />
         </Routes>

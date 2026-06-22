@@ -13,11 +13,12 @@ import { getTitleLabel } from '@renderer/i18n/label'
 import tabsService from '@renderer/services/TabsService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import type { Tab } from '@renderer/store/tabs'
-import { addTab, removeTab, setActiveTab, setTabs } from '@renderer/store/tabs'
+import { addTab, removeTab, setActiveTab, setTabs, updateTab } from '@renderer/store/tabs'
 import type { MinAppType } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import type { LRUCache } from 'lru-cache'
 import {
+  Box,
   FileSearch,
   Folder,
   Home,
@@ -31,7 +32,7 @@ import {
   Terminal,
   X
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
@@ -41,6 +42,14 @@ import MinAppTabsPool from '../MinApp/MinAppTabsPool'
 
 interface TabsContainerProps {
   children: React.ReactNode
+}
+
+type GuiPluginManifest = {
+  id: string
+  name?: string
+  launcher?: {
+    label?: string
+  }
 }
 
 const logger = loggerService.withContext('TabContainer')
@@ -77,6 +86,10 @@ const getTabIcon = (
 
     // Fallback: If no app found (cache evicted), show default icon
     return <LayoutGrid size={14} />
+  }
+
+  if (tabId.startsWith('plugins:')) {
+    return <Box size={14} />
   }
 
   // TODO: Add TabId as type instead of string
@@ -123,14 +136,19 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   // const { settedTheme, toggleTheme } = useTheme() // 已移除主题切换功能
   const { hideMinappPopup, minAppsCache } = useMinappPopup()
   const { minapps } = useMinapps()
+  const [guiPlugins, setGuiPlugins] = useState<GuiPluginManifest[]>([])
   // const { t } = useTranslation() // 已移除主题切换相关翻译
 
   const getTabId = (path: string): string => {
-    if (path === '/') return 'home'
-    const segments = path.split('/')
+    const pathname = path.split('?')[0]
+    if (pathname === '/') return 'home'
+    const segments = pathname.split('/')
     // Handle minapp paths: /apps/appId -> apps:appId
     if (segments[1] === 'apps' && segments[2]) {
       return `apps:${segments[2]}`
+    }
+    if (segments[1] === 'plugins' && segments[2]) {
+      return `plugins:${decodeURIComponent(segments[2])}`
     }
     return segments[1] // 获取第一个路径段作为 id
   }
@@ -157,6 +175,11 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
       // Return app name if found, otherwise use fallback with appId
       return app ? app.name : `MinApp-${appId}`
     }
+    if (tabId.startsWith('plugins:')) {
+      const pluginId = tabId.replace('plugins:', '')
+      const plugin = guiPlugins.find((plugin) => plugin.id === pluginId)
+      return plugin?.launcher?.label || plugin?.name || pluginId
+    }
     return getTitleLabel(tabId)
   }
 
@@ -165,6 +188,38 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
     if (path === '/settings') return false
     return !tabs.some((tab) => tab.id === getTabId(path))
   }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadGuiPlugins = async () => {
+      try {
+        const response = await fetch('/api/v1/plugins/list')
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(result?.error || 'Failed to load plugins')
+        }
+
+        const plugins = Array.isArray(result?.plugins) ? result.plugins : []
+        if (!cancelled) {
+          setGuiPlugins(plugins)
+        }
+      } catch (error) {
+        logger.warn(
+          `Failed to load plugin manifests for tabs: ${error instanceof Error ? error.message : String(error)}`
+        )
+        if (!cancelled) {
+          setGuiPlugins([])
+        }
+      }
+    }
+
+    loadGuiPlugins()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const removeSpecialTabs = useCallback(() => {
     specialTabs.forEach((tabId) => {
@@ -175,12 +230,16 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   }, [activeTabId, dispatch])
 
   useEffect(() => {
-    const tabId = getTabId(location.pathname)
+    const currentPath = `${location.pathname}${location.search}`
+    const tabId = getTabId(currentPath)
     const currentTab = tabs.find((tab) => tab.id === tabId)
 
-    if (!currentTab && shouldCreateTab(location.pathname)) {
-      dispatch(addTab({ id: tabId, path: location.pathname }))
+    if (!currentTab && shouldCreateTab(currentPath)) {
+      dispatch(addTab({ id: tabId, path: currentPath }))
     } else if (currentTab) {
+      if (currentTab.path !== currentPath) {
+        dispatch(updateTab({ id: currentTab.id, updates: { path: currentPath } }))
+      }
       dispatch(setActiveTab(currentTab.id))
     }
 
@@ -189,7 +248,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
       lastSettingsPath = location.pathname
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, location.pathname])
+  }, [dispatch, location.pathname, location.search])
 
   useEffect(() => {
     removeSpecialTabs()
@@ -241,6 +300,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
                 <Tab
                   key={tab.id}
                   active={tab.id === activeTabId}
+                  $closable={isClosable}
                   onClick={() => handleTabClick(tab)}
                   onAuxClick={(e) => {
                     if (e.button === 1 && isClosable) {
@@ -325,7 +385,7 @@ const TabsBar = styled.div<{ $isFullscreen: boolean }>`
   }
 `
 
-const Tab = styled.div<{ active?: boolean }>`
+const Tab = styled.div<{ active?: boolean; $closable?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -339,7 +399,7 @@ const Tab = styled.div<{ active?: boolean }>`
   min-width: 90px;
 
   .close-button {
-    opacity: 0;
+    opacity: ${(props) => (props.active && props.$closable ? 1 : 0)};
     transition: opacity 0.2s;
   }
 

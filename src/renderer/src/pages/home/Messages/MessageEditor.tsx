@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { getSupportedAudioExts } from '@renderer/aiCore/prepareParams/modelCapabilities'
 import { ActionIconButton } from '@renderer/components/Buttons'
 import CustomTag from '@renderer/components/Tags/CustomTag'
 import TranslateButton from '@renderer/components/TranslateButton'
@@ -18,7 +19,7 @@ import { classNames } from '@renderer/utils'
 import { getFilesFromDropEvent, isSendMessageKeyPressed } from '@renderer/utils/input'
 import { createFileBlock, createImageBlock } from '@renderer/utils/messageUtils/create'
 import { findAllBlocks } from '@renderer/utils/messageUtils/find'
-import { documentExts, imageExts, textExts } from '@shared/config/constant'
+import { documentExts, imageExts, textExts, videoExts } from '@shared/config/constant'
 import { Space, Tooltip } from 'antd'
 import type { TextAreaRef } from 'antd/es/input/TextArea'
 import TextArea from 'antd/es/input/TextArea'
@@ -96,17 +97,28 @@ const MessageBlockEditor: FC<Props> = ({ message, topicId, onSave, onResend, onC
     })
   }, [message.id, model, topicMessages])
 
+  const supportedAudioExts = useMemo(() => {
+    const relatedAssistantMessages = topicMessages.filter((m) => m.askId === message.id && m.role === 'assistant')
+    const targetModels =
+      relatedAssistantMessages.length === 0
+        ? [model]
+        : relatedAssistantMessages.map((m) => m.model).filter((m): m is NonNullable<typeof m> => Boolean(m))
+    if (targetModels.length === 0) return []
+    const lists = targetModels.map((m) => getSupportedAudioExts(m))
+    return lists.reduce((acc, cur) => acc.filter((ext) => cur.includes(ext)), lists[0])
+  }, [message.id, model, topicMessages])
+
   const extensions = useMemo(() => {
     if (couldAddImageFile && couldAddTextFile) {
-      return [...imageExts, ...documentExts, ...textExts]
+      return [...imageExts, ...videoExts, ...documentExts, ...textExts, ...supportedAudioExts]
     } else if (couldAddImageFile) {
-      return [...imageExts]
+      return [...imageExts, ...videoExts]
     } else if (couldAddTextFile) {
-      return [...documentExts, ...textExts]
+      return [...documentExts, ...textExts, ...supportedAudioExts]
     } else {
       return []
     }
-  }, [couldAddImageFile, couldAddTextFile])
+  }, [couldAddImageFile, couldAddTextFile, supportedAudioExts])
 
   useEffect(() => {
     const timer = setTimeout(() => {

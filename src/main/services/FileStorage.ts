@@ -15,6 +15,7 @@ import { parseDataUrl } from '@shared/utils'
 import type { FileMetadata, FileType, NotesTreeNode } from '@types'
 import { FILE_TYPE } from '@types'
 import chardet from 'chardet'
+import { spawn } from 'child_process'
 import type { FSWatcher } from 'chokidar'
 import chokidar from 'chokidar'
 import * as crypto from 'crypto'
@@ -784,6 +785,84 @@ class FileStorage {
     const base64 = buffer.toString('base64')
     const mime = `application/${path.extname(filePath).slice(1)}`
     return { data: base64, mime }
+  }
+
+  /**
+   * 通过系统 PATH 上的 ffmpeg 将存储目录里的音频文件转码为压缩格式。
+   *
+   * 默认输出 mp3（64 kbps / 16 kHz / mono），适合发给语音模型且体积小，
+   * 通常能压缩到 wav 的 1/10，避免网关 413。
+   *
+   * @param id storage 内的文件名（含 ext，如 'uuid.m4a'）
+   * @param format 'mp3'（默认）| 'wav'
+   * @returns { base64, mime, ext } 转码后的 base64 数据、MIME 类型与扩展名
+   * @throws 系统未安装 ffmpeg 或转码失败时抛错
+   */
+  public transcodeAudio = async (
+    _: Electron.IpcMainInvokeEvent,
+    id: string,
+    format: 'mp3' | 'wav' = 'mp3'
+  ): Promise<{ base64: string; mime: string; ext: string }> => {
+    const filePath = path.join(this.storageDir, id)
+    await fs.promises.access(filePath, fs.constants.R_OK)
+
+    const outExt = format === 'mp3' ? '.mp3' : '.wav'
+    const tempName = `transcode-${uuidv4()}${outExt}`
+    const outPath = path.join(this.tempDir, tempName)
+
+    const codecArgs =
+      format === 'mp3'
+        ? ['-acodec', 'libmp3lame', '-b:a', '64k', '-ac', '1', '-ar', '16000']
+        : ['-acodec', 'pcm_s16le', '-ac', '1', '-ar', '16000']
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const ffmpegArgs = ['-y', '-i', filePath, '-vn', ...codecArgs, outPath]
+        const proc = spawn('ffmpeg', ffmpegArgs, { windowsHide: true })
+        let stderr = ''
+        proc.stderr?.on('data', (chunk) => {
+          stderr += chunk.toString()
+        })
+        proc.on('error', (err: NodeJS.ErrnoException) => {
+          if (err.code === 'ENOENT') {
+            reject(
+              new Error(
+                '系统未安装 ffmpeg，无法转码音频。请安装 ffmpeg 并加入系统 PATH（推荐 https://www.gyan.dev/ffmpeg/builds/）。'
+              )
+            )
+          } else {
+            reject(err)
+          }
+        })
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-500)}`))
+          }
+        })
+      })
+
+      const buffer = await fs.promises.readFile(outPath)
+      const base64 = buffer.toString('base64')
+      const mime = format === 'mp3' ? 'audio/mp3' : 'audio/wav'
+      logger.info(`transcodeAudio: ${id} -> ${format} (${buffer.length} bytes)`)
+      return { base64, mime, ext: outExt }
+    } finally {
+      try {
+        await fs.promises.unlink(outPath)
+      } catch {
+        // 忽略清理失败
+      }
+    }
+  }
+
+  /**
+   * @deprecated 保留以向后兼容旧 IPC 调用，内部走 `transcodeAudio('wav')`
+   */
+  public transcodeAudioToWav = async (event: Electron.IpcMainInvokeEvent, id: string): Promise<{ base64: string }> => {
+    const { base64 } = await this.transcodeAudio(event, id, 'wav')
+    return { base64 }
   }
 
   public pdfPageCount = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<number> => {

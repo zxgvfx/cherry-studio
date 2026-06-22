@@ -64,6 +64,9 @@ export enum ChunkType {
   MODEL_3D_CREATED = 'model_3d.created',
   MODEL_3D_PROGRESS = 'model_3d.progress',
   MODEL_3D_COMPLETE = 'model_3d.complete',
+  VIDEO_GEN_CREATED = 'video_gen.created',
+  VIDEO_GEN_PROGRESS = 'video_gen.progress',
+  VIDEO_GEN_COMPLETE = 'video_gen.complete',
   RAW = 'raw'
 }
 
@@ -484,6 +487,24 @@ export interface Model3DCompleteChunk {
   format: string
 }
 
+export interface VideoGenCreatedChunk {
+  type: ChunkType.VIDEO_GEN_CREATED
+}
+
+export interface VideoGenProgressChunk {
+  type: ChunkType.VIDEO_GEN_PROGRESS
+  progressText: string
+}
+
+export interface VideoGenCompleteChunk {
+  type: ChunkType.VIDEO_GEN_COMPLETE
+  /**
+   * 可播放的视频地址（通常是后端 /api/v1/files/serve 提供的本地视频，或远端直链）
+   */
+  url: string
+  metadata?: Record<string, any>
+}
+
 export interface RawChunk {
   /**
    * The type of the chunk
@@ -535,4 +556,7 @@ export type Chunk =
   | Model3DCreatedChunk // 3D模型生成开始
   | Model3DProgressChunk // 3D模型生成进度更新
   | Model3DCompleteChunk // 3D模型生成完成
+  | VideoGenCreatedChunk // 视频生成开始
+  | VideoGenProgressChunk // 视频生成进度更新
+  | VideoGenCompleteChunk // 视频生成完成
   | RawChunk

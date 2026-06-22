@@ -4,7 +4,7 @@ import { getLowerBaseModelName, isUserSelectedModelType } from '@renderer/utils'
 
 import { isEmbeddingModel, isRerankModel } from './embedding'
 import { isDeepSeekHybridInferenceModel } from './reasoning'
-import { isTextToImageModel } from './vision'
+import { isGenerateMotionModel, isGenerateVideoModel, isTextToImageModel } from './vision'
 
 // Tool calling models
 export const FUNCTION_CALLING_MODELS = [
@@ -64,11 +64,15 @@ export function isFunctionCallingModel(model?: Model): boolean {
     return false
   }
 
-  // 纯图片模型和3D生成模型不支持函数调用 / MCP
-  if (model.primaryModality === 'image') return false
-  if (model.primaryModality === 'model_3d') return false
+  if (isGenerateMotionModel(model)) return false
+  if (isGenerateVideoModel(model)) return false
+
+  if (model.modality === 'image') return false
+  if (model.modality === 'video') return false
+  if (model.modality === 'model_3d') return false
+  if (model.modality === 'motion') return false
   // 多模态模型支持函数调用 / MCP（跳过 regex 排除列表）
-  if (model.primaryModality === 'multimodal') return true
+  if (model.modality === 'multimodal') return true
 
   const modelId = getLowerBaseModelName(model.id)
 

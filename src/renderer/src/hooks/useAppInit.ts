@@ -7,16 +7,16 @@ import i18n, { setDayjsLocale } from '@renderer/i18n'
 import KnowledgeQueue from '@renderer/queue/KnowledgeQueue'
 import MemoryService from '@renderer/services/MemoryService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
+import { addModel, addProvider, initialState, updateModel } from '@renderer/store/llm'
+import { addMCPServer, updateMCPServer } from '@renderer/store/mcp'
 import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
-import { addModel, updateModel, addProvider, initialState } from '@renderer/store/llm'
-import { addMCPServer, updateMCPServer } from '@renderer/store/mcp'
-import { addWebSearchProvider, updateWebSearchProvider } from '@renderer/store/websearch'
 import {
   type ToolPermissionRequestPayload,
   type ToolPermissionResultPayload,
   toolPermissionsActions
 } from '@renderer/store/toolPermissions'
+import { addWebSearchProvider, updateWebSearchProvider } from '@renderer/store/websearch'
 import { delay, runAsyncFunction } from '@renderer/utils'
 import { checkDataLimit } from '@renderer/utils'
 import { sendToolApprovalNotification } from '@renderer/utils/userConfirmation'
@@ -33,6 +33,36 @@ import { useEnableDeveloperMode, useNavbarPosition, useSettings } from './useSet
 import useUpdateHandler from './useUpdateHandler'
 
 const logger = loggerService.withContext('useAppInit')
+
+/**
+ * Translate the clean centralized-config schema into the internal Model shape.
+ *
+ * Config schema (authoritative, what humans edit):
+ *   - modality:  text | multimodal | image | video | model_3d | motion | embedding | rerank
+ *   - protocol:  openai | openai-response | anthropic | gemini | image-generation | jina-rerank  (optional)
+ *   - stream:    boolean  (optional)
+ *
+ * Internal Model fields used by the rest of the codebase:
+ *   - modality (kept as-is)
+ *   - endpoint_type        ← protocol
+ *   - supported_text_delta ← stream
+ *
+ * Keeping this mapping in one place lets new generative models be added via
+ * config alone, while the (large) existing routing/SDK code keeps using its
+ * established field names.
+ */
+function normalizeCentralizedModel(raw: any): any {
+  if (!raw || typeof raw !== 'object') return raw
+  const { protocol, stream, ...rest } = raw
+  const normalized: any = { ...rest }
+  if (protocol !== undefined && normalized.endpoint_type === undefined) {
+    normalized.endpoint_type = protocol
+  }
+  if (stream !== undefined && normalized.supported_text_delta === undefined) {
+    normalized.supported_text_delta = stream
+  }
+  return normalized
+}
 
 export function useAppInit() {
   const { t } = useTranslation()
@@ -72,7 +102,7 @@ export function useAppInit() {
         // 但在 API 存根中是返回 str，这里需要小心
         // 在 electron_injector.py 中，我们修改了 getMergedConfig: async () => ... return result ? JSON.parse(result) : null;
         // 所以这里拿到的是对象
-        
+
         if (!config) return
 
         const centralizedProviders = config.centralizedProviders || []
@@ -80,45 +110,53 @@ export function useAppInit() {
         // Fallback for old config structure (single provider)
         const oldCentralizedModels = config.centralizedModels || []
         const oldCentralizedProvider = config.centralizedProvider
-        
+
         // Handle new multi-provider structure
         if (centralizedProviders.length > 0) {
-            logger.info('Loading centralized providers:', centralizedProviders)
-            centralizedProviders.forEach((cProvider: any) => {
-                const providerId = cProvider.id || 'centralized-unknown'
-                
-                // Check if provider exists (by ID)
-                const hasProvider = providers.some(p => p.id === providerId)
-                if (!hasProvider) {
-                    dispatch(addProvider({
-                        id: providerId,
-                        name: cProvider.name || 'Centralized',
-                        type: cProvider.type || 'openai',
-                        apiKey: cProvider.apiKey || '',
-                        apiHost: cProvider.apiHost || '',
-                        models: [],
-                        enabled: true,
-                        isSystem: true,
-                        icon: cProvider.icon,
-                        isCentralized: true // Mark provider as centralized
-                    }))
-                } else {
-                   // Update existing provider (e.g. if config changed)
-                   // But be careful not to overwrite user settings if they share ID (unlikely for centralized IDs)
-                   // dispatch(updateProvider({ ...cProvider, id: providerId, isCentralized: true }))
+          logger.info('Loading centralized providers:', centralizedProviders)
+          centralizedProviders.forEach((cProvider: any) => {
+            const providerId = cProvider.id || 'centralized-unknown'
+
+            // Check if provider exists (by ID)
+            const hasProvider = providers.some((p) => p.id === providerId)
+            if (!hasProvider) {
+              dispatch(
+                addProvider({
+                  id: providerId,
+                  name: cProvider.name || 'Centralized',
+                  type: cProvider.type || 'openai',
+                  apiKey: cProvider.apiKey || '',
+                  apiHost: cProvider.apiHost || '',
+                  models: [],
+                  enabled: true,
+                  isSystem: true,
+                  icon: cProvider.icon,
+                  isCentralized: true // Mark provider as centralized
+                })
+              )
+            } else {
+              // Update existing provider (e.g. if config changed)
+              // But be careful not to overwrite user settings if they share ID (unlikely for centralized IDs)
+              // dispatch(updateProvider({ ...cProvider, id: providerId, isCentralized: true }))
+            }
+
+            // Add models for this provider
+            if (cProvider.models && Array.isArray(cProvider.models)) {
+              cProvider.models.forEach((model: any) => {
+                const normalized = normalizeCentralizedModel(model)
+                const modelWithFlag = {
+                  ...normalized,
+                  provider: providerId,
+                  isCentralized: true,
+                  group: cProvider.name || 'Centralized'
                 }
-                
-                // Add models for this provider
-                if (cProvider.models && Array.isArray(cProvider.models)) {
-                    cProvider.models.forEach((model: any) => {
-                        const modelWithFlag = { ...model, provider: providerId, isCentralized: true, group: cProvider.name || 'Centralized' }
-                        dispatch(updateModel({ providerId: providerId, model: modelWithFlag }))
-                        dispatch(addModel({ providerId: providerId, model: modelWithFlag }))
-                    })
-                }
-            })
+                dispatch(updateModel({ providerId: providerId, model: modelWithFlag }))
+                dispatch(addModel({ providerId: providerId, model: modelWithFlag }))
+              })
+            }
+          })
         }
-        
+
         // Handle backward compatibility or mix (old structure)
         if (oldCentralizedModels.length > 0) {
           // Use config from centralized-config.json if available, otherwise default
@@ -126,13 +164,14 @@ export function useAppInit() {
           const centralizedProviderId = centralizedProviderConfig.id || 'centralized'
           const centralizedProviderName = centralizedProviderConfig.name || 'Centralized'
           const centralizedProviderIcon = centralizedProviderConfig.icon
-          
-          const hasCentralizedProvider = providers.some(p => p.id === centralizedProviderId)
+
+          const hasCentralizedProvider = providers.some((p) => p.id === centralizedProviderId)
           if (!hasCentralizedProvider) {
-             dispatch(addProvider({
+            dispatch(
+              addProvider({
                 id: centralizedProviderId,
                 name: centralizedProviderName,
-                type: 'openai', 
+                type: 'openai',
                 apiKey: 'placeholder',
                 apiHost: '',
                 models: [],
@@ -140,70 +179,75 @@ export function useAppInit() {
                 isSystem: true,
                 icon: centralizedProviderIcon,
                 isCentralized: true
-             }))
+              })
+            )
           }
 
           oldCentralizedModels.forEach((model: any) => {
-            const modelWithFlag = { ...model, isCentralized: true }
-            if (model.group === 'Centralized' || model.group === centralizedProviderName || model.group === centralizedProviderId) {
-               dispatch(updateModel({ providerId: centralizedProviderId, model: modelWithFlag }))
-               dispatch(addModel({ providerId: centralizedProviderId, model: modelWithFlag }))
+            const modelWithFlag = { ...normalizeCentralizedModel(model), isCentralized: true }
+            if (
+              model.group === 'Centralized' ||
+              model.group === centralizedProviderName ||
+              model.group === centralizedProviderId
+            ) {
+              dispatch(updateModel({ providerId: centralizedProviderId, model: modelWithFlag }))
+              dispatch(addModel({ providerId: centralizedProviderId, model: modelWithFlag }))
             } else if (model.provider) {
-               dispatch(updateModel({ providerId: model.provider, model: modelWithFlag }))
-               dispatch(addModel({ providerId: model.provider, model: modelWithFlag }))
+              dispatch(updateModel({ providerId: model.provider, model: modelWithFlag }))
+              dispatch(addModel({ providerId: model.provider, model: modelWithFlag }))
             }
           })
         }
-        
+
         // Handle centralized MCP servers
         if (centralizedMcpServers.length > 0) {
-            logger.info('Loading centralized MCP servers:', centralizedMcpServers)
-            centralizedMcpServers.forEach((mcpServer: any) => {
-                const serverWithFlag = { ...mcpServer, isCentralized: true }
-                // Try to update existing server, then add if not exists
-                dispatch(updateMCPServer(serverWithFlag))
-                dispatch(addMCPServer(serverWithFlag))
-            })
+          logger.info('Loading centralized MCP servers:', centralizedMcpServers)
+          centralizedMcpServers.forEach((mcpServer: any) => {
+            const serverWithFlag = { ...mcpServer, isCentralized: true }
+            // Try to update existing server, then add if not exists
+            dispatch(updateMCPServer(serverWithFlag))
+            dispatch(addMCPServer(serverWithFlag))
+          })
         }
 
         // Handle centralized web search providers
         const centralizedWebSearchProviders = config.centralizedWebSearchProviders || []
         if (centralizedWebSearchProviders.length > 0) {
-            logger.info('Loading centralized web search providers:', centralizedWebSearchProviders)
-            centralizedWebSearchProviders.forEach((provider: any) => {
-                // Ensure provider has an ID
-                if (provider.id) {
-                    const providerWithFlag = { ...provider, isCentralized: true }
-                    dispatch(updateWebSearchProvider(providerWithFlag))
-                    dispatch(addWebSearchProvider(providerWithFlag))
-                } else {
-                    logger.warn('Skipping centralized web search provider without ID:', provider)
-                }
-            })
+          logger.info('Loading centralized web search providers:', centralizedWebSearchProviders)
+          centralizedWebSearchProviders.forEach((provider: any) => {
+            // Ensure provider has an ID
+            if (provider.id) {
+              const providerWithFlag = { ...provider, isCentralized: true }
+              dispatch(updateWebSearchProvider(providerWithFlag))
+              dispatch(addWebSearchProvider(providerWithFlag))
+            } else {
+              logger.warn('Skipping centralized web search provider without ID:', provider)
+            }
+          })
         }
 
         // 等待模型加载完成后，处理默认模型配置
         await delay(0.2) // 给 Redux 更多时间更新
-        
+
         // Handle default models from centralized config
         const defaultModels = config.defaultModels || {}
         if (Object.keys(defaultModels).length > 0) {
           logger.info('Found centralized default models config:', defaultModels)
-          
+
           // 获取当前 Redux store 中的 llm state
           const currentState = window.store?.getState?.()?.llm
-          
+
           if (!currentState) {
             logger.warn('Redux store not ready, skipping default models setup')
             return
           }
-          
+
           // 辅助函数：检查用户是否设置了模型（不是初始值）
           const isUserSetModel = (currentModel: any, initialModel: any) => {
             if (!currentModel || !initialModel) return false
             return currentModel.id !== initialModel.id
           }
-          
+
           // 辅助函数：根据 model ID 在所有 providers 中查找模型
           const findModelById = (modelConfig: string | { id: string; provider?: string }, providers: any[]) => {
             const targetId = typeof modelConfig === 'string' ? modelConfig : modelConfig.id
@@ -219,23 +263,27 @@ export function useAppInit() {
             }
             return null
           }
-          
+
           // 获取初始默认模型（用于判断用户是否修改过）
           const initialDefaultModel = initialState.defaultModel
           const initialQuickModel = initialState.quickModel
           const initialTranslateModel = initialState.translateModel
-          
+
           // 获取所有 providers（包括刚加载的中心化 providers）
           const allProviders = currentState.providers || []
-          
+
           logger.info(`Current providers count: ${allProviders.length}`)
-          logger.info(`Looking for models: default=${defaultModels.defaultModel}, quick=${defaultModels.quickModel}, translate=${defaultModels.translateModel}`)
-          
+          logger.info(
+            `Looking for models: default=${defaultModels.defaultModel}, quick=${defaultModels.quickModel}, translate=${defaultModels.translateModel}`
+          )
+
           // 如果用户没有设置 defaultModel，使用中心化配置
           if (defaultModels.defaultModel) {
             const hasUserSetDefaultModel = isUserSetModel(currentState.defaultModel, initialDefaultModel)
-            logger.info(`User has set defaultModel: ${hasUserSetDefaultModel}, current: ${currentState.defaultModel?.id}, initial: ${initialDefaultModel?.id}`)
-            
+            logger.info(
+              `User has set defaultModel: ${hasUserSetDefaultModel}, current: ${currentState.defaultModel?.id}, initial: ${initialDefaultModel?.id}`
+            )
+
             if (!hasUserSetDefaultModel) {
               const centralizedDefaultModel = findModelById(defaultModels.defaultModel, allProviders)
               if (centralizedDefaultModel) {
@@ -248,12 +296,14 @@ export function useAppInit() {
               logger.info('User has custom defaultModel, skipping centralized config')
             }
           }
-          
+
           // 如果用户没有设置 quickModel，使用中心化配置
           if (defaultModels.quickModel) {
             const hasUserSetQuickModel = isUserSetModel(currentState.quickModel, initialQuickModel)
-            logger.info(`User has set quickModel: ${hasUserSetQuickModel}, current: ${currentState.quickModel?.id}, initial: ${initialQuickModel?.id}`)
-            
+            logger.info(
+              `User has set quickModel: ${hasUserSetQuickModel}, current: ${currentState.quickModel?.id}, initial: ${initialQuickModel?.id}`
+            )
+
             if (!hasUserSetQuickModel) {
               const centralizedQuickModel = findModelById(defaultModels.quickModel, allProviders)
               if (centralizedQuickModel) {
@@ -266,12 +316,14 @@ export function useAppInit() {
               logger.info('User has custom quickModel, skipping centralized config')
             }
           }
-          
+
           // 如果用户没有设置 translateModel，使用中心化配置
           if (defaultModels.translateModel) {
             const hasUserSetTranslateModel = isUserSetModel(currentState.translateModel, initialTranslateModel)
-            logger.info(`User has set translateModel: ${hasUserSetTranslateModel}, current: ${currentState.translateModel?.id}, initial: ${initialTranslateModel?.id}`)
-            
+            logger.info(
+              `User has set translateModel: ${hasUserSetTranslateModel}, current: ${currentState.translateModel?.id}, initial: ${initialTranslateModel?.id}`
+            )
+
             if (!hasUserSetTranslateModel) {
               const centralizedTranslateModel = findModelById(defaultModels.translateModel, allProviders)
               if (centralizedTranslateModel) {
@@ -291,7 +343,7 @@ export function useAppInit() {
         logger.error('Failed to load centralized config:', error as Error)
       }
     }
-    
+
     loadCentralizedConfig()
   }, [])
 

@@ -70,6 +70,10 @@ export const getFileIcon = (type?: string) => {
     return <FileTextFilled />
   }
 
+  if (['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a'].includes(ext)) {
+    return <FileTextFilled />
+  }
+
   if (['.url'].includes(ext)) {
     return <LinkOutlined />
   }

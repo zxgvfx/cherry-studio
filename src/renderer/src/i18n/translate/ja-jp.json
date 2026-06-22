@@ -833,6 +833,64 @@
       "file_not_supported_count": "{{count}} 個のファイルはサポートされていません",
       "generate_image": "画像を生成する",
       "generate_image_not_supported": "モデルは画像の生成をサポートしていません。",
+      "gpt_image": {
+        "aspect_ratio": {
+          "16_9_description": "[to be translated]:Widescreen landscape (wallpapers, thumbnails)",
+          "1_1_description": "[to be translated]:Square (avatars, products)",
+          "2_3_description": "[to be translated]:DSLR portrait",
+          "3_2_description": "[to be translated]:DSLR landscape",
+          "3_4_description": "[to be translated]:Classic portrait (book covers)",
+          "4_3_description": "[to be translated]:Classic landscape (slides, cameras)",
+          "9_16_description": "[to be translated]:Widescreen portrait (mobile, Reels)",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Aspect ratio"
+        },
+        "input_images": {
+          "max": "[to be translated]:Image editing supports up to {{count}} input images"
+        },
+        "label": "[to be translated]:Image gen params",
+        "output_count": {
+          "label": "[to be translated]:Output count",
+          "value": "[to be translated]:{{count}} images"
+        },
+        "preview": {
+          "auto": "[to be translated]:auto size",
+          "auto_quality": "[to be translated]:auto quality",
+          "text": "[to be translated]:Generate at {{size}} · {{quality}}",
+          "text_with_count": "[to be translated]:Generate at {{size}} · {{quality}} · {{imageCount}}"
+        },
+        "quality": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model choose (usually high)",
+          "high": "[to be translated]:High",
+          "high_description": "[to be translated]:More detail, slower and more expensive",
+          "label": "[to be translated]:Image quality",
+          "low": "[to be translated]:Low",
+          "low_description": "[to be translated]:Fastest and cheapest output",
+          "medium": "[to be translated]:Medium",
+          "medium_description": "[to be translated]:Balanced speed and quality"
+        },
+        "resolution": {
+          "1k": "[to be translated]:1K",
+          "1k_description": "[to be translated]:Long edge 1024px, fastest & cheapest",
+          "2k": "[to be translated]:2K",
+          "2k_description": "[to be translated]:Long edge 2048px, common quality",
+          "3k": "[to be translated]:3K",
+          "3k_description": "[to be translated]:Long edge 3072px, high definition",
+          "4k": "[to be translated]:4K",
+          "4k_description": "[to be translated]:Long edge 3840px (max), highest detail",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Resolution"
+        },
+        "size": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Decided by model or source image",
+          "fixed_description": "[to be translated]:Generate at {{size}}",
+          "label": "[to be translated]:Image size"
+        }
+      },
       "knowledge_base": "ナレッジベース",
       "new": {
         "context": "コンテキストをクリア {{Command}}"
@@ -1598,7 +1656,10 @@
     "name": "名前",
     "open": "開く",
     "preview": {
-      "error": "ファイルを開くのに失敗しました"
+      "coming_soon": "[to be translated]:{{type}} preview is coming soon",
+      "error": "ファイルを開くのに失敗しました",
+      "model_3d": "[to be translated]:3D Model",
+      "point_cloud": "[to be translated]:Point Cloud"
     },
     "size": "サイズ",
     "text": "テキスト",
@@ -2122,6 +2183,7 @@
       "video": {
         "error": {
           "local_file_missing": "ローカル動画ファイルのパスが見つかりません",
+          "playback_failed": "[to be translated]:Unable to play video: the local file may have been removed, or the remote link has expired",
           "unsupported_type": "サポートされていない動画タイプです",
           "youtube_url_missing": "YouTube動画のURLが見つかりません"
         }
@@ -2370,6 +2432,30 @@
       "pin": "上部ウィンドウ"
     }
   },
+  "model3d": {
+    "download": "[to be translated]:Download model",
+    "exit_fullscreen": "[to be translated]:Exit fullscreen",
+    "fullscreen": "[to be translated]:Fullscreen",
+    "generating": "[to be translated]:Generating 3D model (image-to-3D, may take a few seconds)...",
+    "hint": "[to be translated]:Drag to rotate · Scroll to zoom · Right-click to pan",
+    "import_failed": "[to be translated]:Import to DCC failed",
+    "import_success": "[to be translated]:Imported to DCC",
+    "import_to_dcc": "[to be translated]:Import to DCC",
+    "importing": "[to be translated]:Importing...",
+    "load_error": "[to be translated]:Failed to load 3D model",
+    "no_file": "[to be translated]:No 3D model file available",
+    "no_image": "[to be translated]:Please upload an image (PNG with transparent background recommended) to generate a 3D model",
+    "progress_downloading": "[to be translated]:Downloading model file...",
+    "progress_failed": "[to be translated]:Generation failed",
+    "progress_processing": "[to be translated]:Generating 3D model...",
+    "progress_retry": "[to be translated]:retrying...",
+    "progress_saving": "[to be translated]:Saving model...",
+    "progress_submitted": "[to be translated]:Task submitted, waiting...",
+    "progress_waiting": "[to be translated]:Queued, waiting...",
+    "reset_camera": "[to be translated]:Reset camera",
+    "toggle_material": "[to be translated]:Toggle material",
+    "wireframe": "[to be translated]:Wireframe"
+  },
   "models": {
     "add_parameter": "パラメータを追加",
     "all": "すべて",
@@ -2429,6 +2515,24 @@
       "vision": "画像",
       "websearch": "ウェブ検索"
     }
+  },
+  "motion": {
+    "downloading": "[to be translated]:Downloading animation files...",
+    "focus": "[to be translated]:Focus all",
+    "load_error": "[to be translated]:Failed to load FBX animation",
+    "loading": "[to be translated]:Loading animation...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate motion animation",
+    "pause": "[to be translated]:Pause",
+    "play": "[to be translated]:Play",
+    "processing": "[to be translated]:Generating motion animation...",
+    "retrying": "[to be translated]:retrying...",
+    "settings": {
+      "duration": "[to be translated]:Duration (s)",
+      "title": "[to be translated]:Motion Settings",
+      "variant_count": "[to be translated]:Variants"
+    },
+    "speed": "[to be translated]:Playback speed",
+    "submitted": "[to be translated]:Motion task submitted, waiting..."
   },
   "navbar": {
     "expand": "ダイアログを展開",
@@ -3038,6 +3142,7 @@
       "stars": "スター"
     },
     "standalone_plugins": "スタンドアロンプラグイン",
+    "title": "[to be translated]:Plugin Tools",
     "try_different_search": "検索またはカテゴリフィルターを調整してみてください",
     "type": "タイプ",
     "uninstall": "アンインストール",
@@ -3367,6 +3472,19 @@
       "undo": "取り消す"
     }
   },
+  "sam3": {
+    "complete": "[to be translated]:3D model generation complete",
+    "confirm_generate": "[to be translated]:Generate 3D Model",
+    "generating": "[to be translated]:Generating 3D model...",
+    "launch_error": "[to be translated]:Failed to launch SAM3 annotation window",
+    "manual_mode": "[to be translated]:SAM3 Manual Annotation",
+    "need_image": "[to be translated]:Please attach an image first for SAM3 annotation",
+    "need_image_auto": "[to be translated]:Auto mode requires an attached image",
+    "need_mcp": "[to be translated]:Auto mode requires MCP tools. Please enable MCP (auto or manual mode) in assistant settings.",
+    "retry": "[to be translated]:Retry",
+    "server_unavailable": "[to be translated]:SAM3 server is unavailable",
+    "waiting_annotation": "[to be translated]:Waiting for annotation in SAM3 window..."
+  },
   "selection": {
     "action": {
       "builtin": {
@@ -3620,6 +3738,8 @@
       "model_params": "モデルパラメータ",
       "title": "デフォルトアシスタント"
     },
+    "centralized": "[to be translated]:Managed",
+    "centralized_config_readonly": "[to be translated]:Managed by Administrator",
     "data": {
       "app_data": {
         "copy_data_option": "データをコピーする, 開くと元のディレクトリのデータが新しいディレクトリにコピーされます。",
@@ -4236,7 +4356,11 @@
     "developer": {
       "enable_developer_mode": "開発者モードを有効にする",
       "help": "開発者モードを有効にすると、トレース機能を使用してモデルの呼び出しプロセスにおけるデータフローを確認できるようになります。",
-      "title": "開発者モード"
+      "password_incorrect": "[to be translated]:Incorrect password, please try again",
+      "password_placeholder": "[to be translated]:Developer password",
+      "password_required": "[to be translated]:Enter Developer Password",
+      "title": "開発者モード",
+      "user_not_allowed": "[to be translated]:Current system user is not authorized for developer mode"
     },
     "display": {
       "assistant": {
@@ -4760,6 +4884,10 @@
           "placeholder": "例：GPT-4",
           "tooltip": "例：GPT-4"
         },
+        "stream_output": {
+          "label": "[to be translated]:Stream Output",
+          "tooltip": "[to be translated]:When enabled, this model streams output token-by-token; when disabled, it waits for the full result and returns it at once. Takes priority over the assistant setting."
+        },
         "supported_text_delta": {
           "label": "インクリメンタルテキスト出力のサポート",
           "tooltip": "モデルがテキストをチャンクで返す場合、デフォルトで有効になっています。モデルがサポートしていない場合は、このオプションを無効にしてください"
@@ -4790,6 +4918,13 @@
         "timeout": "タイムアウト",
         "title": "モデル健康チェック",
         "use_all_keys": "キー"
+      },
+      "context_summary": {
+        "enable": "[to be translated]:Enable context summary compression",
+        "enable_tooltip": "[to be translated]:When enabled, earlier conversation turns are compressed into summaries using the Quick Model above, reducing token usage. The model can retrieve full details via a tool.",
+        "full_turns": "[to be translated]:Full content turns",
+        "full_turns_tooltip": "[to be translated]:Number of recent turns to keep full content. Earlier turns use summaries.",
+        "label": "[to be translated]:Context Summary"
       },
       "default_assistant_model": "デフォルトアシスタントモデル",
       "default_assistant_model_description": "新しいアシスタントを作成する際に使用されるモデル。アシスタントがモデルを設定していない場合、このモデルが使用されます",
@@ -5222,6 +5357,26 @@
       "zoom_out": "ズームアウト",
       "zoom_reset": "ズームをリセット"
     },
+    "skills": {
+      "add": "[to be translated]:Add Skill",
+      "contentLabel": "[to be translated]:Content",
+      "contentPlaceholder": "[to be translated]:Enter skill instructions in Markdown",
+      "delete": "[to be translated]:Delete Skill",
+      "deleteConfirm": "[to be translated]:This skill will be permanently deleted. Continue?",
+      "descriptionLabel": "[to be translated]:Description",
+      "descriptionPlaceholder": "[to be translated]:Describe what this skill does",
+      "edit": "[to be translated]:Edit Skill",
+      "empty": "[to be translated]:No skills configured yet",
+      "filePathLabel": "[to be translated]:File Path",
+      "filePathPlaceholder": "[to be translated]:Path to a local .md file",
+      "nameLabel": "[to be translated]:Name",
+      "namePlaceholder": "[to be translated]:Enter skill name",
+      "selectFile": "[to be translated]:Browse",
+      "sourceFile": "[to be translated]:File Reference",
+      "sourceInline": "[to be translated]:Inline Content",
+      "sourceLabel": "[to be translated]:Content Source",
+      "title": "[to be translated]:Skills"
+    },
     "theme": {
       "color_primary": "テーマ色",
       "dark": "ダーク",
@@ -5328,6 +5483,13 @@
             }
           },
           "title": "検索結果の圧縮"
+        },
+        "content_fetch_mode": {
+          "full": "[to be translated]:Fetch Full Content",
+          "help": "[to be translated]:Use 'Snippet Only' mode for internal networks that cannot access external websites to avoid freezing",
+          "label": "[to be translated]:Content Fetch Mode",
+          "snippet": "[to be translated]:Snippet Only (Recommended for Intranet)",
+          "tip": "[to be translated]:Choose how to fetch search result content. 'Snippet Only' uses short summaries returned by the search engine without accessing target websites; 'Fetch Full Content' visits each search result page to get complete content"
         },
         "content_limit": "コンテンツ制限",
         "content_limit_tooltip": "検索結果のコンテンツの長さを制限します。制限を超えるコンテンツは切り捨てられます。",
@@ -5626,6 +5788,15 @@
     "noReleaseNotes": "暫無更新日誌",
     "saveDataError": "データの保存に失敗しました。もう一度お試しください。",
     "title": "更新"
+  },
+  "video": {
+    "download": "[to be translated]:Download video",
+    "downloading": "[to be translated]:Downloading video...",
+    "generating": "[to be translated]:Generating video...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate a video",
+    "processing": "[to be translated]:Generating video...",
+    "retrying": "[to be translated]:retrying...",
+    "submitted": "[to be translated]:Video task submitted, waiting..."
   },
   "warning": {
     "missing_provider": "サプライヤーが存在しないため、デフォルトのサプライヤー {{provider}} にロールバックされました。これにより問題が発生する可能性があります。"

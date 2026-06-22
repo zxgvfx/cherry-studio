@@ -25,7 +25,7 @@ import {
   findToolBlocks,
   getMainTextContent
 } from '@renderer/utils/messageUtils/find'
-import { audioExts as AUDIO_EXTS_CONFIG } from '@shared/config/constant'
+import { audioExts as AUDIO_EXTS_CONFIG, videoExts as VIDEO_EXTS_CONFIG } from '@shared/config/constant'
 import { parseDataUrl } from '@shared/utils'
 import type {
   AssistantModelMessage,
@@ -249,6 +249,7 @@ async function convertMessageToUserModelMessage(
     if (!processed) {
       const lowerExt = file.ext?.toLowerCase() ?? ''
       const isAudio = file.type === FILE_TYPE.AUDIO || AUDIO_EXTS_CONFIG.includes(lowerExt)
+      const isVideo = file.type === FILE_TYPE.VIDEO || VIDEO_EXTS_CONFIG.includes(lowerExt)
 
       if (isAudio) {
         // 音频文件无法做文本提取，跳过并提示（避免去 OCR）
@@ -264,6 +265,19 @@ async function convertMessageToUserModelMessage(
             `(1) 该文件编码不被 Electron 内置解码器支持（多见于 .m4a/AAC）；` +
             `(2) 当前模型/Provider 不支持音频输入。` +
             `建议将音频转换为 .mp3 或 .wav 后再上传。]`
+        })
+      } else if (isVideo) {
+        logger.warn(
+          `Video file ${file.origin_name} could not be sent natively to current model. ` +
+            `Either the model/provider does not support video input, or the file exceeds the native send limit.`
+        )
+        parts.push({
+          type: 'text',
+          text:
+            `[视频文件 ${file.origin_name} 未能发送给当前模型。常见原因：` +
+            `(1) 当前模型/Provider 不支持视频输入；` +
+            `(2) 文件超过该 Provider 的原生上传限制。` +
+            `建议切换到支持视频理解的 Gemini/Google 模型，或压缩视频后重试。]`
         })
       } else {
         const textPart = await convertFileBlockToTextPart(fileBlock)
@@ -565,6 +579,60 @@ function convertSummarizedMessage(
 }
 
 /**
+ * Removes structurally-invalid messages/parts that would make AI SDK's
+ * `standardizePrompt` reject the prompt (AI_InvalidPromptError). This can happen
+ * when a conversation accumulates many tool calls (e.g. repeated web searches) or
+ * when context filtering / truncation leaves a dangling tool result.
+ *
+ * Rules (conservative — only drops what is genuinely invalid):
+ * - assistant: drop tool-call parts missing a non-empty `toolCallId`/`toolName`;
+ *   drop the whole message if its content array ends up empty.
+ * - tool: keep only tool-result parts whose `toolCallId` matches a tool-call from a
+ *   preceding (kept) assistant message; drop the message if nothing valid remains.
+ * - user/system: drop messages whose content is an empty array.
+ */
+export function sanitizeModelMessages(messages: ModelMessage[]): ModelMessage[] {
+  const validToolCallIds = new Set<string>()
+  const result: ModelMessage[] = []
+
+  for (const msg of messages) {
+    if (msg.role === 'assistant') {
+      if (Array.isArray(msg.content)) {
+        const parts = msg.content.filter(
+          (part) =>
+            part.type !== 'tool-call' ||
+            (typeof part.toolCallId === 'string' &&
+              part.toolCallId.length > 0 &&
+              typeof part.toolName === 'string' &&
+              part.toolName.length > 0)
+        )
+        if (parts.length === 0) continue
+        for (const part of parts) {
+          if (part.type === 'tool-call') validToolCallIds.add(part.toolCallId)
+        }
+        result.push({ ...msg, content: parts } as ModelMessage)
+      } else {
+        result.push(msg)
+      }
+    } else if (msg.role === 'tool') {
+      const content = Array.isArray(msg.content) ? (msg.content as ToolResultPart[]) : []
+      const parts = content.filter(
+        (part) =>
+          typeof part.toolCallId === 'string' && part.toolCallId.length > 0 && validToolCallIds.has(part.toolCallId)
+      )
+      if (parts.length === 0) continue
+      result.push({ ...msg, content: parts } as ModelMessage)
+    } else {
+      // user / system
+      if (Array.isArray(msg.content) && msg.content.length === 0) continue
+      result.push(msg)
+    }
+  }
+
+  return result
+}
+
+/**
  * Converts an array of messages to SDK-compatible model messages.
  *
  * This function processes messages and transforms them into the format required by the SDK.
@@ -650,7 +718,7 @@ export async function convertMessagesToSdkMessages(
 
     // If no images to merge, return messages as-is
     if (imageParts.length === 0) {
-      return sdkMessages
+      return sanitizeModelMessages(sdkMessages)
     }
 
     // Build the new last user message with merged images
@@ -670,8 +738,8 @@ export async function convertMessagesToSdkMessages(
     const result = [...sdkMessages]
     result[lastUserSdkIndex] = { role: 'user', content: finalUserParts }
 
-    return result
+    return sanitizeModelMessages(result)
   }
 
-  return sdkMessages
+  return sanitizeModelMessages(sdkMessages)
 }

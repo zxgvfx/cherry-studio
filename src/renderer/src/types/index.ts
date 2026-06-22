@@ -57,6 +57,8 @@ export type Assistant = {
   regularPhrases?: QuickPhrase[] // Added for regular phrase
   tags?: string[] // 助手标签
   enableMemory?: boolean
+  motionCount?: number
+  motionDuration?: number
   // for translate. 更好的做法是定义base assistant，把 Assistant 作为多种不同定义 assistant 的联合类型，但重构代价太大
   content?: string
   targetLanguage?: TranslateLanguage
@@ -190,6 +192,54 @@ export type AssistantSettings = {
   toolUseMode: 'function' | 'prompt'
   maxToolCalls?: number
   enableMaxToolCalls?: boolean
+  /**
+   * gpt-image / gpt-image-1.5 / gpt-image-2 等独立 image endpoint 系列的生图参数。
+   *
+   * 对应文档：
+   *   - 文生图  https://api-gpt-ge.apifox.cn/288964677e0
+   *   - 图生图  https://api-gpt-ge.apifox.cn/210463340e0
+   *
+   * 这些字段会被 `ImageGenerationMiddleware` 注入到 `sdk.images.generate()` / `sdk.images.edit()`。
+   *
+   * 字段都是 optional —— 未设置时 SDK / 网关使用各自默认值（通常是 `auto`）。
+   */
+  gptImage?: GptImageSettings
+}
+
+/**
+ * gpt-image-2 在 gpt.ge 网关下的 `size` 不再是固定 enum，而是 `"WxH"` 自由字符串：
+ *   - 长/宽均 ≤ 3840，必须是 16 的倍数
+ *   - 也可填 `auto` 让模型/原图决定
+ *
+ * UI 上拆成两个维度 `aspectRatio + resolutionTier`，最终请求时由
+ * `computeGptImageSize()` 合成 `"WxH"`。这里仍保留 `size: string` 作为兜底，
+ * 既能在 UI 里展示当前生效值，也方便未来加自定义输入。
+ */
+export type GptImageSize = string
+export type GptImageAspectRatio = 'auto' | '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '3:2' | '2:3'
+/** 长边像素档位；4k 对应 3840（gpt-image-2 上限）。 */
+export type GptImageResolutionTier = 'auto' | '1k' | '2k' | '3k' | '4k'
+export type GptImageQuality = 'auto' | 'high' | 'medium' | 'low'
+export type GptImageBackground = 'auto' | 'transparent' | 'opaque'
+export type GptImageOutputFormat = 'png' | 'jpeg' | 'webp'
+
+export interface GptImageSettings {
+  /**
+   * 当前生效的 size 字符串（`auto` 或 `WxH`）。
+   *
+   * UI 通常通过 `aspectRatio + resolutionTier` 选择，
+   * middleware 发请求时会优先用计算结果；此字段是兜底/展示用。
+   */
+  size?: GptImageSize
+  /** UI 维度 1：宽高比 */
+  aspectRatio?: GptImageAspectRatio
+  /** UI 维度 2：长边档位（1k=1024, 2k=2048, 3k=3072, 4k=3840） */
+  resolutionTier?: GptImageResolutionTier
+  quality?: GptImageQuality
+  background?: GptImageBackground
+  outputFormat?: GptImageOutputFormat
+  /** 1 ~ 10 */
+  n?: number
 }
 
 export type AssistantPreset = Omit<Assistant, 'model'> & {
@@ -284,7 +334,7 @@ export type User = {
 export type ModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
 
 export type ModelTag = Exclude<ModelType, 'text'> | 'free'
-export type ModelPrimaryModality = 'text' | 'multimodal' | 'image' | 'model_3d' | 'embedding' | 'rerank'
+export type ModelModality = 'text' | 'multimodal' | 'image' | 'video' | 'model_3d' | 'motion' | 'embedding' | 'rerank'
 
 // "image-generation" is also openai endpoint, but specifically for image generation.
 export const EndPointTypeSchema = z.enum([
@@ -325,17 +375,32 @@ export type Model = {
    */
   type?: ModelType[]
   /**
-   * Centralized primary modality classification for routing decisions.
+   * Centralized modality classification — the single source of truth for routing.
+   * Set from centralized-config.json `modality`.
    * - text: text/chat models
-   * - multimodal: text + image input models
-   * - image: dedicated image generation/edit models
-   * - embedding/rerank: retrieval models
+   * - multimodal: text + image (and possibly audio/video) input models
+   * - image / video / model_3d / motion: dedicated generation pipelines
+   * - embedding / rerank: retrieval models
    */
-  primaryModality?: ModelPrimaryModality
+  modality?: ModelModality
   pricing?: ModelPricing
+  /**
+   * Internal wire/endpoint kind used by provider & SDK routing.
+   * Fed from centralized-config.json `protocol` via the load-time adapter
+   * (see normalizeCentralizedModel in useAppInit).
+   */
   endpoint_type?: EndpointType
   supported_endpoint_types?: EndpointType[]
+  /**
+   * Internal streaming-capability flag.
+   * Fed from centralized-config.json `stream` via the load-time adapter.
+   */
   supported_text_delta?: boolean
+  /**
+   * 是否开启流式输出（单模型级别覆盖）。
+   * 优先级高于 assistant.settings.streamOutput；未设置时回退到助手设置（默认开启）。
+   */
+  streamOutput?: boolean
   /**
    * 是否为中心化配置的模型（只读）
    */
@@ -675,6 +740,7 @@ export const isAutoDetectionMethod = (method: string): method is AutoDetectionMe
 export type SidebarIcon =
   | 'assistants'
   | 'agents'
+  | 'plugins'
   | 'store'
   | 'paintings'
   | 'translate'
