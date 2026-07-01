@@ -31,7 +31,7 @@ import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 import ManageModelsList from './ManageModelsList'
-import { isModelInProvider, isValidNewApiModel } from './utils'
+import { canAutoAddNewApiModel, isModelInProvider } from './utils'
 
 const logger = loggerService.withContext('ManageModelsPopup')
 
@@ -132,14 +132,19 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
       if (!isEmpty(model.name)) {
         if (isNewApiProvider(provider)) {
           const endpointTypes = model.supported_endpoint_types
-          if (endpointTypes && endpointTypes.length > 0) {
+          if (endpointTypes && endpointTypes.length === 1) {
             addModel({
               ...model,
-              endpoint_type: endpointTypes.includes('image-generation') ? 'image-generation' : endpointTypes[0],
+              endpoint_type: endpointTypes[0],
               supported_text_delta: !isNotSupportTextDeltaModel(model)
             })
           } else {
-            NewApiAddModelPopup.show({ title: t('settings.models.add.add_model'), provider, model })
+            NewApiAddModelPopup.show({
+              title: t('settings.models.add.add_model'),
+              provider,
+              model,
+              endpointType: endpointTypes?.includes('openai') ? 'openai' : endpointTypes?.[0]
+            })
           }
         } else {
           addModel({ ...model, supported_text_delta: !isNotSupportTextDeltaModel(model) })
@@ -163,7 +168,7 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
       centered: true,
       onOk: () => {
         if (isNewApiProvider(provider)) {
-          if (models.every(isValidNewApiModel)) {
+          if (wouldAddModel.every(canAutoAddNewApiModel)) {
             wouldAddModel.forEach(onAddModel)
           } else {
             NewApiBatchAddModelPopup.show({

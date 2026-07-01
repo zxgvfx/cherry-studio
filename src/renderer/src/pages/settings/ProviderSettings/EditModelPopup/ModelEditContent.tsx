@@ -20,7 +20,7 @@ import {
 import { useDynamicLabelWidth } from '@renderer/hooks/useDynamicLabelWidth'
 import type { Model, ModelCapability, ModelType, Provider } from '@renderer/types'
 import { getDefaultGroupName, getDifference, getUnion, uniqueObjectArray } from '@renderer/utils'
-import { isNewApiProvider } from '@renderer/utils/provider'
+import { isEndpointTypeConfigurableProvider } from '@renderer/utils/provider'
 import type { ModalProps } from 'antd'
 import { Button, Divider, Flex, Form, Input, InputNumber, message, Modal, Select, Switch, Tag, Tooltip } from 'antd'
 import { cloneDeep } from 'lodash'
@@ -48,8 +48,19 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   const [supportedTextDelta, setSupportedTextDelta] = useState(model.supported_text_delta)
   const [streamOutput, setStreamOutput] = useState(model.streamOutput ?? true)
   const [hasUserModified, setHasUserModified] = useState(false)
+  const canConfigureEndpointType = isEndpointTypeConfigurableProvider(provider)
 
   const labelWidth = useDynamicLabelWidth([t('settings.models.add.endpoint_type.label')])
+  const endpointOptions = useMemo(
+    () =>
+      endpointTypeOptions.filter((opt) => {
+        if (provider.type === 'openai' || provider.type === 'azure-openai') {
+          return opt.value === 'openai' || opt.value === 'image-generation'
+        }
+        return true
+      }),
+    [provider.type]
+  )
 
   // 自动保存函数
   const autoSave = (overrides?: {
@@ -70,7 +81,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       id: formValues.id || model.id,
       name: formValues.name || model.name,
       group: formValues.group || model.group,
-      endpoint_type: isNewApiProvider(provider) ? formValues.endpointType : model.endpoint_type,
+      endpoint_type: canConfigureEndpointType ? formValues.endpointType : model.endpoint_type,
       capabilities: overrides?.capabilities ?? modelCapabilities,
       supported_text_delta: overrides?.supported_text_delta ?? supportedTextDelta,
       streamOutput: overrides?.streamOutput ?? streamOutput,
@@ -90,7 +101,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       id: values.id || model.id,
       name: values.name || model.name,
       group: values.group || model.group,
-      endpoint_type: isNewApiProvider(provider) ? values.endpointType : model.endpoint_type,
+      endpoint_type: canConfigureEndpointType ? values.endpointType : model.endpoint_type,
       capabilities: modelCapabilities,
       supported_text_delta: supportedTextDelta,
       streamOutput: streamOutput,
@@ -252,7 +263,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       <Form
         form={form}
         disabled={model.isCentralized}
-        labelCol={{ flex: isNewApiProvider(provider) ? labelWidth : '110px' }}
+        labelCol={{ flex: canConfigureEndpointType ? labelWidth : '110px' }}
         labelAlign="left"
         colon={false}
         style={{ marginTop: 15 }}
@@ -260,7 +271,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
           id: model.id,
           name: model.name,
           group: model.group,
-          endpointType: model.endpoint_type,
+          endpointType: model.endpoint_type ?? 'openai',
           input_per_million_tokens: model.pricing?.input_per_million_tokens ?? 0,
           output_per_million_tokens: model.pricing?.output_per_million_tokens ?? 0,
           currencySymbol: symbols.includes(model.pricing?.currencySymbol || '$')
@@ -314,14 +325,14 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
           tooltip={t('settings.models.add.group_name.tooltip')}>
           <Input placeholder={t('settings.models.add.group_name.placeholder')} spellCheck={false} />
         </Form.Item>
-        {isNewApiProvider(provider) && (
+        {canConfigureEndpointType && (
           <Form.Item
             name="endpointType"
             label={t('settings.models.add.endpoint_type.label')}
             tooltip={t('settings.models.add.endpoint_type.tooltip')}
             rules={[{ required: true, message: t('settings.models.add.endpoint_type.required') }]}>
             <Select placeholder={t('settings.models.add.endpoint_type.placeholder')}>
-              {endpointTypeOptions.map((opt) => (
+              {endpointOptions.map((opt) => (
                 <Select.Option key={opt.value} value={opt.value}>
                   {t(opt.label)}
                 </Select.Option>

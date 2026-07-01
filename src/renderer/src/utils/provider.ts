@@ -139,6 +139,10 @@ export const isNewApiProvider = (provider: Provider) => {
   return ['new-api', 'cherryin'].includes(provider.id) || provider.type === 'new-api'
 }
 
+export const isEndpointTypeConfigurableProvider = (provider: Provider) => {
+  return isNewApiProvider(provider) || provider.type === 'openai' || provider.type === 'azure-openai'
+}
+
 export function isCherryAIProvider(provider: Provider): boolean {
   return provider.id === 'cherryai'
 }

@@ -14,7 +14,7 @@ import React, { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
-import { isModelInProvider, isValidNewApiModel } from './utils'
+import { canAutoAddNewApiModel, isModelInProvider } from './utils'
 
 // 列表项类型定义
 interface GroupRowData {
@@ -93,7 +93,7 @@ const ManageModelsList: React.FC<ManageModelsListProps> = ({ modelGroups, provid
           const wouldAddModels = models.filter((model) => !isModelInProvider(provider, model.id))
 
           if (isNewApiProvider(provider)) {
-            if (wouldAddModels.every(isValidNewApiModel)) {
+            if (wouldAddModels.every(canAutoAddNewApiModel)) {
               wouldAddModels.forEach(onAddModel)
             } else {
               NewApiBatchAddModelPopup.show({

@@ -42,6 +42,8 @@ const IMAGE_GENERATION_TIMEOUT = 60 * 1000 * 60
  */
 type GptImageBody = {
   size?: 'auto' | '1024x1024' | '1024x1536' | '1536x1024' | (string & {})
+  aspect_ratio?: string
+  resolution?: '1K' | '2K' | '3K' | '4K'
   quality?: 'auto' | 'high' | 'medium' | 'low'
   background?: 'opaque' | 'transparent'
   output_format?: 'png' | 'jpeg' | 'webp'
@@ -184,6 +186,36 @@ function pickGptImageBodyFields(model: Model | undefined, settings: GptImageSett
   return out
 }
 
+function shouldUseGenericImageRequestParams(model: Model | undefined): boolean {
+  return !!model && model.endpoint_type === 'image-generation' && !model.isCentralized
+}
+
+function isNanoBananaModel(model: Model | undefined): boolean {
+  return /^nano-banana(?:[-.]|$)/.test(model?.id?.toLowerCase() ?? '')
+}
+
+function pickGenericImageBodyFields(model: Model | undefined, settings: GptImageSettings | undefined): GptImageBody {
+  if (!settings) return {}
+  const out: GptImageBody = {}
+  const computed = computeGptImageSize(settings.aspectRatio, settings.resolutionTier)
+  const size =
+    computed && computed !== 'auto' ? computed : settings.size && settings.size !== 'auto' ? settings.size : undefined
+
+  if (size) {
+    out.size = size
+  }
+  if (isNanoBananaModel(model)) {
+    if (settings.aspectRatio && settings.aspectRatio !== 'auto') {
+      out.aspect_ratio = settings.aspectRatio
+    }
+    if (settings.resolutionTier && settings.resolutionTier !== 'auto') {
+      out.resolution = settings.resolutionTier.toUpperCase() as '1K' | '2K' | '3K' | '4K'
+    }
+  }
+
+  return out
+}
+
 export const MIDDLEWARE_NAME = 'ImageGenerationMiddleware'
 
 export const ImageGenerationMiddleware: CompletionsMiddleware =
@@ -260,17 +292,21 @@ export const ImageGenerationMiddleware: CompletionsMiddleware =
           const options = { signal, timeout: IMAGE_GENERATION_TIMEOUT, maxRetries: 0 }
 
           const canEdit = isImageEnhancementModel(assistant.model)
-          // 仅在 gpt-image 家族模型上注入用户设置的 size/quality 等参数；
-          // 其他模型（dall-e-3 等）当前不暴露这些 UI，保持原有行为不变。
-          const gptImageBody = isGptImageModel(assistant.model)
-            ? pickGptImageBodyFields(assistant.model, assistant.settings?.gptImage)
-            : {}
+          const useGenericImageRequestParams = shouldUseGenericImageRequestParams(assistant.model)
+          // 中心化 gpt-image 仍按 OpenAI 官方约束过滤；自定义 image-generation 渠道按网关文档透传通用参数。
+          const gptImageBody =
+            isGptImageModel(assistant.model) && !useGenericImageRequestParams
+              ? pickGptImageBodyFields(assistant.model, assistant.settings?.gptImage)
+              : {}
 
           // OpenAI gpt-image 整个家族（gpt-image-1 / 1.5 / 2 / mini 等）**都不接受** `response_format`
           // 参数 —— 它们固定只能返回 b64_json。给 gpt-image-2 传 `response_format: 'b64_json'`
           // 会被上游回 `400 The requested operation is unsupported`。
           // 因此这里用 `isGptImageModel` 而不是 `id.includes('gpt-image-1')` 来豁免整个家族。
           const isGptImage = isGptImageModel(assistant.model)
+          const genericImageBody = useGenericImageRequestParams
+            ? pickGenericImageBodyFields(assistant.model, assistant.settings?.gptImage)
+            : {}
 
           if (imageFiles.length > 0 && canEdit) {
             const model = assistant.model
@@ -284,7 +320,8 @@ export const ImageGenerationMiddleware: CompletionsMiddleware =
               prompt: prompt || '',
               // size 在 gpt.ge 网关下接受 `WxH` 自由格式（gpt-image-2 文档），
               // 但 OpenAI SDK 类型把 size 限制为 enum。这里把 body 整体 cast 透传。
-              ...(gptImageBody as Record<string, unknown>)
+              ...(gptImageBody as Record<string, unknown>),
+              ...(genericImageBody as Record<string, unknown>)
             }
             const imageMeta = imageFiles.map((image) => ({
               name: image instanceof File ? image.name : undefined,
@@ -310,8 +347,13 @@ export const ImageGenerationMiddleware: CompletionsMiddleware =
               prompt: prompt || '',
               // gpt-image 家族不接受 response_format（只能返回 b64_json）；
               // 其余模型（dall-e-2 / 3）需要显式传 b64_json 以保证我们能拿到本地图片数据。
-              response_format: isGptImage ? undefined : ('b64_json' as const),
-              ...(gptImageBody as Record<string, unknown>)
+              response_format: useGenericImageRequestParams
+                ? ('url' as const)
+                : isGptImage
+                  ? undefined
+                  : ('b64_json' as const),
+              ...(gptImageBody as Record<string, unknown>),
+              ...(genericImageBody as Record<string, unknown>)
             }
             logger.info(`[images.generate] model=${assistant.model.id}, body=${JSON.stringify(generateBody)}`)
             try {

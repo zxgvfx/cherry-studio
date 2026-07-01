@@ -8,3 +8,7 @@ export const isModelInProvider = (provider: Provider, modelId: string): boolean 
 export const isValidNewApiModel = (model: Model): boolean => {
   return !!(model.supported_endpoint_types && model.supported_endpoint_types.length > 0)
 }
+
+export const canAutoAddNewApiModel = (model: Model): boolean => {
+  return model.supported_endpoint_types?.length === 1
+}

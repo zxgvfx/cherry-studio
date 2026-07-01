@@ -6,7 +6,7 @@ import { useProvider } from '@renderer/hooks/useProvider'
 import type { EndpointType, Model, Provider } from '@renderer/types'
 import type { FormProps } from 'antd'
 import { Button, Flex, Form, Modal, Select } from 'antd'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface ShowParams {
@@ -30,6 +30,24 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
   const [form] = Form.useForm()
   const { addModel } = useProvider(provider.id)
   const { t } = useTranslation()
+  const endpointOptions = useMemo(() => {
+    const supportedEndpointTypes = batchModels
+      .map((model) => model.supported_endpoint_types)
+      .filter((types): types is EndpointType[] => !!types?.length)
+
+    if (supportedEndpointTypes.length === 0) return endpointTypeOptions
+
+    const commonEndpointTypes = supportedEndpointTypes.reduce(
+      (common, types) => common.filter((type) => types.includes(type)),
+      supportedEndpointTypes[0]
+    )
+    const allowedEndpointTypes = commonEndpointTypes.length > 0 ? commonEndpointTypes : supportedEndpointTypes[0]
+
+    return endpointTypeOptions.filter((opt) => allowedEndpointTypes.includes(opt.value))
+  }, [batchModels])
+  const defaultEndpointType = endpointOptions.some((opt) => opt.value === 'openai')
+    ? 'openai'
+    : endpointOptions[0]?.value
 
   const onOk = () => {
     setOpen(false)
@@ -79,7 +97,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
         style={{ marginTop: 25 }}
         onFinish={onFinish}
         initialValues={{
-          endpointType: 'openai'
+          endpointType: defaultEndpointType
         }}>
         <Form.Item
           name="endpointType"
@@ -87,7 +105,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
           tooltip={t('settings.models.add.endpoint_type.tooltip')}
           rules={[{ required: true, message: t('settings.models.add.endpoint_type.required') }]}>
           <Select placeholder={t('settings.models.add.endpoint_type.placeholder')}>
-            {endpointTypeOptions.map((opt) => (
+            {endpointOptions.map((opt) => (
               <Select.Option key={opt.value} value={opt.value}>
                 {t(opt.label)}
               </Select.Option>

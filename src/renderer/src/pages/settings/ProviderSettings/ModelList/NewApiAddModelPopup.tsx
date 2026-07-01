@@ -9,7 +9,7 @@ import { isNewApiProvider } from '@renderer/utils/provider'
 import type { FormProps } from 'antd'
 import { Button, Flex, Form, Input, Modal, Select } from 'antd'
 import { find } from 'lodash'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface ShowParams {
@@ -36,6 +36,17 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, model, endp
   const [form] = Form.useForm()
   const { addModel, models } = useProvider(provider.id)
   const { t } = useTranslation()
+  const endpointOptions = useMemo(() => {
+    const supportedEndpointTypes = model?.supported_endpoint_types
+    if (!supportedEndpointTypes?.length) return endpointTypeOptions
+    return endpointTypeOptions.filter((opt) => supportedEndpointTypes.includes(opt.value))
+  }, [model?.supported_endpoint_types])
+  const defaultEndpointType = useMemo(() => {
+    if (endpointType) return endpointType
+    const supportedEndpointTypes = model?.supported_endpoint_types
+    if (supportedEndpointTypes?.includes('openai')) return 'openai'
+    return supportedEndpointTypes?.[0] ?? 'openai'
+  }, [endpointType, model?.supported_endpoint_types])
 
   const onOk = () => {
     setOpen(false)
@@ -75,7 +86,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, model, endp
 
     if (id.includes(',')) {
       const ids = id.split(',')
-      ids.forEach((id) => onAddModel({ id, name: id } as FieldType))
+      ids.forEach((id) => onAddModel({ ...values, id, name: id } as FieldType))
       resolve({})
       return
     }
@@ -109,10 +120,10 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, model, endp
                 id: model.id,
                 name: model.name,
                 group: model.group,
-                endpointType: endpointType ?? 'openai'
+                endpointType: defaultEndpointType
               }
             : {
-                endpointType: endpointType ?? 'openai'
+                endpointType: defaultEndpointType
               }
         }>
         <Form.Item
@@ -148,7 +159,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, model, endp
           tooltip={t('settings.models.add.endpoint_type.tooltip')}
           rules={[{ required: true, message: t('settings.models.add.endpoint_type.required') }]}>
           <Select placeholder={t('settings.models.add.endpoint_type.placeholder')}>
-            {endpointTypeOptions.map((opt) => (
+            {endpointOptions.map((opt) => (
               <Select.Option key={opt.value} value={opt.value}>
                 {t(opt.label)}
               </Select.Option>

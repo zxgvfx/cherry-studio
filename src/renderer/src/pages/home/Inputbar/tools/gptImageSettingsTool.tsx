@@ -9,9 +9,9 @@ const logger = loggerService.withContext('gptImageSettingsTool')
 let lastEvaluatedModelId: string | null = null
 
 /**
- * gpt-image / gpt-image-1.5 / gpt-image-2 系列参数控制器。
+ * image-generation 端点参数控制器。
  *
- * 仅当当前模型是 gpt-image 家族时显示；
+ * gpt-image 家族始终显示；自定义 image-generation 图片模型也显示。
  * 用户选择的 size / quality 等通过 `assistant.settings.gptImage` 持久化，
  * 实际请求由 `ImageGenerationMiddleware` 在调用 `sdk.images.generate` / `sdk.images.edit`
  * 时注入到请求体。
@@ -25,11 +25,12 @@ const gptImageSettingsTool = defineTool({
   label: (t) => t('chat.input.gpt_image.label', { defaultValue: '生图参数' }),
   visibleInScopes: [TopicType.Chat],
   condition: ({ model }) => {
-    const matched = isGptImageModel(model)
+    const matched =
+      isGptImageModel(model) || (!!model && !model.isCentralized && model.endpoint_type === 'image-generation')
     if (model?.id !== lastEvaluatedModelId) {
       lastEvaluatedModelId = model?.id ?? null
       logger.info(
-        `[condition] model.id=${model?.id ?? '<none>'} → ${matched ? 'SHOW gpt-image settings button' : 'hide (not gpt-image)'}`
+        `[condition] model.id=${model?.id ?? '<none>'} → ${matched ? 'SHOW image settings button' : 'hide (not image-generation)'}`
       )
     }
     return matched

@@ -49,7 +49,9 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
   const currentAspectRatio: GptImageAspectRatio = assistant.settings?.gptImage?.aspectRatio ?? 'auto'
   const currentTier: GptImageResolutionTier = assistant.settings?.gptImage?.resolutionTier ?? 'auto'
   const currentQuality: GptImageQuality = assistant.settings?.gptImage?.quality ?? 'auto'
-  const supportsMultipleOutputs = !isGptImage2Model(model)
+  const isGenericImageEndpoint = model.endpoint_type === 'image-generation' && !model.isCentralized
+  const supportsAdvancedParams = !isGenericImageEndpoint
+  const supportsMultipleOutputs = supportsAdvancedParams && !isGptImage2Model(model)
   const currentOutputCount = supportsMultipleOutputs ? (assistant.settings?.gptImage?.n ?? 1) : 1
   const maxInputImages = getImageEditMaxInputImages(model)
 
@@ -68,11 +70,19 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
       }>
     ) => {
       const prev = assistant.settings?.gptImage ?? {}
-      const merged = { ...prev, ...patch }
-      const nextSize = computeGptImageSize(
-        patch.aspectRatio ?? prev.aspectRatio,
-        patch.resolutionTier ?? prev.resolutionTier
-      )
+      const nextAspectRatio =
+        patch.aspectRatio ??
+        (patch.resolutionTier && (!prev.aspectRatio || prev.aspectRatio === 'auto') ? '1:1' : prev.aspectRatio)
+      const nextResolutionTier =
+        patch.resolutionTier ??
+        (patch.aspectRatio && (!prev.resolutionTier || prev.resolutionTier === 'auto') ? '1k' : prev.resolutionTier)
+      const merged = {
+        ...prev,
+        ...patch,
+        aspectRatio: nextAspectRatio,
+        resolutionTier: nextResolutionTier
+      }
+      const nextSize = computeGptImageSize(nextAspectRatio, nextResolutionTier)
       updateAssistantSettings({ gptImage: { ...merged, size: nextSize } })
     },
     [assistant.settings?.gptImage, updateAssistantSettings]
@@ -109,12 +119,17 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
       count: currentOutputCount,
       defaultValue: '{{count}} 张'
     })
+    if (!supportsAdvancedParams) {
+      return t('chat.input.gpt_image.preview.text', '将以 {{size}} 生成', {
+        size: sizePart
+      })
+    }
     return t('chat.input.gpt_image.preview.text_with_count', '将以 {{size}} · {{quality}} · {{imageCount}} 生成', {
       size: sizePart,
       quality: qualityPart,
       imageCount: countPart
     })
-  }, [computedSize, currentOutputCount, currentQuality, qualityLabel, t])
+  }, [computedSize, currentOutputCount, currentQuality, qualityLabel, supportsAdvancedParams, t])
 
   const popoverContent = (
     <PanelRoot>
@@ -171,47 +186,54 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
         </ChipGrid>
       </Section>
 
-      <Section>
-        <SectionTitle>
-          <Sparkles size={14} />
-          <span>{t('chat.input.gpt_image.quality.label', { defaultValue: '图片质量' })}</span>
-        </SectionTitle>
-        <ChipGrid>
-          {GPT_IMAGE_QUALITIES.map((quality) => (
-            <Chip
-              key={quality}
-              type="button"
-              data-active={currentQuality === quality}
-              onClick={() => updateGptImage({ quality })}>
-              {qualityLabel(quality)}
-            </Chip>
-          ))}
-        </ChipGrid>
-      </Section>
+      {supportsAdvancedParams && (
+        <>
+          <Section>
+            <SectionTitle>
+              <Sparkles size={14} />
+              <span>{t('chat.input.gpt_image.quality.label', { defaultValue: '图片质量' })}</span>
+            </SectionTitle>
+            <ChipGrid>
+              {GPT_IMAGE_QUALITIES.map((quality) => (
+                <Chip
+                  key={quality}
+                  type="button"
+                  data-active={currentQuality === quality}
+                  onClick={() => updateGptImage({ quality })}>
+                  {qualityLabel(quality)}
+                </Chip>
+              ))}
+            </ChipGrid>
+          </Section>
 
-      <Section>
-        <SectionTitle>
-          <Hash size={14} />
-          <span>{t('chat.input.gpt_image.output_count.label', { defaultValue: '输出数量' })}</span>
-        </SectionTitle>
-        <ChipGrid>
-          {(supportsMultipleOutputs ? GPT_IMAGE_OUTPUT_COUNTS : [1]).map((count) => (
-            <Chip
-              key={count}
-              type="button"
-              data-active={currentOutputCount === count}
-              onClick={() => updateGptImage({ n: count })}>
-              {t('chat.input.gpt_image.output_count.value', { count, defaultValue: '{{count}} 张' })}
-            </Chip>
-          ))}
-        </ChipGrid>
-      </Section>
+          <Section>
+            <SectionTitle>
+              <Hash size={14} />
+              <span>{t('chat.input.gpt_image.output_count.label', { defaultValue: '输出数量' })}</span>
+            </SectionTitle>
+            <ChipGrid>
+              {(supportsMultipleOutputs ? GPT_IMAGE_OUTPUT_COUNTS : [1]).map((count) => (
+                <Chip
+                  key={count}
+                  type="button"
+                  data-active={currentOutputCount === count}
+                  onClick={() => updateGptImage({ n: count })}>
+                  {t('chat.input.gpt_image.output_count.value', { count, defaultValue: '{{count}} 张' })}
+                </Chip>
+              ))}
+            </ChipGrid>
+          </Section>
+        </>
+      )}
     </PanelRoot>
   )
 
   const ariaLabel = t('chat.input.gpt_image.label', { defaultValue: '生图参数' })
-  const tooltipTitle = `${ariaLabel}  ${computedSize} · ${qualityLabel(currentQuality)} · ${currentOutputCount}`
-  const active = computedSize !== 'auto' || currentQuality !== 'auto' || currentOutputCount !== 1
+  const tooltipTitle = supportsAdvancedParams
+    ? `${ariaLabel}  ${computedSize} · ${qualityLabel(currentQuality)} · ${currentOutputCount}`
+    : `${ariaLabel}  ${computedSize}`
+  const active =
+    computedSize !== 'auto' || (supportsAdvancedParams && (currentQuality !== 'auto' || currentOutputCount !== 1))
 
   return (
     <Popover
