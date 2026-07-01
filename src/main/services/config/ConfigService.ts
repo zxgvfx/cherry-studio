@@ -4,11 +4,11 @@
  */
 
 import { loggerService } from '@logger'
+import type { MCPServer } from '@types'
 
 import { centralizedConfigManager } from './CentralizedConfigManager'
-import type { MergedConfig, ModelConfig } from './types'
+import type { CentralizedConfig, MergedConfig, ModelConfig, UserConfig } from './types'
 import { userConfigManager } from './UserConfigManager'
-import type { MCPServer } from '@types'
 
 const logger = loggerService.withContext('ConfigService')
 
@@ -23,13 +23,13 @@ export class ConfigService {
     try {
       // 先加载中心化配置（只读）
       const centralizedConfig = await centralizedConfigManager.load()
-      
+
       // 再加载用户配置（可读写）
       const userConfig = await userConfigManager.load()
 
       // 合并配置
       this.mergedConfig = this.mergeConfigs(centralizedConfig, userConfig)
-      
+
       logger.info('Config merged successfully', {
         centralizedModels: centralizedConfig.models.length,
         centralizedMcpServers: centralizedConfig.mcpServers.length,
@@ -130,17 +130,14 @@ export class ConfigService {
    * 合并配置
    * 用户配置会覆盖中心化配置中相同ID的项
    */
-  private mergeConfigs(
-    centralized: { models: ModelConfig[]; mcpServers: MCPServer[]; defaultModelSettings?: any },
-    user: { models: ModelConfig[]; mcpServers: MCPServer[]; defaultModelSettings?: any; version?: string; lastUpdated?: string }
-  ): MergedConfig {
+  private mergeConfigs(centralized: CentralizedConfig, user: UserConfig): MergedConfig {
     // 创建ID映射，用于快速查找
     const userModelIds = new Set(user.models.map((m) => m.id))
     const userServerIds = new Set(user.mcpServers.map((s) => s.id))
 
     // 过滤出未被用户配置覆盖的中心化模型
     const centralizedModels = centralized.models.filter((m) => !userModelIds.has(m.id))
-    
+
     // 过滤出未被用户配置覆盖的中心化MCP服务器
     const centralizedMcpServers = centralized.mcpServers.filter((s) => !userServerIds.has(s.id))
 
@@ -153,7 +150,7 @@ export class ConfigService {
     // 合并默认模型设置：用户设置优先，如果用户未设置则使用中心化配置
     const userDefaultSettings = user.defaultModelSettings || {}
     const centralizedDefaultSettings = centralized.defaultModelSettings || {}
-    
+
     const mergedDefaultSettings = {
       quickModel: userDefaultSettings.quickModel || centralizedDefaultSettings.quickModel,
       translateModel: userDefaultSettings.translateModel || centralizedDefaultSettings.translateModel,
@@ -164,10 +161,14 @@ export class ConfigService {
       models: mergedModels,
       mcpServers: mergedMcpServers,
       defaultModelSettings: mergedDefaultSettings,
+      defaultModels: mergedDefaultSettings,
+      centralizedProviders: centralized.centralizedProviders,
+      centralizedWebSearchProviders: centralized.centralizedWebSearchProviders,
       centralizedModels,
       centralizedMcpServers,
       userModels: user.models,
       userMcpServers: user.mcpServers,
+      pythonVenv: centralized.pythonVenv,
       version: user.version || '1.0.0',
       lastUpdated: user.lastUpdated || new Date().toISOString()
     }
@@ -175,4 +176,3 @@ export class ConfigService {
 }
 
 export const configService = new ConfigService()
-

@@ -3,13 +3,13 @@
  * 负责读取中心化配置（只读，不可修改）
  */
 
+import { loggerService } from '@logger'
+import { app } from 'electron'
 import * as fs from 'fs-extra'
 import path from 'path'
 
-import { loggerService } from '@logger'
-import { app } from 'electron'
-
-import type { CentralizedConfig } from './types'
+import { newApiProvisioningService } from './NewApiProvisioningService'
+import type { CentralizedConfig, ProviderConfig } from './types'
 
 const logger = loggerService.withContext('CentralizedConfigManager')
 
@@ -34,10 +34,10 @@ export class CentralizedConfigManager {
         path.join(path.dirname(app.getPath('exe')), 'centralized-config.json'),
         path.join((process as any).resourcesPath, 'centralized-config.json')
       ]
-      
+
       // 默认使用第一个路径
       this.configPath = possiblePaths[0]
-      
+
       // 尝试找到第一个存在的文件
       for (const p of possiblePaths) {
         if (fs.pathExistsSync(p)) {
@@ -46,7 +46,7 @@ export class CentralizedConfigManager {
           break
         }
       }
-      
+
       // 如果没有找到存在的文件，记录日志
       if (!fs.pathExistsSync(this.configPath)) {
         logger.info(`No centralized config found. Will check: ${this.configPath}`)
@@ -72,8 +72,8 @@ export class CentralizedConfigManager {
 
       // 读取配置文件
       const configContent = await fs.readJson(this.configPath)
-      this.config = this.validateAndNormalizeConfig(configContent)
-      
+      this.config = await this.validateAndNormalizeConfig(configContent)
+
       logger.info(`Centralized config loaded from: ${this.configPath}`)
       return this.config
     } catch (error) {
@@ -101,14 +101,16 @@ export class CentralizedConfigManager {
   /**
    * 验证和规范化配置
    */
-  private validateAndNormalizeConfig(config: any): CentralizedConfig {
+  private async validateAndNormalizeConfig(config: any): Promise<CentralizedConfig> {
     const defaultConfig = this.getDefaultConfig()
+
+    const providers = await this.normalizeProviders(config.providers || [])
 
     // 处理 providers 结构（新格式）或 models 数组（旧格式）
     let models: any[] = []
-    if (config.providers && Array.isArray(config.providers)) {
+    if (providers.length > 0) {
       // 从 providers 中提取所有 models
-      config.providers.forEach((provider: any) => {
+      providers.forEach((provider: any) => {
         if (provider.models && Array.isArray(provider.models)) {
           provider.models.forEach((model: any) => {
             models.push({
@@ -132,6 +134,11 @@ export class CentralizedConfigManager {
       isCentralized: true
     }))
 
+    const webSearchProviders = (config.webSearchProviders || []).map((p: any) => ({
+      ...p,
+      isCentralized: true
+    }))
+
     // 支持 defaultModels 或 defaultModelSettings 字段名
     const defaultModelSettings = config.defaultModels || config.defaultModelSettings || {}
 
@@ -143,7 +150,11 @@ export class CentralizedConfigManager {
     return {
       models,
       mcpServers,
+      centralizedProviders: providers,
+      centralizedWebSearchProviders: webSearchProviders,
       defaultModelSettings,
+      defaultModels: defaultModelSettings,
+      pythonVenv: config.pythonVenv,
       version: config.version || '1.0.0',
       lastUpdated: config.lastUpdated || new Date().toISOString()
     }
@@ -156,10 +167,44 @@ export class CentralizedConfigManager {
     return {
       models: [],
       mcpServers: [],
+      centralizedProviders: [],
+      centralizedWebSearchProviders: [],
       defaultModelSettings: {},
+      defaultModels: {},
       version: '1.0.0',
       lastUpdated: new Date().toISOString()
     }
+  }
+
+  private async normalizeProviders(providers: any[]): Promise<ProviderConfig[]> {
+    if (!Array.isArray(providers)) {
+      return []
+    }
+
+    return Promise.all(
+      providers.map(async (provider) => {
+        const centralizedProvider: ProviderConfig = {
+          ...provider,
+          apiKeyMode: provider.apiKeyMode || (provider.apiKey ? 'static' : undefined),
+          models: Array.isArray(provider.models) ? provider.models : [],
+          isCentralized: true
+        }
+
+        if (centralizedProvider.apiKeyMode !== 'per-user-provisioned') {
+          return centralizedProvider
+        }
+
+        try {
+          return await newApiProvisioningService.provisionProvider(centralizedProvider)
+        } catch (error) {
+          logger.error(`Failed to provision NewAPI key for provider ${centralizedProvider.id}: ${error}`)
+          return {
+            ...centralizedProvider,
+            apiKey: ''
+          }
+        }
+      })
+    )
   }
 
   /**
@@ -171,4 +216,3 @@ export class CentralizedConfigManager {
 }
 
 export const centralizedConfigManager = new CentralizedConfigManager()
-
