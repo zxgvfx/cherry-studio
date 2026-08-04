@@ -7,6 +7,7 @@ import type { ReasoningPart } from '@ai-sdk/provider-utils'
 import { loggerService } from '@logger'
 import { getModelPrimaryModality, isImageEnhancementModel, isVisionModel } from '@renderer/config/models'
 import type { ConversationSummary } from '@renderer/services/ConversationSummaryService'
+import { formatImagePlaceholders } from '@renderer/services/ImageContextOffload'
 import type { Message, Model } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import type {
@@ -47,6 +48,16 @@ export interface SummaryOptions {
   splitIndex: number
 }
 
+export interface MessageConversionOptions {
+  /** When true, replace image pixels with lightweight text refs. */
+  offloadImages?: boolean
+}
+
+export interface ConvertMessagesOptions extends Partial<SummaryOptions> {
+  /** Message IDs whose image pixels should be replaced with refs. */
+  offloadImageMessageIds?: Set<string>
+}
+
 const logger = loggerService.withContext('messageConverter')
 
 /**
@@ -81,7 +92,8 @@ function setCachedImage(key: string, value: { base64: string; mime: string }): v
 export async function convertMessageToSdkParam(
   message: Message,
   isVisionModel = false,
-  model?: Model
+  model?: Model,
+  options?: MessageConversionOptions
 ): Promise<ModelMessage | ModelMessage[]> {
   const content = getMainTextContent(message)
   const fileBlocks = findFileBlocks(message)
@@ -90,7 +102,14 @@ export async function convertMessageToSdkParam(
   const mainTextBlocks = findMainTextBlocks(message)
   const toolBlocks = findToolBlocks(message)
   if (message.role === 'user' || message.role === 'system') {
-    return convertMessageToUserModelMessage(content, fileBlocks, imageBlocks, isVisionModel, model)
+    return convertMessageToUserModelMessage(
+      content,
+      fileBlocks,
+      imageBlocks,
+      isVisionModel,
+      model,
+      options?.offloadImages === true
+    )
   } else {
     return convertAssistantWithToolBlocks(
       message,
@@ -158,21 +177,35 @@ async function convertMessageToUserModelMessage(
   fileBlocks: FileMessageBlock[],
   imageBlocks: ImageMessageBlock[],
   isVisionModel = false,
-  model?: Model
+  model?: Model,
+  offloadImages = false
 ): Promise<UserModelMessage | (UserModelMessage | SystemModelMessage)[]> {
   const parts: Array<TextPart | FilePart | ImagePart> = []
-  if (content) {
-    parts.push({ type: 'text', text: content })
+
+  let textContent = content || ''
+  if (offloadImages) {
+    const placeholders = formatImagePlaceholders(imageBlocks, fileBlocks)
+    if (placeholders) {
+      textContent = textContent ? `${textContent}\n\n${placeholders}` : placeholders
+    }
+  }
+
+  if (textContent) {
+    parts.push({ type: 'text', text: textContent })
   }
 
   // 处理图片：只要用户附带了图片就发送给模型，
   // 不再仅限 vision 模型（由 API 端决定是否支持图片输入）
-  if (imageBlocks.length > 0) {
+  // 历史轮次可 offload：只保留文本 ref，避免像素撑爆上下文。
+  if (!offloadImages && imageBlocks.length > 0) {
     parts.push(...(await convertImageBlockToImagePart(imageBlocks)))
   }
   // 处理文件
   for (const fileBlock of fileBlocks) {
     const file = fileBlock.file
+    if (offloadImages && file?.type === FILE_TYPE.IMAGE) {
+      continue
+    }
     let processed = false
 
     // 优先尝试原生文件支持（PDF、图片等）
@@ -661,24 +694,31 @@ export function sanitizeModelMessages(messages: ModelMessage[]): ModelMessage[] 
 export async function convertMessagesToSdkMessages(
   messages: Message[],
   model: Model,
-  summaryOptions?: SummaryOptions
+  conversionOptions?: ConvertMessagesOptions | SummaryOptions
 ): Promise<ModelMessage[]> {
   const sdkMessages: ModelMessage[] = []
   const modality = getModelPrimaryModality(model)
   const isVision = isVisionModel(model) || modality === 'image'
+  const options = conversionOptions as ConvertMessagesOptions | undefined
+  const summaryMap = options?.summaryMap
+  const splitIndex = options?.splitIndex
+  const offloadImageMessageIds = options?.offloadImageMessageIds
+  const hasSummaryZone = summaryMap !== undefined && splitIndex !== undefined && typeof splitIndex === 'number'
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]
 
-    if (summaryOptions && i < summaryOptions.splitIndex) {
-      const converted = convertSummarizedMessage(message, summaryOptions.summaryMap, i, messages)
+    if (hasSummaryZone && summaryMap && i < splitIndex) {
+      const converted = convertSummarizedMessage(message, summaryMap, i, messages)
       if (converted) {
         sdkMessages.push(converted)
         continue
       }
     }
 
-    const sdkMessage = await convertMessageToSdkParam(message, isVision, model)
+    const sdkMessage = await convertMessageToSdkParam(message, isVision, model, {
+      offloadImages: offloadImageMessageIds?.has(message.id)
+    })
     sdkMessages.push(...(Array.isArray(sdkMessage) ? sdkMessage : [sdkMessage]))
   }
   // Special handling for image enhancement / image-generation models

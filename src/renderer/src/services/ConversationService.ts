@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { convertMessagesToSdkMessages } from '@renderer/aiCore/prepareParams'
+import store from '@renderer/store'
 import type { Assistant, Message } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import { applyContextFilters } from '@renderer/utils/messageUtils/filters'
@@ -21,6 +22,12 @@ import {
   getContextSummaryEnabled,
   getContextSummaryFullTurns
 } from './ConversationSummaryService'
+import {
+  countOffloadableImages,
+  DEFAULT_KEEP_FULL_IMAGE_USER_MESSAGES,
+  IMAGE_PLACEHOLDER_TOKEN_ESTIMATE,
+  resolveImageOffloadMessageIds
+} from './ImageContextOffload'
 import { estimateImageTokens } from './TokenService'
 
 const logger = loggerService.withContext('ConversationService')
@@ -53,8 +60,9 @@ export class ConversationService {
    * made the budget blind to images / search results / tool outputs and routinely
    * under-estimated the real payload by a large margin.
    */
-  static estimateMessageTokens(message: Message): number {
+  static estimateMessageTokens(message: Message, options?: { offloadImages?: boolean }): number {
     let tokens = 0
+    const offloadImages = options?.offloadImages === true
 
     const text = getMainTextContent(message)
     if (text) tokens += approximateTokenSize(text)
@@ -62,9 +70,14 @@ export class ConversationService {
     const thinking = getThinkingContent(message)
     if (thinking) tokens += approximateTokenSize(thinking)
 
-    // Inline images (vision input)
-    for (const block of findImageBlocks(message)) {
-      if (block.file) tokens += estimateImageTokens(block.file)
+    if (offloadImages) {
+      // Historical images are sent as short refs, not base64 pixels.
+      tokens += countOffloadableImages(message) * IMAGE_PLACEHOLDER_TOKEN_ESTIMATE
+    } else {
+      // Inline images (vision input)
+      for (const block of findImageBlocks(message)) {
+        if (block.file) tokens += estimateImageTokens(block.file)
+      }
     }
 
     // Attached files (text extraction / native file parts)
@@ -72,7 +85,12 @@ export class ConversationService {
       const file = block.file
       if (!file) continue
       if (file.type === FILE_TYPE.IMAGE) {
-        tokens += estimateImageTokens(file)
+        // Image file blocks are already counted via countOffloadableImages / image blocks
+        // when offloading; when keeping pixels, charge full estimate (skip if also
+        // present as an image block to avoid double-counting).
+        if (offloadImages) continue
+        const duplicatedAsImageBlock = findImageBlocks(message).some((b) => b.file?.id === file.id)
+        if (!duplicatedAsImageBlock) tokens += estimateImageTokens(file)
       } else if (file.type === FILE_TYPE.TEXT) {
         tokens += Math.floor((file.size ?? 0) / TEXT_FILE_BYTES_PER_TOKEN)
       } else {
@@ -113,12 +131,24 @@ export class ConversationService {
   /**
    * Drops the oldest messages when estimated token count exceeds MAX_SAFE_CONTEXT_TOKENS.
    * Always preserves at least the last user message to avoid empty payloads.
+   *
+   * When `offloadImageMessageIds` is provided, those messages are estimated with
+   * lightweight image placeholders so historical text is less likely to be discarded
+   * solely because of attached image pixels.
    */
-  static truncateByTokenBudget(messages: Message[], systemPromptTokens = 0): Message[] {
+  static truncateByTokenBudget(
+    messages: Message[],
+    systemPromptTokens = 0,
+    offloadImageMessageIds?: Set<string>
+  ): Message[] {
     if (messages.length <= 1) return messages
 
     let totalTokens = systemPromptTokens
-    const tokenPerMessage: number[] = messages.map((msg) => ConversationService.estimateMessageTokens(msg))
+    const tokenPerMessage: number[] = messages.map((msg) =>
+      ConversationService.estimateMessageTokens(msg, {
+        offloadImages: offloadImageMessageIds?.has(msg.id)
+      })
+    )
     totalTokens += tokenPerMessage.reduce((sum, t) => sum + t, 0)
 
     if (totalTokens <= MAX_SAFE_CONTEXT_TOKENS) return messages
@@ -161,18 +191,36 @@ export class ConversationService {
     logger.debug('uiMessagesFromPipeline', pipelineMessages)
 
     const systemPromptTokens = assistant.prompt ? approximateTokenSize(assistant.prompt) : 0
-    const truncatedMessages = ConversationService.truncateByTokenBudget(pipelineMessages, systemPromptTokens)
+    const keepFullImageUserTurns =
+      store.getState().settings?.imageContextKeepFullUserTurns ?? DEFAULT_KEEP_FULL_IMAGE_USER_MESSAGES
+
+    // Estimate with provisional offload so large historical images don't force
+    // whole-turn drops; recompute after truncation so the keep-window stays correct.
+    const provisionalOffloadIds = resolveImageOffloadMessageIds(pipelineMessages, keepFullImageUserTurns)
+    const truncatedMessages = ConversationService.truncateByTokenBudget(
+      pipelineMessages,
+      systemPromptTokens,
+      provisionalOffloadIds
+    )
 
     let uiMessages = truncatedMessages
     if ((!uiMessages || uiMessages.length === 0) && lastUserMessage) {
       uiMessages = [lastUserMessage]
     }
 
+    const offloadImageMessageIds = resolveImageOffloadMessageIds(uiMessages, keepFullImageUserTurns)
+    if (offloadImageMessageIds.size > 0) {
+      logger.info(
+        `Offloading image pixels from ${offloadImageMessageIds.size} historical message(s); ` +
+          `text and image refs are preserved`
+      )
+    }
+
     const model = assistant.model || getDefaultModel()
 
     if (!summaryEnabled || uiMessages.length <= 2) {
       return {
-        modelMessages: await convertMessagesToSdkMessages(uiMessages, model),
+        modelMessages: await convertMessagesToSdkMessages(uiMessages, model, { offloadImageMessageIds }),
         uiMessages
       }
     }
@@ -193,7 +241,11 @@ export class ConversationService {
       }
     }
 
-    const modelMessages = await convertMessagesToSdkMessages(uiMessages, model, { summaryMap, splitIndex })
+    const modelMessages = await convertMessagesToSdkMessages(uiMessages, model, {
+      summaryMap,
+      splitIndex,
+      offloadImageMessageIds
+    })
 
     return { modelMessages, uiMessages, hasSummaries }
   }

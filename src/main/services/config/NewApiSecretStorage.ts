@@ -14,12 +14,15 @@ export interface StoredNewApiKey {
   tokenId?: number
   tokenName?: string
   apiKey: string
+  /** NewAPI system access token (PAT), used for management APIs like /api/log/self. */
+  accessToken?: string
   createdAt: string
   lastValidatedAt?: string
 }
 
-interface StoredNewApiKeyPayload extends Omit<StoredNewApiKey, 'apiKey'> {
+interface StoredNewApiKeyPayload extends Omit<StoredNewApiKey, 'apiKey' | 'accessToken'> {
   encryptedApiKey: string
+  encryptedAccessToken?: string
 }
 
 export class NewApiSecretStorage {
@@ -34,9 +37,13 @@ export class NewApiSecretStorage {
     try {
       const payload = (await fs.readJson(filePath)) as StoredNewApiKeyPayload
       const apiKey = safeStorage.decryptString(Buffer.from(payload.encryptedApiKey, 'base64'))
+      const accessToken = payload.encryptedAccessToken
+        ? safeStorage.decryptString(Buffer.from(payload.encryptedAccessToken, 'base64'))
+        : undefined
       return {
         ...payload,
-        apiKey
+        apiKey,
+        accessToken
       }
     } catch (error) {
       logger.warn(`Failed to read NewAPI secret for ${providerId}/${username}`, error as Error)
@@ -48,6 +55,9 @@ export class NewApiSecretStorage {
     await fs.ensureDir(this.secretsDir)
 
     const encryptedApiKey = safeStorage.encryptString(secret.apiKey).toString('base64')
+    const encryptedAccessToken = secret.accessToken
+      ? safeStorage.encryptString(secret.accessToken).toString('base64')
+      : undefined
     const payload: StoredNewApiKeyPayload = {
       providerId: secret.providerId,
       username: secret.username,
@@ -55,6 +65,7 @@ export class NewApiSecretStorage {
       tokenId: secret.tokenId,
       tokenName: secret.tokenName,
       encryptedApiKey,
+      encryptedAccessToken,
       createdAt: secret.createdAt,
       lastValidatedAt: secret.lastValidatedAt
     }

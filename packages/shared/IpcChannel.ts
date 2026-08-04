@@ -74,6 +74,7 @@ export enum IpcChannel {
   Config_UpdateUserModels = 'config:update-user-models',
   Config_UpdateUserMcpServers = 'config:update-user-mcp-servers',
   Config_UpdateDefaultModelSettings = 'config:update-default-model-settings',
+  Config_GetLastRequestCost = 'config:get-last-request-cost',
 
   MiniWindow_Show = 'miniwindow:show',
   MiniWindow_Hide = 'miniwindow:hide',

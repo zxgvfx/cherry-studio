@@ -6,13 +6,15 @@ import {
   GPT_IMAGE_OUTPUT_COUNTS,
   GPT_IMAGE_QUALITIES,
   GPT_IMAGE_RESOLUTION_TIERS,
-  isGptImage2Model
+  isGptImage2Model,
+  isGptImageModel,
+  isNanoBananaModel
 } from '@renderer/config/models/vision'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
 import type { GptImageAspectRatio, GptImageQuality, GptImageResolutionTier, Model } from '@renderer/types'
-import { Popover, Tooltip } from 'antd'
-import { Hash, Image as ImageIcon, Images, Maximize2, Ratio, Sparkles } from 'lucide-react'
+import { Popover, Switch, Tooltip } from 'antd'
+import { Globe, Hash, Image as ImageIcon, Images, Maximize2, Ratio, Sparkles } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -49,10 +51,12 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
   const currentAspectRatio: GptImageAspectRatio = assistant.settings?.gptImage?.aspectRatio ?? 'auto'
   const currentTier: GptImageResolutionTier = assistant.settings?.gptImage?.resolutionTier ?? 'auto'
   const currentQuality: GptImageQuality = assistant.settings?.gptImage?.quality ?? 'auto'
-  const isGenericImageEndpoint = model.endpoint_type === 'image-generation' && !model.isCentralized
-  const supportsAdvancedParams = !isGenericImageEndpoint
+  // quality / n 仅 gpt-image 支持；nano-banana 等通用生图端点只用比例与分辨率
+  const supportsAdvancedParams = isGptImageModel(model)
+  const supportsNanoWebSearch = isNanoBananaModel(model)
   const supportsMultipleOutputs = supportsAdvancedParams && !isGptImage2Model(model)
   const currentOutputCount = supportsMultipleOutputs ? (assistant.settings?.gptImage?.n ?? 1) : 1
+  const currentEnableWebSearch = Boolean(assistant.settings?.gptImage?.enableWebSearch)
   const maxInputImages = getImageEditMaxInputImages(model)
 
   const computedSize = useMemo(
@@ -67,6 +71,7 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
         resolutionTier: GptImageResolutionTier
         quality: GptImageQuality
         n: number
+        enableWebSearch: boolean
       }>
     ) => {
       const prev = assistant.settings?.gptImage ?? {}
@@ -107,10 +112,20 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
     [t]
   )
 
-  // 顶部预览文本：将以 1024x1024 · high · 1张 生成 / 将以 auto 生成
+  // 顶部预览文本：将以 1024x1024 · high · 1张 生成 / 将以 原图比例·2K 生成
   const previewText = useMemo(() => {
-    const sizePart =
-      computedSize === 'auto' ? t('chat.input.gpt_image.preview.auto', { defaultValue: '自动尺寸' }) : computedSize
+    let sizePart: string
+    if (computedSize !== 'auto') {
+      sizePart = computedSize
+    } else if (currentTier && currentTier !== 'auto') {
+      // 比例 auto + 档位明确：请求时按原图比例（图生图）或 1:1（文生图）解析，这里提示用户。
+      sizePart = t('chat.input.gpt_image.preview.follow_source_tier', {
+        tier: tierLabel(currentTier),
+        defaultValue: '原图比例 · {{tier}}'
+      })
+    } else {
+      sizePart = t('chat.input.gpt_image.preview.auto', { defaultValue: '自动尺寸' })
+    }
     const qualityPart =
       currentQuality === 'auto'
         ? t('chat.input.gpt_image.preview.auto_quality', { defaultValue: '自动质量' })
@@ -129,7 +144,16 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
       quality: qualityPart,
       imageCount: countPart
     })
-  }, [computedSize, currentOutputCount, currentQuality, qualityLabel, supportsAdvancedParams, t])
+  }, [
+    computedSize,
+    currentOutputCount,
+    currentQuality,
+    currentTier,
+    qualityLabel,
+    supportsAdvancedParams,
+    t,
+    tierLabel
+  ])
 
   const popoverContent = (
     <PanelRoot>
@@ -186,6 +210,27 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
         </ChipGrid>
       </Section>
 
+      {supportsNanoWebSearch && (
+        <Section>
+          <WebSearchRow>
+            <SectionTitle>
+              <Globe size={14} />
+              <span>{t('chat.input.gpt_image.web_search.label', { defaultValue: '联网搜索' })}</span>
+            </SectionTitle>
+            <Switch
+              size="small"
+              checked={currentEnableWebSearch}
+              onChange={(checked) => updateGptImage({ enableWebSearch: checked })}
+            />
+          </WebSearchRow>
+          <WebSearchHint>
+            {t('chat.input.gpt_image.web_search.hint', {
+              defaultValue: '开启后按 Atlas 报价约 +$0.014 / 张'
+            })}
+          </WebSearchHint>
+        </Section>
+      )}
+
       {supportsAdvancedParams && (
         <>
           <Section>
@@ -233,7 +278,10 @@ const GptImageSettingsButton: FC<Props> = ({ assistantId, model }) => {
     ? `${ariaLabel}  ${computedSize} · ${qualityLabel(currentQuality)} · ${currentOutputCount}`
     : `${ariaLabel}  ${computedSize}`
   const active =
-    computedSize !== 'auto' || (supportsAdvancedParams && (currentQuality !== 'auto' || currentOutputCount !== 1))
+    computedSize !== 'auto' ||
+    (currentTier !== 'auto' && currentAspectRatio === 'auto') ||
+    (supportsNanoWebSearch && currentEnableWebSearch) ||
+    (supportsAdvancedParams && (currentQuality !== 'auto' || currentOutputCount !== 1))
 
   return (
     <Popover
@@ -318,6 +366,21 @@ const SectionTitle = styled.div`
     flex-shrink: 0;
     opacity: 0.7;
   }
+`
+
+const WebSearchRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+`
+
+const WebSearchHint = styled.div`
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+  line-height: 1.35;
+  padding-left: 20px;
 `
 
 const ChipGrid = styled.div`

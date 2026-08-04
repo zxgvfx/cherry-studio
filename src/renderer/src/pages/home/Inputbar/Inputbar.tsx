@@ -28,6 +28,7 @@ import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { CacheService } from '@renderer/services/CacheService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import FileManager from '@renderer/services/FileManager'
+import { ImageCaptionService } from '@renderer/services/ImageCaptionService'
 import { checkRateLimit, getUserMessage } from '@renderer/services/MessagesService'
 import { spanManagerService } from '@renderer/services/SpanManagerService'
 import { estimateTextTokens as estimateTxtTokens, estimateUserPromptUsage } from '@renderer/services/TokenService'
@@ -281,6 +282,8 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       message.traceId = parent?.spanContext().traceId
 
       dispatch(_sendMessage(message, blocks, assistant, topic.id))
+      // Async: caption images for later offloaded context (does not block send).
+      ImageCaptionService.scheduleForBlocks(blocks)
 
       setText('')
       setFiles([])

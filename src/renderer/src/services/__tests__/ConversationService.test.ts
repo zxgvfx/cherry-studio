@@ -211,4 +211,99 @@ describe('ConversationService.estimateMessageTokens', () => {
     // have been a handful of tokens.
     expect(tokens).toBeGreaterThan(1900)
   })
+
+  it('uses lightweight placeholder cost when images are offloaded', () => {
+    const topicId = 'topic-img-offload'
+    const assistantId = 'assistant-img'
+
+    const textBlock = createMainTextBlock('user-offload', 'Look at this image', {
+      status: MessageBlockStatus.SUCCESS
+    })
+    const imageBlock = createImageBlock('user-offload', {
+      status: MessageBlockStatus.SUCCESS,
+      file: {
+        id: 'file-img-offload',
+        name: 'photo.png',
+        origin_name: 'photo.png',
+        path: '/tmp/photo.png',
+        size: 200_000,
+        ext: '.png',
+        type: FILE_TYPE.IMAGE,
+        created_at: new Date().toISOString(),
+        count: 1
+      }
+    })
+    const message = createMessage('user', topicId, assistantId, {
+      id: 'user-offload',
+      blocks: [textBlock.id, imageBlock.id]
+    })
+
+    mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(textBlock))
+    mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(imageBlock))
+
+    const fullTokens = ConversationService.estimateMessageTokens(message)
+    const offloadTokens = ConversationService.estimateMessageTokens(message, { offloadImages: true })
+
+    expect(offloadTokens).toBeLessThan(fullTokens)
+    expect(offloadTokens).toBeLessThan(200)
+  })
+})
+
+describe('ConversationService.truncateByTokenBudget with image offload', () => {
+  beforeEach(() => {
+    mockStore = createMockStore()
+    vi.clearAllMocks()
+  })
+
+  it('prefers keeping historical text when old images are offloaded in the estimate', () => {
+    const topicId = 'topic-budget'
+    const assistantId = 'assistant-budget'
+
+    // ~90KB image ≈ 900 tokens each; three of them plus text still stay under 120k,
+    // so this test focuses on the relative estimate path rather than forcing a drop.
+    const mkUser = (id: string, size: number) => {
+      const text = createMainTextBlock(id, `Question for ${id}`, { status: MessageBlockStatus.SUCCESS })
+      const image = createImageBlock(id, {
+        status: MessageBlockStatus.SUCCESS,
+        file: {
+          id: `file-${id}`,
+          name: `${id}.png`,
+          origin_name: `${id}.png`,
+          path: `/tmp/${id}.png`,
+          size,
+          ext: '.png',
+          type: FILE_TYPE.IMAGE,
+          created_at: new Date().toISOString(),
+          count: 1
+        }
+      })
+      mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(text))
+      mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(image))
+      return createMessage('user', topicId, assistantId, { id, blocks: [text.id, image.id] })
+    }
+
+    const oldUser = mkUser('user-old', 80_000_000) // ~800k tokens if counted fully
+    const midText = createMainTextBlock('assistant-mid', 'Mid answer with important facts', {
+      status: MessageBlockStatus.SUCCESS
+    })
+    mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(midText))
+    const midAssistant = createMessage('assistant', topicId, assistantId, {
+      id: 'assistant-mid',
+      askId: 'user-old',
+      blocks: [midText.id]
+    })
+    const recentUser = mkUser('user-recent', 50_000)
+
+    const offloadIds = new Set(['user-old'])
+    const kept = ConversationService.truncateByTokenBudget([oldUser, midAssistant, recentUser], 0, offloadIds)
+
+    // With offload, the huge historical image should not force dropping the mid text turn.
+    expect(kept.map((m) => m.id)).toEqual(['user-old', 'assistant-mid', 'user-recent'])
+
+    const withoutOffload = ConversationService.truncateByTokenBudget([oldUser, midAssistant, recentUser], 0)
+    // Without offload the 80MB image estimate exceeds the 120k safety budget and
+    // drops the oldest image-bearing user turn first.
+    expect(withoutOffload.map((m) => m.id)).toEqual(['assistant-mid', 'user-recent'])
+    expect(withoutOffload.find((m) => m.id === 'user-old')).toBeUndefined()
+  })
 })

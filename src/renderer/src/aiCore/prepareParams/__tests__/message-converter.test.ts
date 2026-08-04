@@ -187,6 +187,29 @@ describe('messageConverter', () => {
       })
     })
 
+    it('replaces image pixels with text refs when offloadImages is enabled', async () => {
+      const model = createModel()
+      const message = createMessage('user')
+      message.__mockContent = 'Describe this picture'
+      message.__mockImageBlocks = [createImageBlock(message.id, { url: 'https://example.com/cat.png' })]
+
+      const result = await convertMessageToSdkParam(message, true, model, { offloadImages: true })
+
+      expect(result).toEqual({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: expect.stringContaining('Describe this picture')
+          }
+        ]
+      })
+      const text = (result as { content: Array<{ type: string; text?: string }> }).content[0].text || ''
+      expect(text).toContain('[Image ref url=https://example.com/cat.png')
+      expect(text).toContain('builtin_get_conversation_image')
+      expect(text).not.toContain('https://example.com/cat.png\n')
+    })
+
     it('extracts base64 data from data URLs and preserves mediaType', async () => {
       const model = createModel()
       const message = createMessage('user')

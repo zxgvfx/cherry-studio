@@ -454,7 +454,14 @@ const api = {
     getMergedConfig: () => ipcRenderer.invoke(IpcChannel.Config_GetMergedConfig),
     reload: () => ipcRenderer.invoke(IpcChannel.Config_Reload),
     updateUserModels: (models: any[]) => ipcRenderer.invoke(IpcChannel.Config_UpdateUserModels, models),
-    updateUserMcpServers: (servers: any[]) => ipcRenderer.invoke(IpcChannel.Config_UpdateUserMcpServers, servers)
+    updateUserMcpServers: (servers: any[]) => ipcRenderer.invoke(IpcChannel.Config_UpdateUserMcpServers, servers),
+    getLastRequestCost: (params: {
+      providerId: string
+      modelName?: string
+      promptTokens?: number
+      completionTokens?: number
+      sinceTs?: number
+    }) => ipcRenderer.invoke(IpcChannel.Config_GetLastRequestCost, params)
   },
   miniWindow: {
     show: () => ipcRenderer.invoke(IpcChannel.MiniWindow_Show),

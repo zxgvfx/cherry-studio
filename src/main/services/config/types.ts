@@ -15,6 +15,18 @@ export interface NewApiProvisioningConfig {
   endpoint?: string
   /** Shared secret sent as X-Provision-Secret to the provisioning endpoint. */
   secret?: string
+  /** Per-request monetary cost tracking via NewAPI /api/log/self. */
+  costTracking?: CostTrackingConfig
+}
+
+export interface CostTrackingConfig {
+  enabled?: boolean
+  /** Currency symbol shown in the UI, e.g. '¥' or '$'. */
+  currency?: string
+  /** How many internal quota units equal 1 USD — fetched from GET /api/status when omitted. */
+  quotaPerUnit?: number
+  /** Legacy alias; prefer site usd_exchange_rate from GET /api/status. */
+  cnyPerUsd?: number
 }
 
 /**

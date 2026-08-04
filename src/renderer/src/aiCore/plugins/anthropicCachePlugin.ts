@@ -9,7 +9,11 @@ import type { Provider } from '@renderer/types'
 import type { LanguageModelMiddleware } from 'ai'
 
 const cacheProviderOptions = {
-  anthropic: { cacheControl: { type: 'ephemeral' } }
+  // Native Anthropic and OpenRouter providers consume the camelCase option.
+  anthropic: { cacheControl: { type: 'ephemeral' } },
+  // The OpenAI-compatible SDK copies this metadata onto the outgoing
+  // message/content part. NewAPI then forwards `cache_control` to Claude.
+  openaiCompatible: { cache_control: { type: 'ephemeral' } }
 }
 
 function estimateContentTokens(content: LanguageModelV3Message['content']): number {

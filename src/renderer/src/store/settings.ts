@@ -250,6 +250,10 @@ export interface SettingsState {
   showMessageOutline: boolean
   contextSummaryEnabled: boolean
   contextSummaryFullTurns: number
+  /** Auto-caption uploaded images with the quick (vision) model for offloaded context. */
+  imageCaptionEnabled: boolean
+  /** Keep full image pixels for this many most-recent user messages. */
+  imageContextKeepFullUserTurns: number
 }
 
 export type MultiModelMessageStyle = 'horizontal' | 'vertical' | 'fold' | 'grid'
@@ -453,7 +457,9 @@ export const initialState: SettingsState = {
   },
   showMessageOutline: false,
   contextSummaryEnabled: false,
-  contextSummaryFullTurns: 2
+  contextSummaryFullTurns: 2,
+  imageCaptionEnabled: true,
+  imageContextKeepFullUserTurns: 2
 }
 
 const settingsSlice = createSlice({
@@ -909,6 +915,12 @@ const settingsSlice = createSlice({
     },
     setContextSummaryFullTurns: (state, action: PayloadAction<number>) => {
       state.contextSummaryFullTurns = Math.max(1, Math.floor(action.payload))
+    },
+    setImageCaptionEnabled: (state, action: PayloadAction<boolean>) => {
+      state.imageCaptionEnabled = action.payload
+    },
+    setImageContextKeepFullUserTurns: (state, action: PayloadAction<number>) => {
+      state.imageContextKeepFullUserTurns = Math.min(20, Math.max(1, Math.floor(action.payload)))
     }
   }
 })
@@ -1042,6 +1054,8 @@ export const {
   setShowMessageOutline,
   setContextSummaryEnabled,
   setContextSummaryFullTurns,
+  setImageCaptionEnabled,
+  setImageContextKeepFullUserTurns,
   // API Server actions
   setApiServerEnabled,
   setApiServerPort,

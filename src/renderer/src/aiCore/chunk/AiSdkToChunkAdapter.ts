@@ -652,7 +652,10 @@ export class AiSdkToChunkAdapter {
         const usage = {
           completion_tokens: chunk.totalUsage?.outputTokens || 0,
           prompt_tokens: chunk.totalUsage?.inputTokens || 0,
-          total_tokens: chunk.totalUsage?.totalTokens || 0
+          total_tokens: chunk.totalUsage?.totalTokens || 0,
+          prompt_tokens_details: {
+            cached_tokens: chunk.totalUsage?.inputTokenDetails?.cacheReadTokens || 0
+          }
         }
         const metrics = this.buildMetrics(chunk.totalUsage)
         const baseResponse = {

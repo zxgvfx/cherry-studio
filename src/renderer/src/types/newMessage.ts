@@ -106,6 +106,8 @@ export interface ImageMessageBlock extends BaseMessageBlock {
     prompt?: string
     negativePrompt?: string
     generateImageResponse?: GenerateImageResponse
+    /** Short vision caption generated at upload time for offloaded context refs. */
+    imageCaption?: string
   }
 }
 

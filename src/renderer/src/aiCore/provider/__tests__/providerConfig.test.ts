@@ -82,7 +82,7 @@ import { formatApiHost } from '@renderer/utils/api'
 import { isAzureOpenAIProvider, isCherryAIProvider, isPerplexityProvider } from '@renderer/utils/provider'
 
 import { COPILOT_DEFAULT_HEADERS, COPILOT_EDITOR_VERSION, isCopilotResponsesModel } from '../constants'
-import { getActualProvider, providerToAiSdkConfig } from '../providerConfig'
+import { adaptProvider, getActualProvider, providerToAiSdkConfig } from '../providerConfig'
 
 const { __mockGetState: mockGetState } = vi.mocked(await import('@renderer/store')) as any
 
@@ -351,6 +351,65 @@ describe('Perplexity provider configuration', () => {
 
     expect(formatApiHost).toHaveBeenCalledWith('', false)
     expect(actualProvider.apiHost).toBe('')
+  })
+})
+
+describe('Centralized provider per-model protocol routing', () => {
+  const provider: Provider = {
+    id: 'coco-vapi',
+    type: 'openai',
+    name: 'Coco VAPI',
+    apiKey: 'test-key',
+    apiHost: 'https://gateway.example.com',
+    models: [],
+    isSystem: true,
+    isCentralized: true
+  }
+
+  beforeEach(() => {
+    mockGetState.mockReturnValue({
+      settings: { openAI: { streamOptions: { includeUsage: true } } }
+    })
+  })
+
+  it.each([
+    ['openai-response', 'openai-response'],
+    ['anthropic', 'anthropic'],
+    ['gemini', 'gemini'],
+    ['openai', 'openai']
+  ] as const)('routes endpoint type %s to provider type %s', (endpointType, expectedType) => {
+    const model = {
+      ...createModel('test-model', 'Test Model', provider.id),
+      endpoint_type: endpointType
+    } as Model
+
+    expect(adaptProvider({ provider, model }).type).toBe(expectedType)
+  })
+
+  it('keeps OpenAI as the fallback when protocol is omitted', () => {
+    expect(adaptProvider({ provider, model: createModel('test-model', 'Test Model', provider.id) }).type).toBe('openai')
+  })
+
+  it('builds GPT native Responses configuration', () => {
+    const model = {
+      ...createModel('gpt-5.6-sol', 'GPT 5.6 Sol', provider.id),
+      endpoint_type: 'openai-response'
+    } as Model
+    const adapted = adaptProvider({ provider, model })
+    const config = providerToAiSdkConfig(adapted, model)
+
+    expect(config.providerId).toBe('openai')
+    expect(config.options.mode).toBe('responses')
+  })
+
+  it('builds Claude native Anthropic configuration', () => {
+    const model = {
+      ...createModel('claude-sonnet-5', 'Claude Sonnet 5', provider.id),
+      endpoint_type: 'anthropic'
+    } as Model
+    const adapted = adaptProvider({ provider, model })
+
+    expect(providerToAiSdkConfig(adapted, model).providerId).toBe('anthropic')
   })
 })
 

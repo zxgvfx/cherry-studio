@@ -204,6 +204,11 @@ export type AssistantSettings = {
    * 字段都是 optional —— 未设置时 SDK / 网关使用各自默认值（通常是 `auto`）。
    */
   gptImage?: GptImageSettings
+  /**
+   * Atlas Seedance 等文生视频参数（经本地 generate-video → NewAPI → video adapter）。
+   * 未设置时使用合理默认：5s / 720p / adaptive / 有声。
+   */
+  videoGen?: VideoGenSettings
 }
 
 /**
@@ -240,6 +245,29 @@ export interface GptImageSettings {
   outputFormat?: GptImageOutputFormat
   /** 1 ~ 10 */
   n?: number
+  /**
+   * Nano Banana：Atlas `enable_web_search`（联网 grounding）。
+   * 开启后按 Atlas 报价约 +$0.014 / 张。
+   */
+  enableWebSearch?: boolean
+}
+
+/** Seedance / Atlas generateVideo 时长（秒）；官网支持 4–15，也可传 -1 由模型决定（MVP UI 用固定秒数）。 */
+export type VideoGenDuration = 4 | 5 | 6 | 8 | 10 | 12 | 15
+export type VideoGenResolution = '480p' | '720p'
+export type VideoGenRatio = 'adaptive' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9'
+/** Atlas bitrate_mode：不影响 token/价格，只影响文件码率。 */
+export type VideoGenBitrateMode = 'standard' | 'high'
+
+export interface VideoGenSettings {
+  duration?: VideoGenDuration
+  resolution?: VideoGenResolution
+  ratio?: VideoGenRatio
+  generateAudio?: boolean
+  bitrateMode?: VideoGenBitrateMode
+  watermark?: boolean
+  /** 是否额外返回尾帧图片（一般不影响视频时长计费） */
+  returnLastFrame?: boolean
 }
 
 export type AssistantPreset = Omit<Assistant, 'model'> & {
@@ -295,8 +323,11 @@ export type LegacyMessage = {
 
 export type Usage = OpenAI.Completions.CompletionUsage & {
   thoughts_tokens?: number
-  // OpenRouter specific fields
+  // Actual money cost of the request. Set by OpenRouter (usage.cost) or, for
+  // centralized NewAPI providers, resolved post-hoc from /api/log/self.
   cost?: number
+  // Currency symbol for `cost` (e.g. '¥', '$'). Defaults to '$' when absent.
+  cost_currency?: string
 }
 
 export type Metrics = {

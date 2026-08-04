@@ -2,13 +2,13 @@ import type { AiPlugin } from '@cherrystudio/ai-core'
 import { createPromptToolUsePlugin, webSearchPlugin } from '@cherrystudio/ai-core/built-in/plugins'
 import { loggerService } from '@logger'
 import { isGemini3Model, isQwen35Model, isSupportedThinkingTokenQwenModel } from '@renderer/config/models'
-import { isEmpty } from 'lodash'
 import { getEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import store from '@renderer/store'
 import { selectEnabledSkills } from '@renderer/store/skills'
 import type { Assistant, Model, Provider } from '@renderer/types'
 import { SystemProviderIds } from '@renderer/types'
 import { isOllamaProvider, isSupportEnableThinkingProvider } from '@renderer/utils/provider'
+import { isEmpty } from 'lodash'
 
 import type { AiSdkMiddlewareConfig } from '../types/middlewareConfig'
 import { isOpenRouterGeminiGenerateImageModel } from '../utils/image'
@@ -74,7 +74,11 @@ export function buildPlugins({ provider, model, config }: BuildPluginsContext): 
     plugins.push(createSimulateStreamingPlugin())
   }
 
-  if (provider.anthropicCacheControl?.tokenThreshold) {
+  // A centralized provider can host mixed model families. Only Claude accepts
+  // Anthropic cache breakpoints; sending them to GPT/DeepSeek/Gemini can make
+  // an OpenAI-compatible gateway reject the request.
+  const isClaudeModel = `${model.id} ${model.name}`.toLowerCase().includes('claude')
+  if (isClaudeModel && provider.anthropicCacheControl?.tokenThreshold) {
     plugins.push(createAnthropicCachePlugin(provider))
   }
 

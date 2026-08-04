@@ -17,14 +17,16 @@ const MessageTokens: React.FC<MessageTokensProps> = ({ message }) => {
   }
 
   const getPrice = () => {
+    // Actual money cost reported by the gateway (OpenRouter usage.cost, or a
+    // centralized NewAPI provider resolved via /api/log/self). Prefer it over
+    // any local token-based estimate.
+    if (message?.usage?.cost !== undefined) {
+      return message.usage.cost
+    }
+
     const inputTokens = message?.usage?.prompt_tokens ?? 0
     const outputTokens = message?.usage?.completion_tokens ?? 0
     const model = message.model
-
-    // For OpenRouter, use the cost directly from usage if available
-    if (model?.provider === 'openrouter' && message?.usage?.cost !== undefined) {
-      return message.usage.cost
-    }
 
     if (!model || model.pricing?.input_per_million_tokens === 0 || model.pricing?.output_per_million_tokens === 0) {
       return 0
@@ -38,15 +40,10 @@ const MessageTokens: React.FC<MessageTokensProps> = ({ message }) => {
 
   const getPriceString = () => {
     const price = getPrice()
-    if (price === 0) {
+    if (!price || price <= 0) {
       return ''
     }
-    // For OpenRouter, always show cost even without pricing config
-    const shouldShowCost = message.model?.provider === 'openrouter' || price > 0
-    if (!shouldShowCost) {
-      return ''
-    }
-    const currencySymbol = message.model?.pricing?.currencySymbol || '$'
+    const currencySymbol = message.usage?.cost_currency || message.model?.pricing?.currencySymbol || '$'
     return `| ${t('models.price.cost')}: ${currencySymbol}${price.toFixed(6)}`
   }
 
@@ -65,6 +62,7 @@ const MessageTokens: React.FC<MessageTokensProps> = ({ message }) => {
   if (message.role === 'assistant') {
     let metrixs = ''
     let hasMetrics = false
+    const cachedTokens = message.usage.prompt_tokens_details?.cached_tokens ?? 0
     if (message?.metrics?.completion_tokens && message?.metrics?.time_completion_millsec) {
       hasMetrics = true
       metrixs = t('settings.messages.metrics', {
@@ -80,6 +78,7 @@ const MessageTokens: React.FC<MessageTokensProps> = ({ message }) => {
         Tokens:
         <span>{message?.usage?.total_tokens}</span>
         <span>↑{message?.usage?.prompt_tokens}</span>
+        {cachedTokens > 0 && <span>{t('settings.messages.cache_hit', { count: cachedTokens })}</span>}
         <span>↓{message?.usage?.completion_tokens}</span>
         <span>{getPriceString()}</span>
       </span>

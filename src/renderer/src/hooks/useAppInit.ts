@@ -7,7 +7,7 @@ import i18n, { setDayjsLocale } from '@renderer/i18n'
 import KnowledgeQueue from '@renderer/queue/KnowledgeQueue'
 import MemoryService from '@renderer/services/MemoryService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
-import { addModel, addProvider, initialState, updateModel } from '@renderer/store/llm'
+import { addModel, addProvider, initialState, updateModel, updateProvider } from '@renderer/store/llm'
 import { addMCPServer, updateMCPServer } from '@renderer/store/mcp'
 import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
@@ -122,6 +122,7 @@ export function useAppInit() {
             if (!hasProvider) {
               dispatch(
                 addProvider({
+                  ...cProvider,
                   id: providerId,
                   name: cProvider.name || 'Centralized',
                   type: cProvider.type || 'openai',
@@ -134,10 +135,17 @@ export function useAppInit() {
                   isCentralized: true // Mark provider as centralized
                 })
               )
-            } else {
-              // Update existing provider (e.g. if config changed)
-              // But be careful not to overwrite user settings if they share ID (unlikely for centralized IDs)
-              // dispatch(updateProvider({ ...cProvider, id: providerId, isCentralized: true }))
+            } else if (cProvider.anthropicCacheControl !== undefined) {
+              // Existing providers may have been persisted before this centralized
+              // option was introduced. Sync only the read-only cache policy here;
+              // do not overwrite the provisioned per-user API key.
+              dispatch(
+                updateProvider({
+                  id: providerId,
+                  anthropicCacheControl: cProvider.anthropicCacheControl,
+                  isCentralized: true
+                })
+              )
             }
 
             // Add models for this provider

@@ -48,7 +48,11 @@ import { getAiSdkProviderId } from './factory'
  * 处理特殊provider的转换逻辑
  */
 function handleSpecialProviders(model: Model, provider: Provider): Provider {
-  if (isNewApiProvider(provider)) {
+  // Centralized gateways use the same per-model `endpoint_type` routing rules
+  // as NewAPI. Their provider id/type is intentionally custom (for example
+  // coco-vapi), so relying only on isNewApiProvider would silently force every
+  // model through OpenAI Chat Completions.
+  if (provider.isCentralized || isNewApiProvider(provider)) {
     return newApiResolverCreator(model, provider)
   }
 

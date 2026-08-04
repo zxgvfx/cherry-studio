@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import { autoRenameTopic } from '@renderer/hooks/useTopic'
 import i18n from '@renderer/i18n'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { fetchLastRequestCost } from '@renderer/services/NewApiCostService'
 import { NotificationService } from '@renderer/services/NotificationService'
 import { estimateMessagesUsage } from '@renderer/services/TokenService'
 import { updateOneBlock } from '@renderer/store/messageBlock'
@@ -352,6 +353,36 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
       saveUpdatesToDB(assistantMsgId, topicId, messageUpdates, []).catch((error) => {
         console.error('[saveUpdatesToDB] Failed to save updates:', error)
       })
+
+      // 集中式（NewAPI）模型：请求完成后异步查询本次对话的真实费用（¥），
+      // 写入 usage.cost 供 MessageTokens 展示。失败静默，不影响正常流程。
+      const costModel = finalAssistantMsg?.model || assistant.model
+      const providerId = costModel?.provider || assistant.model?.provider
+      if (status === 'success' && providerId && response?.usage) {
+        const usageSnapshot = response.usage
+        fetchLastRequestCost({
+          providerId,
+          modelName: costModel?.id || assistant.model?.id,
+          promptTokens: usageSnapshot.prompt_tokens,
+          completionTokens: usageSnapshot.completion_tokens,
+          sinceTs: Math.floor(startTime / 1000)
+        })
+          .then((costInfo) => {
+            if (!costInfo) return
+            const latest = getState().messages.entities[assistantMsgId]
+            const mergedUsage = {
+              ...(latest?.usage || usageSnapshot),
+              cost: costInfo.cost,
+              cost_currency: costInfo.currency
+            }
+            const costUpdates = { usage: mergedUsage }
+            dispatch(newMessagesActions.updateMessage({ topicId, messageId: assistantMsgId, updates: costUpdates }))
+            saveUpdatesToDB(assistantMsgId, topicId, costUpdates, []).catch((error) => {
+              console.error('[saveUpdatesToDB] Failed to save cost usage:', error)
+            })
+          })
+          .catch(() => {})
+      }
 
       // Track token usage analytics
       if (status === 'success') {

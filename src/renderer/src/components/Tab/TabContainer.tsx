@@ -39,6 +39,8 @@ import styled from 'styled-components'
 import MinAppIcon from '../Icons/MinAppIcon'
 import { OpenClawIcon } from '../Icons/SVGIcon'
 import MinAppTabsPool from '../MinApp/MinAppTabsPool'
+import NewApiAccountBadge from '../NewApiAccountBadge'
+import PluginTabsPool from '../plugins/PluginTabsPool'
 
 interface TabsContainerProps {
   children: React.ReactNode
@@ -333,6 +335,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
           </AddTabButton>
         </HorizontalScrollContainer>
         <RightButtonsContainer>
+          <NewApiAccountBadge />
           {/* 主题切换按钮已移除 - 页面嵌入到 Qt 窗口中 */}
           <SettingsButton onClick={handleSettingsClick} $active={activeTabId === 'settings'}>
             <Settings size={16} />
@@ -344,6 +347,8 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
       <TabContent>
         {/* MiniApp WebView 池（Tab 模式保活） */}
         <MinAppTabsPool />
+        {/* 插件 iframe 池（Tab 模式保活，避免 AI Pipeline 等嵌套页状态丢失） */}
+        <PluginTabsPool />
         {children}
       </TabContent>
     </Container>

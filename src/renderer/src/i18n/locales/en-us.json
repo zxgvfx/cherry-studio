@@ -857,8 +857,13 @@
         "preview": {
           "auto": "auto size",
           "auto_quality": "auto quality",
+          "follow_source_tier": "match source · {{tier}}",
           "text": "Generate at {{size}} · {{quality}}",
           "text_with_count": "Generate at {{size}} · {{quality}} · {{imageCount}}"
+        },
+        "web_search": {
+          "label": "Web search",
+          "hint": "Adds about +$0.014 per image on Atlas"
         },
         "quality": {
           "auto": "Auto",
@@ -889,6 +894,38 @@
           "auto_description": "Decided by model or source image",
           "fixed_description": "Generate at {{size}}",
           "label": "Image size"
+        }
+      },
+      "video_gen": {
+        "audio": {
+          "label": "Generate audio"
+        },
+        "bitrate": {
+          "high": "High",
+          "hint": "Affects file quality/size only, not billing",
+          "label": "Bitrate mode",
+          "standard": "Standard"
+        },
+        "duration": {
+          "label": "Duration"
+        },
+        "label": "Video settings",
+        "preview": "Generate at {{duration}}s · {{resolution}} · {{ratio}}",
+        "ratio": {
+          "adaptive": "Adaptive",
+          "label": "Aspect ratio"
+        },
+        "resolution": {
+          "hint": "480p / 720p priced from Atlas playground rates; SR tiers not yet",
+          "label": "Resolution"
+        },
+        "return_last_frame": {
+          "hint": "Also return the last frame image; usually no video duration surcharge",
+          "label": "Return last frame"
+        },
+        "watermark": {
+          "hint": "Add watermark; usually no price change",
+          "label": "Watermark"
         }
       },
       "knowledge_base": "Knowledge Base",
@@ -4764,6 +4801,7 @@
       "user": "User"
     },
     "messages": {
+      "cache_hit": "Cache hit {{count}}",
       "divider": {
         "label": "Show divider between messages",
         "tooltip": "Not applicable to bubble-style message"
@@ -4925,6 +4963,13 @@
         "full_turns": "Full content turns",
         "full_turns_tooltip": "Number of recent turns to keep full content. Earlier turns use summaries.",
         "label": "Context Summary"
+      },
+      "image_context": {
+        "caption_enable": "Auto-caption uploaded images",
+        "caption_enable_tooltip": "Use the Quick Model above (must support vision) to write a short caption when images are uploaded. Captions remain in context after historical image pixels are offloaded.",
+        "keep_full_turns": "User turns keeping full images",
+        "keep_full_turns_tooltip": "Keep full image pixels for the most recent N user messages. Older images become refs; the model can fetch them via a tool when needed.",
+        "label": "Image Context"
       },
       "default_assistant_model": "Default Assistant Model",
       "default_assistant_model_description": "Model used when creating a new assistant, if the assistant is not set, this model will be used",

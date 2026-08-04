@@ -23,6 +23,7 @@ import type { ModelMessage } from 'ai'
 import { MemoryProcessor } from '../../services/MemoryProcessor'
 import { BuiltinToolRegistry } from '../tools/BuiltinToolRegistry'
 import { conversationDetailBuiltinTool } from '../tools/ConversationDetailTool'
+import { conversationImageBuiltinTool } from '../tools/ConversationImageTool'
 import { knowledgeBuiltinTool } from '../tools/KnowledgeSearchTool'
 import { memoryBuiltinTool } from '../tools/MemorySearchTool'
 import { skillBuiltinTool } from '../tools/SkillTool'
@@ -151,6 +152,7 @@ export const searchOrchestrationPlugin = (
         registry.register(memoryBuiltinTool)
         registry.register(skillBuiltinTool)
         registry.register(conversationDetailBuiltinTool)
+        registry.register(conversationImageBuiltinTool)
 
         registry.registerAll(params as { tools?: Record<string, any> }, {
           assistant,

@@ -76,7 +76,7 @@ describe('NewApiProvisioningService', () => {
   })
 
   it('provisions via the endpoint (with shared secret header) when cache is missing', async () => {
-    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = new URL(String(input))
       if (url.href === ENDPOINT) {
         return jsonResponse({

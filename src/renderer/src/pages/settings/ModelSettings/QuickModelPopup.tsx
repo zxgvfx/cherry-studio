@@ -8,6 +8,8 @@ import {
   setContextSummaryEnabled,
   setContextSummaryFullTurns,
   setEnableTopicNaming,
+  setImageCaptionEnabled,
+  setImageContextKeepFullUserTurns,
   setTopicNamingPrompt
 } from '@renderer/store/settings'
 import { Button, Divider, Flex, Input, InputNumber, Modal, Popover, Switch } from 'antd'
@@ -24,7 +26,14 @@ interface Props {
 const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const { t } = useTranslation()
-  const { enableTopicNaming, topicNamingPrompt, contextSummaryEnabled, contextSummaryFullTurns } = useSettings()
+  const {
+    enableTopicNaming,
+    topicNamingPrompt,
+    contextSummaryEnabled,
+    contextSummaryFullTurns,
+    imageCaptionEnabled,
+    imageContextKeepFullUserTurns
+  } = useSettings()
   const dispatch = useAppDispatch()
 
   const onOk = () => {
@@ -114,6 +123,33 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
             </HStack>
           </>
         )}
+      </Flex>
+      <Divider />
+      <SettingSubtitle style={{ marginTop: 0, marginBottom: 8 }}>
+        {t('settings.models.image_context.label')}
+      </SettingSubtitle>
+      <Flex vertical align="stretch" gap={8}>
+        <HStack style={{ gap: 16 }} alignItems="center">
+          <HStack alignItems="center" gap={4}>
+            <div>{t('settings.models.image_context.caption_enable')}</div>
+            <InfoTooltip title={t('settings.models.image_context.caption_enable_tooltip')} />
+          </HStack>
+          <Switch checked={imageCaptionEnabled ?? true} onChange={(v) => dispatch(setImageCaptionEnabled(v))} />
+        </HStack>
+        <Divider style={{ margin: 0 }} />
+        <HStack style={{ gap: 16 }} alignItems="center">
+          <HStack alignItems="center" gap={4}>
+            <div>{t('settings.models.image_context.keep_full_turns')}</div>
+            <InfoTooltip title={t('settings.models.image_context.keep_full_turns_tooltip')} />
+          </HStack>
+          <InputNumber
+            min={1}
+            max={20}
+            value={imageContextKeepFullUserTurns ?? 2}
+            onChange={(v) => v !== null && dispatch(setImageContextKeepFullUserTurns(v))}
+            style={{ width: 80 }}
+          />
+        </HStack>
       </Flex>
     </Modal>
   )

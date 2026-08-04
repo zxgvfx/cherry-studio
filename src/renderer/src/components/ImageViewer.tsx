@@ -104,6 +104,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ src: rawSrc, style, ...props 
     return <Skeleton.Image active style={style ?? { width: 200, height: 200 }} />
   }
 
+  if (!src) {
+    return <Skeleton.Image active={false} style={style ?? { width: 200, height: 200 }} />
+  }
+
   return (
     <Dropdown menu={{ items: getContextMenuItems(src) }} trigger={['contextMenu']}>
       <AntImage

@@ -857,8 +857,13 @@
         "preview": {
           "auto": "自动尺寸",
           "auto_quality": "自动质量",
+          "follow_source_tier": "原图比例 · {{tier}}",
           "text": "将以 {{size}} · {{quality}} 生成",
           "text_with_count": "将以 {{size}} · {{quality}} · {{imageCount}} 生成"
+        },
+        "web_search": {
+          "label": "联网搜索",
+          "hint": "开启后按 Atlas 报价约 +$0.014 / 张"
         },
         "quality": {
           "auto": "自动",
@@ -889,6 +894,38 @@
           "auto_description": "由模型或原图决定",
           "fixed_description": "按 {{size}} 生成",
           "label": "图片尺寸"
+        }
+      },
+      "video_gen": {
+        "audio": {
+          "label": "生成音频"
+        },
+        "bitrate": {
+          "high": "高码率",
+          "hint": "仅影响文件清晰度/体积，不影响计费",
+          "label": "比特率模式",
+          "standard": "标准"
+        },
+        "duration": {
+          "label": "时长"
+        },
+        "label": "视频参数",
+        "preview": "将以 {{duration}}s · {{resolution}} · {{ratio}} 生成",
+        "ratio": {
+          "adaptive": "自适应",
+          "label": "画幅"
+        },
+        "resolution": {
+          "hint": "480p / 720p 按官网实测差价计费；SR 档位暂未接入",
+          "label": "分辨率"
+        },
+        "return_last_frame": {
+          "hint": "额外返回最后一帧图片，一般不影响视频时长计费",
+          "label": "返回尾帧"
+        },
+        "watermark": {
+          "hint": "是否加水印，一般不影响价格",
+          "label": "水印"
         }
       },
       "knowledge_base": "知识库",
@@ -4764,6 +4801,7 @@
       "user": "用户"
     },
     "messages": {
+      "cache_hit": "缓存命中 {{count}}",
       "divider": {
         "label": "消息分割线",
         "tooltip": "不适用于气泡样式消息"
@@ -4925,6 +4963,13 @@
         "full_turns": "保留完整内容的轮数",
         "full_turns_tooltip": "最近 N 轮对话保留完整内容，更早的轮次使用摘要替代",
         "label": "对话摘要"
+      },
+      "image_context": {
+        "caption_enable": "上传图片时自动生成说明",
+        "caption_enable_tooltip": "使用上方的快速模型（需支持视觉）为上传图片生成简短说明。历史轮次去掉原图后，仍保留说明文字供模型参考。",
+        "keep_full_turns": "保留原图的用户轮数",
+        "keep_full_turns_tooltip": "最近 N 条用户消息仍发送完整图片；更早的图片会替换为引用占位，模型可按需用工具取回。",
+        "label": "图片上下文"
       },
       "default_assistant_model": "默认助手模型",
       "default_assistant_model_description": "创建新助手时使用的模型，如果助手未设置模型，则使用此模型",

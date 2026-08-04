@@ -95,6 +95,11 @@ export const getLowerBaseModelName = (id: string, delimiter: string = '/'): stri
   if (baseModelName.endsWith(':cloud')) {
     baseModelName = baseModelName.replace(':cloud', '')
   }
+  // gateway routing suffixes like gpt-image-2@atl / gpt-image-2@rc
+  const atIdx = baseModelName.lastIndexOf('@')
+  if (atIdx > 0) {
+    baseModelName = baseModelName.slice(0, atIdx)
+  }
   return baseModelName
 }
 

@@ -1,20 +1,13 @@
+import { useNavbarPosition } from '@renderer/hooks/useSettings'
 import type { FC } from 'react'
 import { useMemo } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import styled from 'styled-components'
 
-/** 与后端 prefix_route `/plugins-ui/<plugin-id>/` 约定一致（见各插件 routes.py）。 */
-const getPluginFrameSrc = (pluginId: string, queryString: string): string => {
-  const backendUrl = (window as { __CHERRY_BACKEND_URL?: string }).__CHERRY_BACKEND_URL || ''
-  const baseUrl = backendUrl.replace(/\/$/, '')
-  if (!baseUrl) return ''
-  const safe = encodeURIComponent(pluginId)
-  const basePath = `${baseUrl}/plugins-ui/${safe}/`
-  const q = queryString.replace(/^\?/, '')
-  return q ? `${basePath}?${q}` : basePath
-}
+import { getPluginFrameSrc } from './pluginFrame'
 
 const PluginEmbedPage: FC = () => {
+  const { isTopNavbar } = useNavbarPosition()
   const { pluginId = '' } = useParams<{ pluginId: string }>()
   const [searchParams] = useSearchParams()
   const queryKey = searchParams.toString()
@@ -36,9 +29,14 @@ const PluginEmbedPage: FC = () => {
     )
   }
 
+  // 顶部 Tab 模式：iframe 由 PluginTabsPool 保活，此处仅保留路由占位
+  if (isTopNavbar) {
+    return <TabShell data-plugin-embed-shell aria-hidden />
+  }
+
   return (
     <Container>
-      <PluginFrame src={src} title={pluginId} />
+      <PluginFrame src={src} title={pluginId} allow="clipboard-read; clipboard-write; fullscreen" />
     </Container>
   )
 }
@@ -49,6 +47,12 @@ const Container = styled.div`
   flex: 1;
   background: var(--color-background);
   overflow: hidden;
+`
+
+const TabShell = styled.div`
+  width: 100%;
+  height: 100%;
+  flex: 1;
 `
 
 const Message = styled.div`

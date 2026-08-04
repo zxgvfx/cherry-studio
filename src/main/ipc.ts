@@ -48,6 +48,7 @@ import BackupManager from './services/BackupManager'
 import CherryINOAuthService from './services/CherryINOAuthService'
 import { codeToolsService } from './services/CodeToolsService'
 import { configService } from './services/config/ConfigService'
+import { newApiProvisioningService } from './services/config/NewApiProvisioningService'
 import { userConfigManager } from './services/config/UserConfigManager'
 import { ConfigKeys, configManager } from './services/ConfigManager'
 import CopilotService from './services/CopilotService'
@@ -344,6 +345,39 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     await userConfigManager.updateDefaultModelSettings(settings)
     return await configService.reload()
   })
+
+  ipcMain.handle(
+    IpcChannel.Config_GetLastRequestCost,
+    async (
+      _,
+      params: {
+        providerId: string
+        modelName?: string
+        promptTokens?: number
+        completionTokens?: number
+        sinceTs?: number
+      }
+    ) => {
+      try {
+        if (!params?.providerId) {
+          return { ok: false, reason: 'providerId required' }
+        }
+        const merged = await configService.load()
+        const provider = (merged.centralizedProviders || []).find((p) => p.id === params.providerId)
+        if (!provider) {
+          return { ok: false, reason: 'provider not found' }
+        }
+        return await newApiProvisioningService.getLastRequestCost(provider, {
+          modelName: params.modelName,
+          promptTokens: params.promptTokens,
+          completionTokens: params.completionTokens,
+          sinceTs: params.sinceTs
+        })
+      } catch (error) {
+        return { ok: false, reason: (error as Error).message }
+      }
+    }
+  )
 
   // theme
   ipcMain.handle(IpcChannel.App_SetTheme, (_, theme: ThemeMode) => {

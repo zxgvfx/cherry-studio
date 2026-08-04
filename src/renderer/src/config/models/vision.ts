@@ -123,6 +123,8 @@ const IMAGE_ENHANCEMENT_MODELS = [
   // gpt-image 家族（gpt-image-1 / 1.5 / 1-mini / 2 及带后缀变种）
   // 都支持通过 /v1/images/edits 做图生图编辑。
   'gpt-image[\\w.-]+',
+  // Seedream 图生图（Atlas /edit，经 Higress atlascloud-image-adapter）
+  'seedream(?:[\\w.-]+)?',
   'gemini-2.5-flash-image(?:-[\\w-]+)?',
   'gemini-2.0-flash-preview-image-generation',
   'gemini-3(?:\\.\\d+)?-(?:flash|pro)-image(?:-[\\w-]+)?',
@@ -265,8 +267,19 @@ export const isTextToImageModel = isDedicatedImageModel
  * @param model
  */
 export function isImageEnhancementModel(model: Model): boolean {
+  if (!model) return false
+  // 中心化 image / image-generation 模型（Seedream / Nano Banana 等）均走 /images/edits
+  if (model.modality === 'image' || model.endpoint_type === 'image-generation') {
+    return true
+  }
   const modelId = getLowerBaseModelName(model.id)
   return IMAGE_ENHANCEMENT_MODELS_REGEX.test(modelId)
+}
+
+/** Atlas / Google Nano Banana 系列（含 pro / 2） */
+export function isNanoBananaModel(model?: Model): boolean {
+  if (!model) return false
+  return /nano-banana/i.test(getLowerBaseModelName(model.id))
 }
 
 /**
@@ -415,7 +428,8 @@ const GPT_IMAGE_RATIO_FRAC: Record<Exclude<(typeof GPT_IMAGE_ASPECT_RATIOS)[numb
  * 根据"宽高比 + 长边档位"计算 gpt-image-2 的 size 字符串。
  *
  * 规则：
- *   - 任一为 `auto` / `undefined` → 返回 `'auto'`，让模型/原图决定
+ *   - 任一为 `auto` / `undefined` → 返回 `'auto'`（UI 预览用；实际请求由
+ *     `resolveGptImageOutputSize` 在有参考图/档位时解析成具体 WxH，避免上游默认 1024x1024）
  *   - 长边取档位像素，短边按比例算
  *   - 两边对齐到 16 的倍数（向下取整，确保不超过 3840）
  *
@@ -493,10 +507,10 @@ export function isGenerateMotionModel(model?: Model | null): boolean {
 }
 
 const GENERATE_VIDEO_MODELS_REGEX =
-  /hailuo|minimax-video|\bt2v\b|\bi2v\b|text-to-video|image-to-video|video-?generation|video-?gen|cogvideo|\bsora\b|\bveo\b|\bkling\b/i
+  /seedance|hailuo|minimax-video|\bt2v\b|\bi2v\b|text-to-video|image-to-video|video-?generation|video-?gen|cogvideo|\bsora\b|\bveo\b|\bkling\b/i
 
 /**
- * 文生视频 / 图生视频模型（如 MiniMax-Hailuo 系列），通过异步 submit/poll 流程生成视频。
+ * 文生视频模型（如 Atlas Seedance），通过异步 submit/poll 流程生成视频。
  */
 export function isGenerateVideoModel(model?: Model | null): boolean {
   if (!model) return false

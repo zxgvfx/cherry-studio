@@ -63,6 +63,15 @@ export const DEFAULT_ASSISTANT_SETTINGS = {
     aspectRatio: 'auto',
     resolutionTier: 'auto',
     quality: 'auto'
+  },
+  videoGen: {
+    duration: 5,
+    resolution: '720p',
+    ratio: 'adaptive',
+    generateAudio: true,
+    bitrateMode: 'standard',
+    watermark: false,
+    returnLastFrame: false
   }
 } as const satisfies AssistantSettings
 

@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import { createSelector } from '@reduxjs/toolkit'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { ImageCaptionService } from '@renderer/services/ImageCaptionService'
 import { appendMessageTrace, pauseTrace, restartTrace } from '@renderer/services/SpanManagerService'
 import { estimateUserPromptUsage } from '@renderer/services/TokenService'
 import store, { type RootState, useAppDispatch, useAppSelector } from '@renderer/store'
@@ -369,6 +370,11 @@ export function useMessageOperations(topic: Topic) {
         // Then remove blocks if needed
         if (blockIdsToRemove.length > 0) {
           await dispatch(removeBlocksThunk(topic.id, messageId, blockIdsToRemove))
+        }
+
+        // Caption newly added images for later offloaded context.
+        if (blocksToAdd.length > 0) {
+          ImageCaptionService.scheduleForBlocks(blocksToAdd)
         }
       } catch (error) {
         logger.error('[editMessageBlocks] Failed to update message blocks:', error as Error)

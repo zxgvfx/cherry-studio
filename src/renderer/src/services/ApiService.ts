@@ -1399,32 +1399,26 @@ async function handleVideoGeneration(
 
   const prompt = getMainTextContent(lastUserMsg)
 
-  // 图生视频：取最后一条用户消息里的首帧图片（可选）。有图则走图生视频，无图则文生视频。
-  const imageBlocks = findImageBlocks(lastUserMsg)
-  const fileBlocks = findFileBlocks(lastUserMsg)
-  const imageFiles = [
-    ...imageBlocks.filter((b) => b.file).map((b) => b.file!),
-    ...fileBlocks.filter((b) => b.file?.type === 'image').map((b) => b.file!)
-  ]
-  let firstFrameImage = ''
-  if (imageFiles.length > 0) {
-    try {
-      const imageData = await window.api.file.base64Image(imageFiles[0].id + imageFiles[0].ext)
-      if (imageData?.data) {
-        firstFrameImage = imageData.data
-      }
-    } catch (e) {
-      logger.warn('Failed to read first-frame image for video generation:', e as any)
-    }
-  }
-
-  if ((!prompt || !prompt.trim()) && !firstFrameImage) {
+  if (!prompt || !prompt.trim()) {
     onChunkReceived({
       type: ChunkType.ERROR,
       error: { message: i18n.t('video.no_prompt', 'Please enter a text description to generate a video') }
     })
     return
   }
+
+  const videoGen = assistant.settings?.videoGen
+  const duration = videoGen?.duration ?? 5
+  const resolution = videoGen?.resolution ?? '720p'
+  const ratio = videoGen?.ratio ?? 'adaptive'
+  const generateAudio = videoGen?.generateAudio ?? true
+  const bitrateMode = videoGen?.bitrateMode ?? 'standard'
+  const watermark = videoGen?.watermark ?? false
+  const returnLastFrame = videoGen?.returnLastFrame ?? false
+  // Atlas 官网实测 $/s：480p≈0.05648，720p≈0.11215
+  const rate480 = 0.564805 / 10
+  const rate720 = 1.121464 / 10
+  const rate = resolution === '480p' ? rate480 : rate720
 
   onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
   onChunkReceived({ type: ChunkType.VIDEO_GEN_CREATED } as any)
@@ -1440,9 +1434,15 @@ async function handleVideoGeneration(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: (prompt || '').trim(),
-        first_frame_image: firstFrameImage || undefined,
-        model: assistant.model?.id || assistant.model?.name || 'MiniMax-Hailuo-2.3',
+        prompt: prompt.trim(),
+        model: assistant.model?.id || assistant.model?.name || 'seedance-2.0-mini@atl',
+        duration,
+        resolution,
+        ratio,
+        generate_audio: generateAudio,
+        bitrate_mode: bitrateMode,
+        watermark,
+        return_last_frame: returnLastFrame,
         apiHost: provider?.apiHost,
         apiKey: provider?.apiKey
       }),
@@ -1456,6 +1456,15 @@ async function handleVideoGeneration(
     }
 
     const taskId = submitResult.task_id
+    // Synthetic usage for MessageTokens + NewAPI last-cost lookup (resolution-aware).
+    const usageFromSubmit = submitResult.usage || {
+      prompt_tokens: 0,
+      completion_tokens: Math.max(1, Math.round(duration * 1000 * (rate / rate480))),
+      total_tokens: 0
+    }
+    if (!usageFromSubmit.total_tokens) {
+      usageFromSubmit.total_tokens = (usageFromSubmit.prompt_tokens || 0) + (usageFromSubmit.completion_tokens || 0)
+    }
     onChunkReceived({
       type: ChunkType.VIDEO_GEN_PROGRESS,
       progressText: i18n.t('video.processing', 'Generating video...')
@@ -1555,13 +1564,23 @@ async function handleVideoGeneration(
         onChunkReceived({
           type: ChunkType.VIDEO_GEN_COMPLETE,
           url: playableUrl,
-          metadata: { prompt: prompt.trim(), origin_name: originName, download_url: downloadUrl }
+          metadata: {
+            prompt: prompt.trim(),
+            origin_name: originName,
+            download_url: downloadUrl,
+            duration,
+            resolution,
+            billing_seconds: submitResult.billing_seconds
+          }
         } as any)
 
         const modelName = assistant.model?.name || assistant.model?.id || 'video'
         onChunkReceived({
           type: ChunkType.BLOCK_COMPLETE,
-          response: { text: `[Text-to-Video] ${modelName}: ${prompt.slice(0, 60)}` }
+          response: {
+            text: `[Text-to-Video] ${modelName}: ${prompt.slice(0, 60)}`,
+            usage: usageFromSubmit
+          }
         } as any)
         return
       }

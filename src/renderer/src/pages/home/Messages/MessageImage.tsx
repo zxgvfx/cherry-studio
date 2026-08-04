@@ -29,6 +29,7 @@ const ProxiedImage: FC<{ image: string; style?: CSSProperties; preview?: any }> 
 }) => {
   const { src, loading } = useProxiedImage(rawImage)
   if (loading) return <Skeleton.Image active style={style ?? { width: 200, height: 200 }} />
+  if (!src) return <Skeleton.Image active={false} style={style ?? { width: 200, height: 200 }} />
   return <Image src={src} style={style} preview={preview} />
 }
 

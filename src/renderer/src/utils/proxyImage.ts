@@ -122,10 +122,7 @@ export async function proxyLocalFileUrl(url: string): Promise<string | null> {
   return _cachedProxy(url, _doLocalFileProxy)
 }
 
-async function _cachedProxy(
-  url: string,
-  fetchFn: (url: string) => Promise<string | null>
-): Promise<string | null> {
+async function _cachedProxy(url: string, fetchFn: (url: string) => Promise<string | null>): Promise<string | null> {
   const memHit = _memCache.get(url)
   if (memHit) return memHit
 
@@ -177,14 +174,21 @@ async function _doLocalFileProxy(fileUrl: string): Promise<string | null> {
   try {
     let filePath = fileUrl
     if (fileUrl.startsWith('file:///')) {
-      filePath = fileUrl.slice(8)
+      filePath = decodeURIComponent(fileUrl.slice(8))
     } else if (fileUrl.startsWith('file://')) {
-      filePath = fileUrl.slice(7)
+      filePath = decodeURIComponent(fileUrl.slice(7))
     }
+    const normalized = filePath.replace(/\\/g, '/')
 
     const api = (window as any).api
     if (api?.file?.binaryImage) {
-      const result = await api.file.binaryImage(filePath)
+      // FileManager / Qt API expect `id.ext` under app data, not a full absolute path.
+      const baseName = normalized.split('/').pop()
+      if (baseName && baseName.includes('.')) {
+        const byName = await api.file.binaryImage(baseName)
+        if (byName?.data) return byName.data
+      }
+      const result = await api.file.binaryImage(normalized)
       if (result?.data) return result.data
     }
 
@@ -193,7 +197,7 @@ async function _doLocalFileProxy(fileUrl: string): Promise<string | null> {
       const resp = await fetch(backendUrl + '/api/v1/files/binary-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: filePath })
+        body: JSON.stringify({ path: normalized })
       })
       if (!resp.ok) return null
       const data = await resp.json()

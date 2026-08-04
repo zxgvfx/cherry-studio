@@ -4764,6 +4764,7 @@
       "user": "使用者"
     },
     "messages": {
+      "cache_hit": "快取命中 {{count}}",
       "divider": {
         "label": "訊息間顯示分隔線",
         "tooltip": "不適用於氣泡樣式訊息"
@@ -4925,6 +4926,13 @@
         "full_turns": "[to be translated]:Full content turns",
         "full_turns_tooltip": "[to be translated]:Number of recent turns to keep full content. Earlier turns use summaries.",
         "label": "[to be translated]:Context Summary"
+      },
+      "image_context": {
+        "caption_enable": "上傳圖片時自動產生說明",
+        "caption_enable_tooltip": "使用上方的快速模型（需支援視覺）為上傳圖片產生簡短說明。歷史輪次去掉原圖後，仍保留說明文字供模型參考。",
+        "keep_full_turns": "保留原圖的使用者輪數",
+        "keep_full_turns_tooltip": "最近 N 條使用者訊息仍傳送完整圖片；更早的圖片會替換為引用占位，模型可按需用工具取回。",
+        "label": "圖片上下文"
       },
       "default_assistant_model": "預設助手模型",
       "default_assistant_model_description": "建立新助手時使用的模型，如果助手未設定模型，則使用此模型",
