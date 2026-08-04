@@ -1,22 +1,27 @@
 import { loggerService } from '@logger'
+import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import type { RootState } from '@renderer/store'
 import { messageBlocksSelectors } from '@renderer/store/messageBlock'
-import type { ImageMessageBlock, Message, MessageBlock } from '@renderer/types/newMessage'
+import type { ImageMessageBlock, Message, MessageBlock, Model3DMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { isMainTextBlock, isMessageProcessing, isVideoBlock } from '@renderer/utils/messageUtils/is'
+import { isMainTextBlock, isMessageProcessing, isModel3DBlock, isToolBlock, isVideoBlock } from '@renderer/utils/messageUtils/is'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import React, { useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import styled from 'styled-components'
 
+import BlockErrorFallback from './BlockErrorFallback'
 import CitationBlock from './CitationBlock'
+import CompactBlock from './CompactBlock'
 import ErrorBlock from './ErrorBlock'
 import FileBlock from './FileBlock'
 import ImageBlock from './ImageBlock'
 import MainTextBlock from './MainTextBlock'
+import Model3DBlock from './Model3DBlock'
 import PlaceholderBlock from './PlaceholderBlock'
 import ThinkingBlock from './ThinkingBlock'
 import ToolBlock from './ToolBlock'
+import ToolBlockGroup from './ToolBlockGroup'
 import TranslationBlock from './TranslationBlock'
 import VideoBlock from './VideoBlock'
 
@@ -51,7 +56,7 @@ const AnimatedBlockWrapper: React.FC<AnimatedBlockWrapperProps> = ({ children, e
       variants={blockWrapperVariants}
       initial={enableAnimation ? 'hidden' : 'static'}
       animate={enableAnimation ? 'visible' : 'static'}>
-      {children}
+      <ErrorBoundary FallbackComponent={BlockErrorFallback}>{children}</ErrorBoundary>
     </motion.div>
   )
 }
@@ -90,6 +95,14 @@ const groupSimilarBlocks = (blocks: MessageBlock[]): (MessageBlock[] | MessageBl
 
       if (existingGroup) {
         existingGroup.push(currentBlock)
+      } else {
+        acc.push([currentBlock])
+      }
+    } else if (currentBlock.type === MessageBlockType.TOOL) {
+      // 对于TOOL类型，按连续分组
+      const prevGroup = acc[acc.length - 1]
+      if (Array.isArray(prevGroup) && prevGroup[0].type === MessageBlockType.TOOL) {
+        prevGroup.push(currentBlock)
       } else {
         acc.push([currentBlock])
       }
@@ -146,6 +159,29 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
                 <VideoBlock key={firstVideoBlock.id} block={firstVideoBlock} />
               </AnimatedBlockWrapper>
             )
+          } else if (block[0].type === MessageBlockType.TOOL) {
+            // 对于连续的TOOL，使用分组显示
+            if (block.length === 1) {
+              // 单个工具调用，直接渲染
+              if (!isToolBlock(block[0])) {
+                logger.warn('Expected tool block but got different type', block[0])
+                return null
+              }
+              return (
+                <AnimatedBlockWrapper key={groupKey} enableAnimation={message.status.includes('ing')}>
+                  <ToolBlock key={block[0].id} block={block[0]} />
+                </AnimatedBlockWrapper>
+              )
+            }
+            // 多个工具调用，使用分组组件
+            const toolBlocks = block.filter(isToolBlock)
+            // Use first block ID as stable key to prevent remounting when new blocks are added
+            const stableGroupKey = `tool-group-${toolBlocks[0].id}`
+            return (
+              <AnimatedBlockWrapper key={stableGroupKey} enableAnimation={message.status.includes('ing')}>
+                <ToolBlockGroup blocks={toolBlocks} />
+              </AnimatedBlockWrapper>
+            )
           }
           return null
         }
@@ -200,15 +236,21 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
           case MessageBlockType.VIDEO:
             blockComponent = <VideoBlock key={block.id} block={block} />
             break
+          case MessageBlockType.COMPACT:
+            blockComponent = <CompactBlock key={block.id} block={block} />
+            break
+          case MessageBlockType.MODEL_3D:
+            if (isModel3DBlock(block)) {
+              blockComponent = <Model3DBlock key={block.id} block={block as Model3DMessageBlock} />
+            }
+            break
           default:
             logger.warn('Unsupported block type in MessageBlockRenderer:', (block as any).type, block)
             break
         }
 
         return (
-          <AnimatedBlockWrapper
-            key={block.type === MessageBlockType.UNKNOWN ? 'placeholder' : block.id}
-            enableAnimation={message.status.includes('ing')}>
+          <AnimatedBlockWrapper key={block.id} enableAnimation={message.status.includes('ing')}>
             {blockComponent}
           </AnimatedBlockWrapper>
         )

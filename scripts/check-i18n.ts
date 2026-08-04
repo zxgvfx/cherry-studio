@@ -4,7 +4,7 @@ import * as path from 'path'
 import { sortedObjectByKeys } from './sort'
 
 const translationsDir = path.join(__dirname, '../src/renderer/src/i18n/locales')
-const baseLocale = 'zh-cn'
+const baseLocale = process.env.BASE_LOCALE ?? 'zh-cn'
 const baseFileName = `${baseLocale}.json`
 const baseFilePath = path.join(translationsDir, baseFileName)
 
@@ -145,7 +145,7 @@ export function main() {
     console.log('i18n 检查已通过')
   } catch (e) {
     console.error(e)
-    throw new Error(`检查未通过。尝试运行 yarn sync:i18n 以解决问题。`)
+    throw new Error(`检查未通过。尝试运行 pnpm i18n:sync 以解决问题。`)
   }
 }
 

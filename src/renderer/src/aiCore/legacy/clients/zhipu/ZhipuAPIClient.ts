@@ -1,7 +1,7 @@
+import type OpenAI from '@cherrystudio/openai'
 import { loggerService } from '@logger'
-import { Provider } from '@renderer/types'
-import { GenerateImageParams } from '@renderer/types'
-import OpenAI from 'openai'
+import type { Provider } from '@renderer/types'
+import type { GenerateImageParams } from '@renderer/types'
 
 import { OpenAIAPIClient } from '../openai/OpenAIApiClient'
 
@@ -66,6 +66,12 @@ export class ZhipuAPIClient extends OpenAIAPIClient {
 
   public async listModels(): Promise<OpenAI.Models.Model[]> {
     const models = [
+      'glm-5',
+      'glm-4.7',
+      'glm-4.6',
+      'glm-4.6v',
+      'glm-4.6v-flash',
+      'glm-4.6v-flashx',
       'glm-4.5',
       'glm-4.5-x',
       'glm-4.5-air',

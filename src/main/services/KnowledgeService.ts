@@ -16,7 +16,8 @@
 import * as fs from 'node:fs'
 import path from 'node:path'
 
-import { RAGApplication, RAGApplicationBuilder } from '@cherrystudio/embedjs'
+import type { RAGApplication } from '@cherrystudio/embedjs'
+import { RAGApplicationBuilder } from '@cherrystudio/embedjs'
 import { LibSqlDb } from '@cherrystudio/embedjs-libsql'
 import { SitemapLoader } from '@cherrystudio/embedjs-loader-sitemap'
 import { WebLoader } from '@cherrystudio/embedjs-loader-web'
@@ -29,12 +30,12 @@ import Reranker from '@main/knowledge/reranker/Reranker'
 import { fileStorage } from '@main/services/FileStorage'
 import { windowService } from '@main/services/WindowService'
 import { getDataPath } from '@main/utils'
-import { getAllFiles } from '@main/utils/file'
+import { getAllFiles, sanitizeFilename } from '@main/utils/file'
 import { TraceMethod } from '@mcp-trace/trace-core'
 import { MB } from '@shared/config/constant'
 import type { LoaderReturn } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
-import { FileMetadata, KnowledgeBaseParams, KnowledgeItem, KnowledgeSearchResult } from '@types'
+import type { FileMetadata, KnowledgeBaseParams, KnowledgeItem, KnowledgeSearchResult } from '@types'
 import { v4 as uuidv4 } from 'uuid'
 
 const logger = loggerService.withContext('MainKnowledgeService')
@@ -147,11 +148,16 @@ class KnowledgeService {
     }
   }
 
+  private getDbPath = (id: string): string => {
+    // 消除网络搜索requestI d中的特殊字符
+    return path.join(this.storageDir, sanitizeFilename(id, '_'))
+  }
+
   /**
    * Delete knowledge base file
    */
   private deleteKnowledgeFile = (id: string): boolean => {
-    const dbPath = path.join(this.storageDir, id)
+    const dbPath = this.getDbPath(id)
     if (fs.existsSync(dbPath)) {
       try {
         fs.rmSync(dbPath, { recursive: true })
@@ -244,7 +250,8 @@ class KnowledgeService {
       dimensions
     })
     try {
-      const libSqlDb = new LibSqlDb({ path: path.join(this.storageDir, id) })
+      const dbPath = this.getDbPath(id)
+      const libSqlDb = new LibSqlDb({ path: dbPath })
       // Save database instance for later closing
       this.dbInstances.set(id, libSqlDb)
 
@@ -675,6 +682,41 @@ class KnowledgeService {
     return await new Reranker(base).rerank(search, results)
   }
 
+  /**
+   * Close all open database connections and clear cached instances.
+   * Used during factory reset and backup restore to release file handles.
+   */
+  public closeAll = async (): Promise<void> => {
+    const failed: string[] = []
+
+    for (const [id, db] of this.dbInstances) {
+      try {
+        // LibSqlDb's client is private; upstream should add a close() method.
+        // TODO: Remove this cast once LibSqlDb exposes close() natively.
+        const client = (db as any).client
+        if (client && typeof client.close === 'function') {
+          client.close()
+          logger.debug(`Closed database instance for id: ${id}`)
+        } else {
+          logger.error(`Cannot close database instance for id: ${id} — client not accessible`)
+          failed.push(id)
+        }
+      } catch (error) {
+        logger.error(`Failed to close database instance for id: ${id}`, error as Error)
+        failed.push(id)
+      }
+    }
+
+    this.dbInstances.clear()
+    this.ragApplications.clear()
+
+    if (failed.length > 0) {
+      throw new Error(`Failed to close KnowledgeBase connections: ${failed.join(', ')}`)
+    }
+
+    logger.info('All KnowledgeBase connections closed')
+  }
+
   public getStorageDir = (): string => {
     return this.storageDir
   }
@@ -699,12 +741,11 @@ class KnowledgeService {
 
         // Execute preprocessing
         logger.debug(`Starting preprocess processing for scanned PDF: ${filePath}`)
-        const { processedFile, quota } = await provider.parseFile(item.id, file)
+        const { processedFile } = await provider.parseFile(item.id, file)
         fileToProcess = processedFile
         const mainWindow = windowService.getMainWindow()
         mainWindow?.webContents.send('file-preprocess-finished', {
-          itemId: item.id,
-          quota: quota
+          itemId: item.id
         })
       } catch (err) {
         logger.error(`Preprocess processing failed: ${err}`)
@@ -715,23 +756,6 @@ class KnowledgeService {
     }
 
     return fileToProcess
-  }
-
-  public checkQuota = async (
-    _: Electron.IpcMainInvokeEvent,
-    base: KnowledgeBaseParams,
-    userId: string
-  ): Promise<number> => {
-    try {
-      if (base.preprocessProvider && base.preprocessProvider.type === 'preprocess') {
-        const provider = new PreprocessProvider(base.preprocessProvider.provider, userId)
-        return await provider.checkQuota()
-      }
-      throw new Error('No preprocess provider configured')
-    } catch (err) {
-      logger.error(`Failed to check quota: ${err}`)
-      throw new Error(`Failed to check quota: ${err}`)
-    }
   }
 }
 

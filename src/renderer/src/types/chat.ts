@@ -1,0 +1,22 @@
+export type Tab = 'assistants' | 'topic'
+
+export type InputBarToolType =
+  | 'new_topic'
+  | 'attachment'
+  | 'thinking'
+  | 'web_search'
+  | 'url_context'
+  | 'knowledge_base'
+  | 'mcp_tools'
+  | 'generate_image'
+  | 'gpt_image_settings'
+  | 'mention_models'
+  | 'quick_phrases'
+  | 'clear_topic'
+  | 'toggle_expand'
+  | 'new_context'
+  | 'motion_settings'
+  // Agent Session tools
+  | 'create_session'
+  | 'slash_commands'
+  | 'activity_directory'

@@ -3,14 +3,15 @@ import { useAssistants, useDefaultAssistant } from '@renderer/hooks/useAssistant
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useShowTopics } from '@renderer/hooks/useStore'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
-import { Assistant, Topic } from '@renderer/types'
+import type { Assistant, Topic } from '@renderer/types'
+import type { Tab } from '@renderer/types/chat'
 import { classNames, uuid } from '@renderer/utils'
-import { FC, useEffect, useState } from 'react'
+import type { FC } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 import Assistants from './AssistantsTab'
-import Settings from './SettingsTab'
 import Topics from './TopicsTab'
 
 interface Props {
@@ -23,9 +24,7 @@ interface Props {
   style?: React.CSSProperties
 }
 
-type Tab = 'assistants' | 'topic' | 'settings'
-
-let _tab: any = ''
+let _tab: Tab | null = null
 
 const HomeTabs: FC<Props> = ({
   activeAssistant,
@@ -37,14 +36,13 @@ const HomeTabs: FC<Props> = ({
   style
 }) => {
   const { addAssistant } = useAssistants()
-  const [tab, setTab] = useState<Tab>(position === 'left' ? _tab || 'assistants' : 'topic')
   const { topicPosition } = useSettings()
   const { defaultAssistant } = useDefaultAssistant()
   const { toggleShowTopics } = useShowTopics()
   const { isLeftNavbar } = useNavbarPosition()
-
   const { t } = useTranslation()
 
+  const [tab, setTab] = useState<Tab>(position === 'left' ? _tab || 'assistants' : 'topic')
   const borderStyle = '0.5px solid var(--color-border)'
   const border =
     position === 'left'
@@ -59,7 +57,9 @@ const HomeTabs: FC<Props> = ({
 
   const onCreateAssistant = async () => {
     const assistant = await AddAssistantPopup.show()
-    assistant && setActiveAssistant(assistant)
+    if (assistant) {
+      setActiveAssistant(assistant)
+    }
   }
 
   const onCreateDefaultAssistant = () => {
@@ -76,9 +76,6 @@ const HomeTabs: FC<Props> = ({
       EventEmitter.on(EVENT_NAMES.SHOW_TOPIC_SIDEBAR, (): any => {
         showTab && setTab('topic')
       }),
-      EventEmitter.on(EVENT_NAMES.SHOW_CHAT_SETTINGS, (): any => {
-        showTab && setTab('settings')
-      }),
       EventEmitter.on(EVENT_NAMES.SWITCH_TOPIC_SIDEBAR, () => {
         showTab && setTab('topic')
         if (position === 'left' && topicPosition === 'right') {
@@ -87,7 +84,7 @@ const HomeTabs: FC<Props> = ({
       })
     ]
     return () => unsubscribes.forEach((unsub) => unsub())
-  }, [position, showTab, tab, toggleShowTopics, topicPosition])
+  }, [position, setTab, showTab, tab, toggleShowTopics, topicPosition])
 
   useEffect(() => {
     if (position === 'right' && topicPosition === 'right' && tab === 'assistants') {
@@ -110,20 +107,6 @@ const HomeTabs: FC<Props> = ({
           <TabItem active={tab === 'topic'} onClick={() => setTab('topic')}>
             {t('common.topics')}
           </TabItem>
-          <TabItem active={tab === 'settings'} onClick={() => setTab('settings')}>
-            {t('settings.title')}
-          </TabItem>
-        </CustomTabs>
-      )}
-
-      {position === 'right' && topicPosition === 'right' && (
-        <CustomTabs>
-          <TabItem active={tab === 'topic'} onClick={() => setTab('topic')}>
-            {t('common.topics')}
-          </TabItem>
-          <TabItem active={tab === 'settings'} onClick={() => setTab('settings')}>
-            {t('settings.title')}
-          </TabItem>
         </CustomTabs>
       )}
 
@@ -144,7 +127,6 @@ const HomeTabs: FC<Props> = ({
             position={position}
           />
         )}
-        {tab === 'settings' && <Settings assistant={activeAssistant} />}
       </TabContent>
     </Container>
   )
@@ -156,6 +138,7 @@ const Container = styled.div`
   width: var(--assistants-width);
   transition: width 0.3s;
   height: calc(100vh - var(--navbar-height));
+  position: relative;
 
   &.right {
     height: calc(100vh - var(--navbar-height));
@@ -165,10 +148,7 @@ const Container = styled.div`
     background-color: var(--color-background);
   }
   [navbar-position='top'] & {
-    height: calc(100vh - var(--navbar-height) - 12px);
-    &.right {
-      height: calc(100vh - var(--navbar-height) - var(--navbar-height) - 12px);
-    }
+    height: calc(100vh - var(--navbar-height));
   }
   overflow: hidden;
   .collapsed {
@@ -200,7 +180,7 @@ const CustomTabs = styled.div`
 
 const TabItem = styled.button<{ active: boolean }>`
   flex: 1;
-  height: 32px;
+  height: 30px;
   border: none;
   background: transparent;
   color: ${(props) => (props.active ? 'var(--color-text)' : 'var(--color-text-secondary)')};
@@ -225,7 +205,7 @@ const TabItem = styled.button<{ active: boolean }>`
   &::after {
     content: '';
     position: absolute;
-    bottom: -9px;
+    bottom: -8px;
     left: 50%;
     transform: translateX(-50%);
     width: ${(props) => (props.active ? '30px' : '0')};

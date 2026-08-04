@@ -2,26 +2,33 @@ import { loggerService } from '@logger'
 import { autoRenameTopic } from '@renderer/hooks/useTopic'
 import i18n from '@renderer/i18n'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { fetchLastRequestCost } from '@renderer/services/NewApiCostService'
 import { NotificationService } from '@renderer/services/NotificationService'
 import { estimateMessagesUsage } from '@renderer/services/TokenService'
+import { updateOneBlock } from '@renderer/store/messageBlock'
 import { selectMessagesForTopic } from '@renderer/store/newMessage'
 import { newMessagesActions } from '@renderer/store/newMessage'
+import { toolPermissionsActions } from '@renderer/store/toolPermissions'
 import type { Assistant } from '@renderer/types'
-import type { Response } from '@renderer/types/newMessage'
-import {
-  AssistantMessageStatus,
-  MessageBlockStatus,
-  MessageBlockType,
-  PlaceholderMessageBlock
+import { ERROR_I18N_KEY_REQUEST_TIMEOUT, ERROR_I18N_KEY_STREAM_PAUSED } from '@renderer/types/error'
+import type {
+  MessageBlock,
+  PlaceholderMessageBlock,
+  Response,
+  ThinkingMessageBlock,
+  ToolMessageBlock
 } from '@renderer/types/newMessage'
+import { AssistantMessageStatus, MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { uuid } from '@renderer/utils'
-import { isAbortError, serializeError } from '@renderer/utils/error'
+import { trackTokenUsage } from '@renderer/utils/analytics'
+import { isAbortError, isTimeoutError, serializeError } from '@renderer/utils/error'
 import { createBaseMessageBlock, createErrorBlock } from '@renderer/utils/messageUtils/create'
 import { findAllBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { isFocused, isOnHomePage } from '@renderer/utils/window'
-import { AISDKError, NoOutputGeneratedError } from 'ai'
+import type { AISDKError } from 'ai'
+import { NoOutputGeneratedError } from 'ai'
 
-import { BlockManager } from '../BlockManager'
+import type { BlockManager } from '../BlockManager'
 
 const logger = loggerService.withContext('BaseCallbacks')
 interface BaseCallbacksDependencies {
@@ -32,10 +39,20 @@ interface BaseCallbacksDependencies {
   assistantMsgId: string
   saveUpdatesToDB: any
   assistant: Assistant
+  getCurrentThinkingInfo?: () => { blockId: string | null; millsec: number }
 }
 
 export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
-  const { blockManager, dispatch, getState, topicId, assistantMsgId, saveUpdatesToDB, assistant } = deps
+  const {
+    blockManager,
+    dispatch,
+    getState,
+    topicId,
+    assistantMsgId,
+    saveUpdatesToDB,
+    assistant,
+    getCurrentThinkingInfo
+  } = deps
 
   const startTime = Date.now()
   const notificationService = NotificationService.getInstance()
@@ -73,12 +90,28 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
     onError: async (error: AISDKError) => {
       logger.debug('onError', error)
       if (NoOutputGeneratedError.isInstance(error)) {
-        return
+        // The model finished without producing any output. This commonly happens
+        // with Gemini after a tool/search step when the follow-up step yields only
+        // thinking tokens (or none). If the turn already produced visible text,
+        // treat it as benign and stay silent. Otherwise surface it so the user
+        // isn't left with a silent dead-end (search results but no answer).
+        const currentMessage = getState().messages.entities[assistantMsgId]
+        const hasVisibleContent = currentMessage ? getMainTextContent(currentMessage).trim().length > 0 : false
+        if (hasVisibleContent) {
+          return
+        }
+        logger.warn('Model generated no output (NoOutputGeneratedError); surfacing to user', {
+          assistantMsgId
+        })
+        // fall through to the normal error-surfacing path below
       }
       const isErrorTypeAbort = isAbortError(error)
+      const isErrorTypeTimeout = isTimeoutError(error)
       const serializableError = serializeError(error)
       if (isErrorTypeAbort) {
-        serializableError.message = 'pause_placeholder'
+        serializableError.i18nKey = ERROR_I18N_KEY_STREAM_PAUSED
+      } else if (isErrorTypeTimeout) {
+        serializableError.i18nKey = ERROR_I18N_KEY_REQUEST_TIMEOUT
       }
 
       const duration = Date.now() - startTime
@@ -101,12 +134,93 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
       const possibleBlockId = findBlockIdForCompletion()
 
       if (possibleBlockId) {
-        // 更改上一个block的状态为ERROR
-        const changes = {
+        // 更改上一个block的状态为ERROR/PAUSED
+        const changes: Partial<ThinkingMessageBlock> = {
           status: isErrorTypeAbort ? MessageBlockStatus.PAUSED : MessageBlockStatus.ERROR
+        }
+        // 如果是 thinking block，保留实际思考时间
+        if (blockManager.lastBlockType === MessageBlockType.THINKING) {
+          const thinkingInfo = getCurrentThinkingInfo?.()
+          if (thinkingInfo?.blockId === possibleBlockId && thinkingInfo?.millsec && thinkingInfo.millsec > 0) {
+            changes.thinking_millsec = thinkingInfo.millsec
+          }
         }
         blockManager.smartBlockUpdate(possibleBlockId, changes, blockManager.lastBlockType!, true)
       }
+
+      // Fix: 更新所有仍处于 STREAMING 状态的 blocks 为 PAUSED/ERROR
+      // 这修复了停止回复时思考计时器继续运行的问题
+      const currentMessage = getState().messages.entities[assistantMsgId]
+      const updatedBlockIds: string[] = []
+      if (currentMessage) {
+        const allBlockRefs = findAllBlocks(currentMessage)
+        const blockState = getState().messageBlocks
+        // 获取当前思考信息（如果有），用于保留实际思考时间
+        const thinkingInfo = getCurrentThinkingInfo?.()
+        for (const blockRef of allBlockRefs) {
+          const block = blockState.entities[blockRef.id]
+          if (!block) continue
+
+          // 更新非 possibleBlockId 的 STREAMING blocks（possibleBlockId 已在上面处理）
+          // 跳过 TOOL 类型 blocks，它们在下面的 tool block 分支中统一处理
+          if (
+            block.id !== possibleBlockId &&
+            block.status === MessageBlockStatus.STREAMING &&
+            block.type !== MessageBlockType.TOOL
+          ) {
+            const changes: Partial<ThinkingMessageBlock> = {
+              status: isErrorTypeAbort ? MessageBlockStatus.PAUSED : MessageBlockStatus.ERROR
+            }
+            if (
+              block.type === MessageBlockType.THINKING &&
+              thinkingInfo?.blockId === block.id &&
+              thinkingInfo?.millsec &&
+              thinkingInfo.millsec > 0
+            ) {
+              changes.thinking_millsec = thinkingInfo.millsec
+            }
+            dispatch(updateOneBlock({ id: block.id, changes }))
+            updatedBlockIds.push(block.id)
+          }
+
+          // Fix: 更新所有仍处于非完成状态的 tool blocks 的 rawMcpToolResponse.status
+          // 当用户点击停止时，tool blocks 的 UI 状态依赖 rawMcpToolResponse.status，
+          // 而不是 MessageBlockStatus，所以需要单独更新
+          if (block.type === MessageBlockType.TOOL) {
+            const toolBlock = block as ToolMessageBlock
+            const toolResponse = toolBlock.metadata?.rawMcpToolResponse
+            const toolStatus = toolResponse?.status
+            if (
+              toolResponse &&
+              toolStatus &&
+              toolStatus !== 'done' &&
+              toolStatus !== 'error' &&
+              toolStatus !== 'cancelled'
+            ) {
+              dispatch(
+                updateOneBlock({
+                  id: block.id,
+                  changes: {
+                    status: isErrorTypeAbort ? MessageBlockStatus.PAUSED : MessageBlockStatus.ERROR,
+                    metadata: {
+                      ...toolBlock.metadata,
+                      rawMcpToolResponse: {
+                        ...toolResponse,
+                        status: isErrorTypeAbort ? 'cancelled' : 'error'
+                      }
+                    }
+                  }
+                })
+              )
+              updatedBlockIds.push(block.id)
+            }
+          }
+        }
+      }
+
+      // Clean up pending/submitting tool permission requests from this stream.
+      // Preserve 'invoking' entries as they may belong to concurrent streams.
+      dispatch(toolPermissionsActions.clearPending())
 
       const errorBlock = createErrorBlock(assistantMsgId, serializableError, { status: MessageBlockStatus.SUCCESS })
       await blockManager.handleBlockTransition(errorBlock, MessageBlockType.ERROR)
@@ -120,7 +234,12 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
           updates: messageErrorUpdate
         })
       )
-      await saveUpdatesToDB(assistantMsgId, topicId, messageErrorUpdate, [])
+
+      // 从更新后的 state 中获取需要持久化的 blocks
+      const blocksToSave = updatedBlockIds
+        .map((id) => getState().messageBlocks.entities[id])
+        .filter(Boolean) as MessageBlock[]
+      await saveUpdatesToDB(assistantMsgId, topicId, messageErrorUpdate, blocksToSave)
 
       EventEmitter.emit(EVENT_NAMES.MESSAGE_COMPLETE, {
         id: assistantMsgId,
@@ -168,10 +287,14 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
           })
         }
 
-        // 更新topic的name
-        autoRenameTopic(assistant, topicId)
+        // 更新topic的name（延迟到下一个事件循环，完全不阻塞UI）
+        setTimeout(() => {
+          autoRenameTopic(assistant, topicId).catch((error) => {
+            console.error('[autoRenameTopic] Failed to rename topic:', error)
+          })
+        }, 0)
 
-        // 处理usage估算
+        // 处理usage估算（异步执行，不阻塞UI）
         // For OpenRouter, always use the accurate usage data from API, don't estimate
         const isOpenRouter = assistant.model?.provider === 'openrouter'
         if (
@@ -181,8 +304,27 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
             response?.usage?.prompt_tokens === 0 ||
             response?.usage?.completion_tokens === 0)
         ) {
-          const usage = await estimateMessagesUsage({ assistant, messages: finalContextWithAssistant })
-          response.usage = usage
+          estimateMessagesUsage({ assistant, messages: finalContextWithAssistant })
+            .then((usage) => {
+              if (response) {
+                response.usage = usage
+                // 更新 Redux 和数据库中的 usage
+                const updatedMessageUpdates = { usage }
+                dispatch(
+                  newMessagesActions.updateMessage({
+                    topicId,
+                    messageId: assistantMsgId,
+                    updates: updatedMessageUpdates
+                  })
+                )
+                saveUpdatesToDB(assistantMsgId, topicId, updatedMessageUpdates, []).catch((error) => {
+                  console.error('[saveUpdatesToDB] Failed to save usage updates:', error)
+                })
+              }
+            })
+            .catch((error) => {
+              console.error('[estimateMessagesUsage] Failed to estimate usage:', error)
+            })
         }
       }
 
@@ -206,7 +348,47 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
           updates: messageUpdates
         })
       )
-      await saveUpdatesToDB(assistantMsgId, topicId, messageUpdates, [])
+
+      // 异步保存到数据库，不阻塞UI
+      saveUpdatesToDB(assistantMsgId, topicId, messageUpdates, []).catch((error) => {
+        console.error('[saveUpdatesToDB] Failed to save updates:', error)
+      })
+
+      // 集中式（NewAPI）模型：请求完成后异步查询本次对话的真实费用（¥），
+      // 写入 usage.cost 供 MessageTokens 展示。失败静默，不影响正常流程。
+      const costModel = finalAssistantMsg?.model || assistant.model
+      const providerId = costModel?.provider || assistant.model?.provider
+      if (status === 'success' && providerId && response?.usage) {
+        const usageSnapshot = response.usage
+        fetchLastRequestCost({
+          providerId,
+          modelName: costModel?.id || assistant.model?.id,
+          promptTokens: usageSnapshot.prompt_tokens,
+          completionTokens: usageSnapshot.completion_tokens,
+          sinceTs: Math.floor(startTime / 1000)
+        })
+          .then((costInfo) => {
+            if (!costInfo) return
+            const latest = getState().messages.entities[assistantMsgId]
+            const mergedUsage = {
+              ...(latest?.usage || usageSnapshot),
+              cost: costInfo.cost,
+              cost_currency: costInfo.currency
+            }
+            const costUpdates = { usage: mergedUsage }
+            dispatch(newMessagesActions.updateMessage({ topicId, messageId: assistantMsgId, updates: costUpdates }))
+            saveUpdatesToDB(assistantMsgId, topicId, costUpdates, []).catch((error) => {
+              console.error('[saveUpdatesToDB] Failed to save cost usage:', error)
+            })
+          })
+          .catch(() => {})
+      }
+
+      // Track token usage analytics
+      if (status === 'success') {
+        trackTokenUsage({ usage: response?.usage, model: assistant?.model })
+      }
+
       EventEmitter.emit(EVENT_NAMES.MESSAGE_COMPLETE, { id: assistantMsgId, topicId, status })
       logger.debug('onComplete finished')
     }

@@ -1,9 +1,10 @@
 import store from '@renderer/store'
 import { selectCurrentUserId, selectGlobalMemoryEnabled, selectMemoryConfig } from '@renderer/store/memory'
 import { type InferToolInput, type InferToolOutput, tool } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 
 import { MemoryProcessor } from '../../services/MemoryProcessor'
+import type { BuiltinTool } from './BuiltinToolRegistry'
 
 /**
  * 🧠 基础记忆搜索工具
@@ -11,7 +12,6 @@ import { MemoryProcessor } from '../../services/MemoryProcessor'
  */
 export const memorySearchTool = () => {
   return tool({
-    name: 'builtin_memory_search',
     description: 'Search through conversation memories and stored facts for relevant context',
     inputSchema: z.object({
       query: z.string().describe('Search query to find relevant memories'),
@@ -24,7 +24,8 @@ export const memorySearchTool = () => {
       }
 
       const memoryConfig = selectMemoryConfig(store.getState())
-      if (!memoryConfig.llmApiClient || !memoryConfig.embedderApiClient) {
+
+      if (!memoryConfig.llmModel || !memoryConfig.embeddingModel) {
         return []
       }
 
@@ -40,6 +41,15 @@ export const memorySearchTool = () => {
       return []
     }
   })
+}
+
+export const memoryBuiltinTool: BuiltinTool = {
+  name: 'builtin_memory_search',
+  isEnabled: (assistant) => {
+    const globalMemoryEnabled = selectGlobalMemoryEnabled(store.getState())
+    return globalMemoryEnabled && !!assistant.enableMemory
+  },
+  create: () => memorySearchTool()
 }
 
 export type MemorySearchToolInput = InferToolInput<ReturnType<typeof memorySearchTool>>

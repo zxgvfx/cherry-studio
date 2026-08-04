@@ -5,39 +5,89 @@
 
 import {
   isClaudeReasoningModel,
-  isNotSupportTemperatureAndTopP,
-  isSupportedFlexServiceTier
+  isMaxTemperatureOneModel,
+  isSupportedFlexServiceTier,
+  isSupportedThinkingTokenClaudeModel,
+  isSupportTemperatureModel,
+  isSupportTopPModel,
+  isTemperatureTopPMutuallyExclusiveModel
 } from '@renderer/config/models'
-import { getAssistantSettings } from '@renderer/services/AssistantService'
+import {
+  DEFAULT_ASSISTANT_SETTINGS,
+  getAssistantSettings,
+  getProviderByModel
+} from '@renderer/services/AssistantService'
 import type { Assistant, Model } from '@renderer/types'
-import { defaultTimeout } from '@shared/config/constant'
+import { DEFAULT_TIMEOUT } from '@shared/config/constant'
+
+import { getThinkingBudget } from '../utils/reasoning'
 
 /**
- * 获取温度参数
+ * Retrieves the temperature parameter, adapting it based on assistant.settings and model capabilities.
+ * - Disabled for Claude reasoning models when reasoning effort is set.
+ * - Disabled for models that do not support temperature.
+ * - Disabled for Claude 4.5 reasoning models when TopP is enabled and temperature is disabled.
+ * Otherwise, returns the temperature value if the assistant has temperature enabled.
+
  */
 export function getTemperature(assistant: Assistant, model: Model): number | undefined {
   if (assistant.settings?.reasoning_effort && isClaudeReasoningModel(model)) {
     return undefined
   }
-  if (isNotSupportTemperatureAndTopP(model)) {
+
+  if (!isSupportTemperatureModel(model, assistant)) {
     return undefined
   }
+
+  if (
+    isTemperatureTopPMutuallyExclusiveModel(model) &&
+    assistant.settings?.enableTopP &&
+    !assistant.settings?.enableTemperature
+  ) {
+    return undefined
+  }
+
+  return getTemperatureValue(assistant, model)
+}
+
+function getTemperatureValue(assistant: Assistant, model: Model): number | undefined {
   const assistantSettings = getAssistantSettings(assistant)
-  return assistantSettings?.enableTemperature ? assistantSettings?.temperature : undefined
+  let temperature = assistantSettings?.temperature
+  if (temperature && isMaxTemperatureOneModel(model)) {
+    temperature = Math.min(1, temperature)
+  }
+
+  // FIXME: assistant.settings.enableTemperature should be always a boolean value.
+  const enableTemperature = assistantSettings?.enableTemperature ?? DEFAULT_ASSISTANT_SETTINGS.enableTemperature
+  return enableTemperature ? temperature : undefined
 }
 
 /**
- * 获取 TopP 参数
+ * Retrieves the TopP parameter, adapting it based on assistant.settings and model capabilities.
+ * - Disabled for Claude reasoning models when reasoning effort is set.
+ * - Disabled for models that do not support TopP.
+ * - Disabled for Claude 4.5 reasoning models when temperature is explicitly enabled.
+ * Otherwise, returns the TopP value if the assistant has TopP enabled.
  */
 export function getTopP(assistant: Assistant, model: Model): number | undefined {
   if (assistant.settings?.reasoning_effort && isClaudeReasoningModel(model)) {
     return undefined
   }
-  if (isNotSupportTemperatureAndTopP(model)) {
+  if (!isSupportTopPModel(model, assistant)) {
     return undefined
   }
+  if (isTemperatureTopPMutuallyExclusiveModel(model) && assistant.settings?.enableTemperature) {
+    return undefined
+  }
+
+  return getTopPValue(assistant)
+}
+
+function getTopPValue(assistant: Assistant): number | undefined {
   const assistantSettings = getAssistantSettings(assistant)
-  return assistantSettings?.enableTopP ? assistantSettings?.topP : undefined
+  // FIXME: assistant.settings.enableTopP should be always a boolean value.
+  const enableTopP = assistantSettings.enableTopP ?? DEFAULT_ASSISTANT_SETTINGS.enableTopP
+  return enableTopP ? assistantSettings?.topP : undefined
 }
 
 /**
@@ -47,5 +97,30 @@ export function getTimeout(model: Model): number {
   if (isSupportedFlexServiceTier(model)) {
     return 15 * 1000 * 60
   }
-  return defaultTimeout
+  return DEFAULT_TIMEOUT
+}
+
+const AUTO_MAX_TOKENS = 16384
+
+export function getMaxTokens(assistant: Assistant, model: Model): number | undefined {
+  // NOTE: ai-sdk会把maxToken和budgetToken加起来
+  const assistantSettings = getAssistantSettings(assistant)
+  const enabledMaxTokens = assistantSettings.enableMaxTokens ?? false
+  let maxTokens = assistantSettings.maxTokens
+
+  if (!enabledMaxTokens || maxTokens === undefined) {
+    // 用户未手动设定时，使用足够高的默认值，避免长代码/长回复被截断。
+    // 模型会在完成输出后自然发出 EOS 停止，不会因为上限高而多生成内容。
+    return AUTO_MAX_TOKENS
+  }
+
+  const provider = getProviderByModel(model)
+  if (isSupportedThinkingTokenClaudeModel(model) && ['anthropic', 'aws-bedrock'].includes(provider.type)) {
+    const { reasoning_effort: reasoningEffort } = assistantSettings
+    const budget = getThinkingBudget(maxTokens, reasoningEffort, model.id)
+    if (budget) {
+      maxTokens -= budget
+    }
+  }
+  return maxTokens
 }

@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
-import { WebSearchState } from '@renderer/store/websearch'
-import { WebSearchProvider, WebSearchProviderResponse } from '@renderer/types'
-import { BochaSearchParams, BochaSearchResponse } from '@renderer/utils/bocha'
+import type { WebSearchState } from '@renderer/store/websearch'
+import type { WebSearchProvider, WebSearchProviderResponse } from '@renderer/types'
+import type { BochaSearchParams, BochaSearchResponse } from '@renderer/utils/bocha'
 
 import BaseWebSearchProvider from './BaseWebSearchProvider'
 
@@ -26,7 +26,8 @@ export default class BochaProvider extends BaseWebSearchProvider {
 
       const headers = {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`
+        Authorization: `Bearer ${this.apiKey}`,
+        ...this.defaultHeaders()
       }
 
       const params: BochaSearchParams = {
@@ -38,20 +39,35 @@ export default class BochaProvider extends BaseWebSearchProvider {
         page: 1
       }
 
-      const response = await fetch(`${this.apiHost}/v1/web-search`, {
-        method: 'POST',
-        body: JSON.stringify(params),
-        headers: {
-          ...this.defaultHeaders(),
-          ...headers
-        }
-      })
+      let resp: BochaSearchResponse
 
-      if (!response.ok) {
-        throw new Error(`Bocha search failed: ${response.status} ${response.statusText}`)
+      if (this.isQt()) {
+        // Use HTTP proxy in Qt environment
+        const response = await this.proxyFetch(`${this.apiHost}/v1/web-search`, {
+          method: 'POST',
+          headers,
+          body: params,
+          timeout: 30000
+        })
+
+        if (!response.success) {
+          throw new Error(`Bocha search failed: ${response.error}`)
+        }
+        resp = response.data
+      } else {
+        // Use native fetch in non-Qt environment
+        const response = await fetch(`${this.apiHost}/v1/web-search`, {
+          method: 'POST',
+          body: JSON.stringify(params),
+          headers
+        })
+
+        if (!response.ok) {
+          throw new Error(`Bocha search failed: ${response.status} ${response.statusText}`)
+        }
+        resp = await response.json()
       }
 
-      const resp: BochaSearchResponse = await response.json()
       if (resp.code !== 200) {
         throw new Error(`Bocha search failed: ${resp.msg}`)
       }

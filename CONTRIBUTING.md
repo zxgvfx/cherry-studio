@@ -1,4 +1,4 @@
-[中文](docs/CONTRIBUTING.zh.md) | [English](CONTRIBUTING.md)
+[中文](docs/zh/guides/contributing.md) | [English](CONTRIBUTING.md)
 
 # Cherry Studio Contributor Guide
 
@@ -26,13 +26,19 @@ Here are several ways you can participate:
 
 Please make sure you have read the [Code of Conduct](CODE_OF_CONDUCT.md) and the [LICENSE](LICENSE).
 
+## Setting Up Your Development Environment
+
+Please refer to the [Developer Guide](docs/en/guides/development.md) for instructions on setting up your local development environment, including prerequisites, installation steps, and available commands.
+
+For a comprehensive overview of the project architecture, tech stack, conventions, and available commands, see [`CLAUDE.md`](CLAUDE.md).
+
 ## Getting Started
 
 To help you get familiar with the codebase, we recommend tackling issues tagged with one or more of the following labels: [good-first-issue](https://github.com/CherryHQ/cherry-studio/labels/good%20first%20issue), [help-wanted](https://github.com/CherryHQ/cherry-studio/labels/help%20wanted), or [kind/bug](https://github.com/CherryHQ/cherry-studio/labels/kind%2Fbug). Any help is welcome.
 
 ### Testing
 
-Features without tests are considered non-existent. To ensure code is truly effective, relevant processes should be covered by unit tests and functional tests. Therefore, when considering contributions, please also consider testability. All tests can be run locally without dependency on CI. Please refer to the "Testing" section in the [Developer Guide](docs/dev.md).
+Features without tests are considered non-existent. To ensure code is truly effective, relevant processes should be covered by unit tests and functional tests. Therefore, when considering contributions, please also consider testability. All tests can be run locally without dependency on CI. Please refer to the "Testing" section in the [Developer Guide](docs/zh/guides/development.md).
 
 ### Automated Testing for Pull Requests
 
@@ -60,12 +66,33 @@ Maintainers are here to help you implement your use case within a reasonable tim
 
 ### Participating in the Test Plan
 
-The Test Plan aims to provide users with a more stable application experience and faster iteration speed. For details, please refer to the [Test Plan](docs/testplan-en.md).
+The Test Plan aims to provide users with a more stable application experience and faster iteration speed. For details, please refer to the [Test Plan](docs/en/guides/test-plan.md).
 
 ### Other Suggestions
 
 - **Contact Developers**: Before submitting a PR, you can contact the developers first to discuss or get help.
-- **Become a Core Developer**: If you contribute to the project consistently, congratulations, you can become a core developer and gain project membership status. Please check our [Membership Guide](https://github.com/CherryHQ/community/blob/main/docs/membership.en.md).
+
+## Important Contribution Guidelines & Focus Areas
+
+Please review the following critical information before submitting your Pull Request:
+
+### Temporary Restriction on Data-Changing Feature PRs 🚫
+
+**Currently, we are NOT accepting feature Pull Requests that introduce changes to our Redux data models or IndexedDB schemas.**
+
+Our core team is currently focused on significant architectural updates that involve these data structures. To ensure stability and focus during this period, contributions of this nature will be temporarily managed internally.
+
+*   **PRs that require changes to Redux state shape or IndexedDB schemas will be closed.**
+*   **This restriction is temporary and will be lifted with the release of `v2.0.0`.** You can track the progress of `v2.0.0` and its related discussions on issue [#10162](https://github.com/CherryHQ/cherry-studio/pull/10162).
+
+We highly encourage contributions for:
+*   Bug fixes 🐞
+*   Performance improvements 🚀
+*   Documentation updates 📚
+*   Features that **do not** alter Redux data models or IndexedDB schemas (e.g., UI enhancements, new components, minor refactors). ✨
+
+We appreciate your understanding and continued support during this important development phase. Thank you!
+
 
 ## Contact Us
 

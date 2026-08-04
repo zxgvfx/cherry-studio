@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
-import {
+import type Anthropic from '@anthropic-ai/sdk'
+import type {
   Base64ImageSource,
   ImageBlockParam,
   MessageParam,
@@ -8,7 +8,7 @@ import {
   ToolUseBlock,
   WebSearchTool20250305
 } from '@anthropic-ai/sdk/resources'
-import {
+import type {
   ContentBlock,
   ContentBlockParam,
   MessageCreateParamsBase,
@@ -23,27 +23,24 @@ import {
   WebSearchToolResultError
 } from '@anthropic-ai/sdk/resources/messages'
 import { MessageStream } from '@anthropic-ai/sdk/resources/messages/messages'
-import AnthropicVertex from '@anthropic-ai/vertex-sdk'
+import type AnthropicVertex from '@anthropic-ai/vertex-sdk'
 import { loggerService } from '@logger'
 import { DEFAULT_MAX_TOKENS } from '@renderer/config/constant'
 import { findTokenLimit, isClaudeReasoningModel, isReasoningModel, isWebSearchModel } from '@renderer/config/models'
 import { getAssistantSettings } from '@renderer/services/AssistantService'
 import FileManager from '@renderer/services/FileManager'
 import { estimateTextTokens } from '@renderer/services/TokenService'
-import {
+import type {
   Assistant,
-  EFFORT_RATIO,
-  FileTypes,
   MCPCallToolResponse,
   MCPTool,
   MCPToolResponse,
   Model,
   Provider,
-  ToolCallResponse,
-  WebSearchSource
+  ToolCallResponse
 } from '@renderer/types'
-import {
-  ChunkType,
+import { EFFORT_RATIO, FILE_TYPE, WEB_SEARCH_SOURCE } from '@renderer/types'
+import type {
   ErrorChunk,
   LLMWebSearchCompleteChunk,
   LLMWebSearchInProgressChunk,
@@ -53,8 +50,9 @@ import {
   ThinkingDeltaChunk,
   ThinkingStartChunk
 } from '@renderer/types/chunk'
+import { ChunkType } from '@renderer/types/chunk'
 import { type Message } from '@renderer/types/newMessage'
-import {
+import type {
   AnthropicSdkMessageParam,
   AnthropicSdkParams,
   AnthropicSdkRawChunk,
@@ -68,11 +66,12 @@ import {
   mcpToolsToAnthropicTools
 } from '@renderer/utils/mcp-tools'
 import { findFileBlocks, findImageBlocks } from '@renderer/utils/messageUtils/find'
+import { buildClaudeCodeSystemMessage, getSdkClient } from '@shared/anthropic'
 import { t } from 'i18next'
 
-import { GenericChunk } from '../../middleware/schemas'
+import type { GenericChunk } from '../../middleware/schemas'
 import { BaseApiClient } from '../BaseApiClient'
-import { AnthropicStreamListener, RawStreamListener, RequestTransformer, ResponseChunkTransformer } from '../types'
+import type { AnthropicStreamListener, RawStreamListener, RequestTransformer, ResponseChunkTransformer } from '../types'
 
 const logger = loggerService.withContext('AnthropicAPIClient')
 
@@ -86,8 +85,8 @@ export class AnthropicAPIClient extends BaseApiClient<
   ToolUnion
 > {
   oauthToken: string | undefined = undefined
-  isOAuthMode: boolean = false
   sdkInstance: Anthropic | AnthropicVertex | undefined = undefined
+
   constructor(provider: Provider) {
     super(provider)
   }
@@ -96,67 +95,11 @@ export class AnthropicAPIClient extends BaseApiClient<
     if (this.sdkInstance) {
       return this.sdkInstance
     }
-
     if (this.provider.authType === 'oauth') {
-      if (!this.oauthToken) {
-        throw new Error('OAuth token is not available')
-      }
-      this.sdkInstance = new Anthropic({
-        authToken: this.oauthToken,
-        baseURL: 'https://api.anthropic.com',
-        dangerouslyAllowBrowser: true,
-        defaultHeaders: {
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
-          'anthropic-beta': 'oauth-2025-04-20'
-          // ...this.provider.extra_headers
-        }
-      })
-    } else {
-      this.sdkInstance = new Anthropic({
-        apiKey: this.apiKey,
-        baseURL: this.getBaseURL(),
-        dangerouslyAllowBrowser: true,
-        defaultHeaders: {
-          'anthropic-beta': 'output-128k-2025-02-19',
-          ...this.provider.extra_headers
-        }
-      })
+      this.oauthToken = await window.api.anthropic_oauth.getAccessToken()
     }
-
+    this.sdkInstance = getSdkClient(this.provider, this.oauthToken)
     return this.sdkInstance
-  }
-
-  private buildClaudeCodeSystemMessage(system?: string | Array<TextBlockParam>): string | Array<TextBlockParam> {
-    const defaultClaudeCodeSystem = `You are Claude Code, Anthropic's official CLI for Claude.`
-    if (!system) {
-      return defaultClaudeCodeSystem
-    }
-
-    if (typeof system === 'string') {
-      if (system.trim() === defaultClaudeCodeSystem) {
-        return system
-      }
-      return [
-        {
-          type: 'text',
-          text: defaultClaudeCodeSystem
-        },
-        {
-          type: 'text',
-          text: system
-        }
-      ]
-    }
-
-    if (system[0].text.trim() != defaultClaudeCodeSystem) {
-      system.unshift({
-        type: 'text',
-        text: defaultClaudeCodeSystem
-      })
-    }
-
-    return system
   }
 
   override async createCompletions(
@@ -164,16 +107,13 @@ export class AnthropicAPIClient extends BaseApiClient<
     options?: Anthropic.RequestOptions
   ): Promise<AnthropicSdkRawOutput> {
     if (this.provider.authType === 'oauth') {
-      this.oauthToken = await window.api.anthropic_oauth.getAccessToken()
-      this.isOAuthMode = true
-      logger.info('[Anthropic Provider] Using OAuth token for authentication')
-      payload.system = this.buildClaudeCodeSystemMessage(payload.system)
+      payload.system = buildClaudeCodeSystemMessage(payload.system)
     }
     const sdk = (await this.getSdkInstance()) as Anthropic
     if (payload.stream) {
       return sdk.messages.stream(payload, options)
     }
-    return await sdk.messages.create(payload, options)
+    return sdk.messages.create(payload, options)
   }
 
   // @ts-ignore sdk未提供
@@ -183,46 +123,9 @@ export class AnthropicAPIClient extends BaseApiClient<
   }
 
   override async listModels(): Promise<Anthropic.ModelInfo[]> {
-    console.log('[AnthropicAPIClient] listModels called for provider:', this.provider.id);
-    
-    // 在Houdini环境中，使用window.api.models.list
-    const isHoudiniEnv = !!(globalThis as any)?.isHoudini || 
-                         !!(globalThis as any)?.houdini || 
-                         !!(globalThis as any)?.qt || 
-                         !!(globalThis as any)?.QWebChannel ||
-                         !!(globalThis as any)?.hostBridge;
-    
-    if (isHoudiniEnv) {
-      console.log('[AnthropicAPIClient] Using Houdini environment, calling window.api.models.list');
-      const host = this.provider.apiHost || 'https://api.anthropic.com'
-      const modelUrl = `${host.replace(/\/$/, '')}/v1/models`
-      
-      const response = await window.api?.models?.list?.({
-        url: modelUrl,
-        method: 'GET',
-        apiKey: this.provider.apiKey,
-        fallback: { object: 'list', data: [] }
-      });
-      
-      const data = Array.isArray(response?.data) ? response.data : []
-      const models: Anthropic.ModelInfo[] = data.map((item: any) => ({
-        id: item.id || item.name,
-        name: item.name || item.id,
-        created: item.created || Date.now()
-      }));
-      
-      console.log('[AnthropicAPIClient] Houdini models result:', models.length, 'models');
-      return models;
-    }
-    
-    if (this.provider.authType === 'oauth') {
-      this.oauthToken = await window.api.anthropic_oauth.getAccessToken()
-      this.isOAuthMode = true
-      logger.info('[Anthropic Provider] Using OAuth token for authentication')
-    }
     const sdk = (await this.getSdkInstance()) as Anthropic
-    const response = await sdk.models.list()
-
+    // prevent auto appended /v1. It's included in baseUrl.
+    const response = await sdk.models.list({ path: '/models' })
     return response.data
   }
 
@@ -343,7 +246,7 @@ export class AnthropicAPIClient extends BaseApiClient<
     const fileBlocks = findFileBlocks(message)
     for (const fileBlock of fileBlocks) {
       const { file } = fileBlock
-      if ([FileTypes.TEXT, FileTypes.DOCUMENT].includes(file.type)) {
+      if ([FILE_TYPE.TEXT, FILE_TYPE.DOCUMENT].some((type) => file.type === type)) {
         if (file.ext === '.pdf' && file.size < 32 * 1024 * 1024) {
           const base64Data = await FileManager.readBase64File(file)
           parts.push({
@@ -685,7 +588,7 @@ export class AnthropicAPIClient extends BaseApiClient<
                       type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                       llm_web_search: {
                         results: content.content,
-                        source: WebSearchSource.ANTHROPIC
+                        source: WEB_SEARCH_SOURCE.ANTHROPIC
                       }
                     } as LLMWebSearchCompleteChunk)
                     break
@@ -738,7 +641,7 @@ export class AnthropicAPIClient extends BaseApiClient<
                       type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                       llm_web_search: {
                         results: contentBlock.content as Array<WebSearchResultBlock>,
-                        source: WebSearchSource.ANTHROPIC
+                        source: WEB_SEARCH_SOURCE.ANTHROPIC
                       }
                     } as LLMWebSearchCompleteChunk)
                   }

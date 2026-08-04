@@ -1,17 +1,31 @@
+import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
+import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { electronAPI } from '@electron-toolkit/preload'
-import { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
-import { SpanContext } from '@opentelemetry/api'
-import { TerminalConfig, UpgradeChannel } from '@shared/config/constant'
+import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
+import type { SpanContext } from '@opentelemetry/api'
+import type { GitBashPathInfo, TerminalConfig, UpgradeChannel } from '@shared/config/constant'
 import type { LogLevel, LogSourceWithContext } from '@shared/config/logger'
-import type { FileChangeEvent } from '@shared/config/types'
+import type {
+  FileChangeEvent,
+  LanClientEvent,
+  LanFileCompleteMessage,
+  LanHandshakeAckMessage,
+  LocalTransferConnectPayload,
+  LocalTransferState,
+  OperationResult,
+  WebviewKeyEvent
+} from '@shared/config/types'
+import type { MCPServerLogEntry } from '@shared/config/types'
+import type { ExternalAppInfo } from '@shared/externalApp/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { Notification } from '@types'
-import {
+import type {
   AddMemoryOptions,
   AssistantMessage,
   FileListResponse,
   FileMetadata,
   FileUploadResponse,
+  GetApiServerStatusResult,
   KnowledgeBaseParams,
   KnowledgeItem,
   KnowledgeSearchResult,
@@ -19,19 +33,127 @@ import {
   MemoryConfig,
   MemoryListOptions,
   MemorySearchOptions,
+  Model,
   OcrProvider,
   OcrResult,
   Provider,
+  RestartApiServerStatusResult,
   S3Config,
   Shortcut,
+  StartApiServerStatusResult,
+  StopApiServerStatusResult,
   SupportedOcrFile,
   ThemeMode,
   WebDavConfig
 } from '@types'
-import { contextBridge, ipcRenderer, OpenDialogOptions, shell, webUtils } from 'electron'
-import { CreateDirectoryOptions } from 'webdav'
+import type { OpenDialogOptions } from 'electron'
+import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
+import type { CreateDirectoryOptions } from 'webdav'
 
+import type {
+  InstalledPlugin,
+  InstallFromDirectoryOptions,
+  InstallFromSourceResult,
+  InstallFromZipOptions,
+  InstallPluginOptions,
+  PluginMetadata,
+  PluginResult,
+  UninstallPluginOptions,
+  UninstallPluginPackageOptions,
+  UninstallPluginPackageResult,
+  WritePluginContentOptions
+} from '../renderer/src/types/plugin'
 import type { ActionItem } from '../renderer/src/types/selectionTypes'
+
+// OpenClaw types
+type OpenClawGatewayStatus = 'stopped' | 'starting' | 'running' | 'error'
+
+interface OpenClawHealthInfo {
+  status: 'healthy' | 'unhealthy'
+  gatewayPort: number
+}
+
+interface OpenClawChannelInfo {
+  id: string
+  name: string
+  type: string
+  status: 'connected' | 'disconnected' | 'error'
+}
+
+type DirectoryListOptions = {
+  recursive?: boolean
+  maxDepth?: number
+  includeHidden?: boolean
+  includeFiles?: boolean
+  includeDirectories?: boolean
+  maxEntries?: number
+  searchPattern?: string
+}
+
+type NetworkFetchConfig = {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: any
+  timeout?: number
+  stream?: boolean
+  requestId?: string
+}
+
+type LocalSearchRequest = {
+  provider: 'local-google' | 'local-bing' | 'local-baidu'
+  url: string
+  headers?: Record<string, string>
+  timeout?: number
+}
+
+type HttpProxyConfig = {
+  url: string
+  headers?: Record<string, string>
+  timeout?: number
+  auth?: { username: string; password?: string }
+  data?: any
+  body?: any
+}
+
+async function getApiServerConnection() {
+  let status = (await ipcRenderer.invoke(IpcChannel.ApiServer_GetStatus)) as GetApiServerStatusResult
+
+  if (!status.running) {
+    const startResult = (await ipcRenderer.invoke(IpcChannel.ApiServer_Start)) as StartApiServerStatusResult
+    if (!startResult.success) {
+      throw new Error(startResult.error)
+    }
+    status = (await ipcRenderer.invoke(IpcChannel.ApiServer_GetStatus)) as GetApiServerStatusResult
+  }
+
+  if (!status.config) {
+    throw new Error('API server config unavailable')
+  }
+
+  const host = status.config.host
+  const normalizedHost = /^https?:\/\//.test(host) ? host : `http://${host}:${status.config.port}`
+  const baseUrl = normalizedHost.replace(/\/$/, '')
+
+  return {
+    baseUrl,
+    apiKey: status.config.apiKey
+  }
+}
+
+async function callApiServer(path: string, payload: unknown) {
+  const { baseUrl, apiKey } = await getApiServerConnection()
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-API-Key': apiKey
+    },
+    body: JSON.stringify(payload ?? {})
+  })
+
+  return await response.json()
+}
 
 export function tracedInvoke(channel: string, spanContext: SpanContext | undefined, ...args: any[]) {
   if (spanContext) {
@@ -51,7 +173,7 @@ const api = {
   setProxy: (proxy: string | undefined, bypassRules?: string) =>
     ipcRenderer.invoke(IpcChannel.App_Proxy, proxy, bypassRules),
   checkForUpdate: () => ipcRenderer.invoke(IpcChannel.App_CheckForUpdate),
-  showUpdateDialog: () => ipcRenderer.invoke(IpcChannel.App_ShowUpdateDialog),
+  quitAndInstall: () => ipcRenderer.invoke(IpcChannel.App_QuitAndInstall),
   setLanguage: (lang: string) => ipcRenderer.invoke(IpcChannel.App_SetLanguage, lang),
   setEnableSpellCheck: (isEnable: boolean) => ipcRenderer.invoke(IpcChannel.App_SetEnableSpellCheck, isEnable),
   setSpellCheckLanguages: (languages: string[]) => ipcRenderer.invoke(IpcChannel.App_SetSpellCheckLanguages, languages),
@@ -78,6 +200,7 @@ const api = {
   flushAppData: () => ipcRenderer.invoke(IpcChannel.App_FlushAppData),
   isNotEmptyDir: (path: string) => ipcRenderer.invoke(IpcChannel.App_IsNotEmptyDir, path),
   relaunchApp: (options?: Electron.RelaunchOptions) => ipcRenderer.invoke(IpcChannel.App_RelaunchApp, options),
+  resetData: () => ipcRenderer.invoke(IpcChannel.App_ResetData),
   openWebsite: (url: string) => ipcRenderer.invoke(IpcChannel.Open_Website, url),
   getCacheSize: () => ipcRenderer.invoke(IpcChannel.App_GetCacheSize),
   clearCache: () => ipcRenderer.invoke(IpcChannel.App_ClearCache),
@@ -86,6 +209,8 @@ const api = {
   setFullScreen: (value: boolean): Promise<void> => ipcRenderer.invoke(IpcChannel.App_SetFullScreen, value),
   isFullScreen: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.App_IsFullScreen),
   getSystemFonts: (): Promise<string[]> => ipcRenderer.invoke(IpcChannel.App_GetSystemFonts),
+  getIpCountry: (): Promise<string> => ipcRenderer.invoke(IpcChannel.App_GetIpCountry),
+  mockCrashRenderProcess: () => ipcRenderer.invoke(IpcChannel.APP_CrashRenderProcess),
   mac: {
     isProcessTrusted: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.App_MacIsProcessTrusted),
     requestProcessTrust: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.App_MacRequestProcessTrust)
@@ -95,7 +220,13 @@ const api = {
   },
   system: {
     getDeviceType: () => ipcRenderer.invoke(IpcChannel.System_GetDeviceType),
-    getHostname: () => ipcRenderer.invoke(IpcChannel.System_GetHostname)
+    getHostname: () => ipcRenderer.invoke(IpcChannel.System_GetHostname),
+    getCpuName: () => ipcRenderer.invoke(IpcChannel.System_GetCpuName),
+    checkGitBash: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.System_CheckGitBash),
+    getGitBashPath: (): Promise<string | null> => ipcRenderer.invoke(IpcChannel.System_GetGitBashPath),
+    getGitBashPathInfo: (): Promise<GitBashPathInfo> => ipcRenderer.invoke(IpcChannel.System_GetGitBashPathInfo),
+    setGitBashPath: (newPath: string | null): Promise<boolean> =>
+      ipcRenderer.invoke(IpcChannel.System_SetGitBashPath, newPath)
   },
   devTools: {
     toggle: () => ipcRenderer.invoke(IpcChannel.System_ToggleDevTools)
@@ -139,7 +270,11 @@ const api = {
     listS3Files: (s3Config: S3Config) => ipcRenderer.invoke(IpcChannel.Backup_ListS3Files, s3Config),
     deleteS3File: (fileName: string, s3Config: S3Config) =>
       ipcRenderer.invoke(IpcChannel.Backup_DeleteS3File, fileName, s3Config),
-    checkS3Connection: (s3Config: S3Config) => ipcRenderer.invoke(IpcChannel.Backup_CheckS3Connection, s3Config)
+    checkS3Connection: (s3Config: S3Config) => ipcRenderer.invoke(IpcChannel.Backup_CheckS3Connection, s3Config),
+    createLanTransferBackup: (data: string): Promise<string> =>
+      ipcRenderer.invoke(IpcChannel.Backup_CreateLanTransferBackup, data),
+    deleteTempBackup: (filePath: string): Promise<boolean> =>
+      ipcRenderer.invoke(IpcChannel.Backup_DeleteTempBackup, filePath)
   },
   file: {
     select: (options?: OpenDialogOptions): Promise<FileMetadata[] | null> =>
@@ -167,8 +302,10 @@ const api = {
     openPath: (path: string) => ipcRenderer.invoke(IpcChannel.File_OpenPath, path),
     save: (path: string, content: string | NodeJS.ArrayBufferView, options?: any) =>
       ipcRenderer.invoke(IpcChannel.File_Save, path, content, options),
-    selectFolder: (options?: OpenDialogOptions) => ipcRenderer.invoke(IpcChannel.File_SelectFolder, options),
-    saveImage: (name: string, data: string) => ipcRenderer.invoke(IpcChannel.File_SaveImage, name, data),
+    selectFolder: (options?: OpenDialogOptions): Promise<string | null> =>
+      ipcRenderer.invoke(IpcChannel.File_SelectFolder, options),
+    saveImage: (name: string, data: string): Promise<boolean> =>
+      ipcRenderer.invoke(IpcChannel.File_SaveImage, name, data),
     binaryImage: (fileId: string) => ipcRenderer.invoke(IpcChannel.File_BinaryImage, fileId),
     base64Image: (fileId: string): Promise<{ mime: string; base64: string; data: string }> =>
       ipcRenderer.invoke(IpcChannel.File_Base64Image, fileId),
@@ -179,17 +316,31 @@ const api = {
       ipcRenderer.invoke(IpcChannel.File_Download, url, isUseContentType),
     copy: (fileId: string, destPath: string) => ipcRenderer.invoke(IpcChannel.File_Copy, fileId, destPath),
     base64File: (fileId: string) => ipcRenderer.invoke(IpcChannel.File_Base64File, fileId),
+    transcodeAudioToWav: (fileId: string): Promise<{ base64: string }> =>
+      ipcRenderer.invoke(IpcChannel.File_TranscodeAudioToWav, fileId),
+    transcodeAudio: (
+      fileId: string,
+      format: 'mp3' | 'wav' = 'mp3'
+    ): Promise<{ base64: string; mime: string; ext: string }> =>
+      ipcRenderer.invoke(IpcChannel.File_TranscodeAudio, fileId, format),
     pdfInfo: (fileId: string) => ipcRenderer.invoke(IpcChannel.File_GetPdfInfo, fileId),
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     openFileWithRelativePath: (file: FileMetadata) => ipcRenderer.invoke(IpcChannel.File_OpenWithRelativePath, file),
     isTextFile: (filePath: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.File_IsTextFile, filePath),
+    isDirectory: (filePath: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.File_IsDirectory, filePath),
     getDirectoryStructure: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_GetDirectoryStructure, dirPath),
+    listDirectory: (dirPath: string, options?: DirectoryListOptions) =>
+      ipcRenderer.invoke(IpcChannel.File_ListDirectory, dirPath, options),
     checkFileName: (dirPath: string, fileName: string, isFile: boolean) =>
       ipcRenderer.invoke(IpcChannel.File_CheckFileName, dirPath, fileName, isFile),
     validateNotesDirectory: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_ValidateNotesDirectory, dirPath),
     startFileWatcher: (dirPath: string, config?: any) =>
       ipcRenderer.invoke(IpcChannel.File_StartWatcher, dirPath, config),
     stopFileWatcher: () => ipcRenderer.invoke(IpcChannel.File_StopWatcher),
+    pauseFileWatcher: () => ipcRenderer.invoke(IpcChannel.File_PauseWatcher),
+    resumeFileWatcher: () => ipcRenderer.invoke(IpcChannel.File_ResumeWatcher),
+    batchUploadMarkdown: (filePaths: string[], targetPath: string) =>
+      ipcRenderer.invoke(IpcChannel.File_BatchUploadMarkdown, filePaths, targetPath),
     onFileChange: (callback: (data: FileChangeEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: any) => {
         if (data && typeof data === 'object') {
@@ -198,7 +349,8 @@ const api = {
       }
       ipcRenderer.on('file-change', listener)
       return () => ipcRenderer.off('file-change', listener)
-    }
+    },
+    showInFolder: (path: string): Promise<void> => ipcRenderer.invoke(IpcChannel.File_ShowInFolder, path)
   },
   fs: {
     read: (pathOrUrl: string, encoding?: BufferEncoding) => ipcRenderer.invoke(IpcChannel.Fs_Read, pathOrUrl, encoding),
@@ -220,7 +372,7 @@ const api = {
     create: (base: KnowledgeBaseParams, context?: SpanContext) =>
       tracedInvoke(IpcChannel.KnowledgeBase_Create, context, base),
     reset: (base: KnowledgeBaseParams) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Reset, base),
-    delete: (base: KnowledgeBaseParams, id: string) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Delete, base, id),
+    delete: (id: string) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Delete, id),
     add: ({
       base,
       item,
@@ -239,9 +391,7 @@ const api = {
     rerank: (
       { search, base, results }: { search: string; base: KnowledgeBaseParams; results: KnowledgeSearchResult[] },
       context?: SpanContext
-    ) => tracedInvoke(IpcChannel.KnowledgeBase_Rerank, context, { search, base, results }),
-    checkQuota: ({ base, userId }: { base: KnowledgeBaseParams; userId: string }) =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeBase_Check_Quota, base, userId)
+    ) => tracedInvoke(IpcChannel.KnowledgeBase_Rerank, context, { search, base, results })
   },
   memory: {
     add: (messages: string | AssistantMessage[], options?: AddMemoryOptions) =>
@@ -257,7 +407,8 @@ const api = {
     deleteUser: (userId: string) => ipcRenderer.invoke(IpcChannel.Memory_DeleteUser, userId),
     deleteAllMemoriesForUser: (userId: string) =>
       ipcRenderer.invoke(IpcChannel.Memory_DeleteAllMemoriesForUser, userId),
-    getUsersList: () => ipcRenderer.invoke(IpcChannel.Memory_GetUsersList)
+    getUsersList: () => ipcRenderer.invoke(IpcChannel.Memory_GetUsersList),
+    migrateMemoryDb: () => ipcRenderer.invoke(IpcChannel.Memory_MigrateMemoryDb)
   },
   window: {
     setMinimumSize: (width: number, height: number) =>
@@ -285,10 +436,32 @@ const api = {
     clearAuthCache: (projectId: string, clientEmail?: string) =>
       ipcRenderer.invoke(IpcChannel.VertexAI_ClearAuthCache, projectId, clientEmail)
   },
+  ovms: {
+    isSupported: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.Ovms_IsSupported),
+    addModel: (modelName: string, modelId: string, modelSource: string, task: string) =>
+      ipcRenderer.invoke(IpcChannel.Ovms_AddModel, modelName, modelId, modelSource, task),
+    stopAddModel: () => ipcRenderer.invoke(IpcChannel.Ovms_StopAddModel),
+    getModels: () => ipcRenderer.invoke(IpcChannel.Ovms_GetModels),
+    isRunning: () => ipcRenderer.invoke(IpcChannel.Ovms_IsRunning),
+    getStatus: () => ipcRenderer.invoke(IpcChannel.Ovms_GetStatus),
+    runOvms: () => ipcRenderer.invoke(IpcChannel.Ovms_RunOVMS),
+    stopOvms: () => ipcRenderer.invoke(IpcChannel.Ovms_StopOVMS)
+  },
   config: {
     set: (key: string, value: any, isNotify: boolean = false) =>
       ipcRenderer.invoke(IpcChannel.Config_Set, key, value, isNotify),
-    get: (key: string) => ipcRenderer.invoke(IpcChannel.Config_Get, key)
+    get: (key: string) => ipcRenderer.invoke(IpcChannel.Config_Get, key),
+    getMergedConfig: () => ipcRenderer.invoke(IpcChannel.Config_GetMergedConfig),
+    reload: () => ipcRenderer.invoke(IpcChannel.Config_Reload),
+    updateUserModels: (models: any[]) => ipcRenderer.invoke(IpcChannel.Config_UpdateUserModels, models),
+    updateUserMcpServers: (servers: any[]) => ipcRenderer.invoke(IpcChannel.Config_UpdateUserMcpServers, servers),
+    getLastRequestCost: (params: {
+      providerId: string
+      modelName?: string
+      promptTokens?: number
+      completionTokens?: number
+      sinceTs?: number
+    }) => ipcRenderer.invoke(IpcChannel.Config_GetLastRequestCost, params)
   },
   miniWindow: {
     show: () => ipcRenderer.invoke(IpcChannel.MiniWindow_Show),
@@ -325,8 +498,19 @@ const api = {
       return ipcRenderer.invoke(IpcChannel.Mcp_UploadDxt, buffer, file.name)
     },
     abortTool: (callId: string) => ipcRenderer.invoke(IpcChannel.Mcp_AbortTool, callId),
+    resolveHubTool: (nameOrId: string): Promise<{ serverId: string; toolName: string } | null> =>
+      ipcRenderer.invoke(IpcChannel.Mcp_ResolveHubTool, nameOrId),
     getServerVersion: (server: MCPServer): Promise<string | null> =>
-      ipcRenderer.invoke(IpcChannel.Mcp_GetServerVersion, server)
+      ipcRenderer.invoke(IpcChannel.Mcp_GetServerVersion, server),
+    getServerLogs: (server: MCPServer): Promise<MCPServerLogEntry[]> =>
+      ipcRenderer.invoke(IpcChannel.Mcp_GetServerLogs, server),
+    onServerLog: (callback: (log: MCPServerLogEntry & { serverId?: string }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, log: MCPServerLogEntry & { serverId?: string }) => {
+        callback(log)
+      }
+      ipcRenderer.on(IpcChannel.Mcp_ServerLog, listener)
+      return () => ipcRenderer.off(IpcChannel.Mcp_ServerLog, listener)
+    }
   },
   python: {
     execute: (script: string, context?: Record<string, any>, timeout?: number) =>
@@ -345,11 +529,22 @@ const api = {
     logout: () => ipcRenderer.invoke(IpcChannel.Copilot_Logout),
     getUser: (token: string) => ipcRenderer.invoke(IpcChannel.Copilot_GetUser, token)
   },
+  cherryin: {
+    saveToken: (accessToken: string, refreshToken?: string) =>
+      ipcRenderer.invoke(IpcChannel.CherryIN_SaveToken, accessToken, refreshToken),
+    hasToken: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.CherryIN_HasToken),
+    getBalance: (apiHost: string) => ipcRenderer.invoke(IpcChannel.CherryIN_GetBalance, apiHost),
+    logout: (apiHost: string) => ipcRenderer.invoke(IpcChannel.CherryIN_Logout, apiHost),
+    startOAuthFlow: (oauthServer: string, apiHost?: string) =>
+      ipcRenderer.invoke(IpcChannel.CherryIN_StartOAuthFlow, oauthServer, apiHost),
+    exchangeToken: (code: string, state: string) => ipcRenderer.invoke(IpcChannel.CherryIN_ExchangeToken, code, state)
+  },
   // Binary related APIs
   isBinaryExist: (name: string) => ipcRenderer.invoke(IpcChannel.App_IsBinaryExist, name),
   getBinaryPath: (name: string) => ipcRenderer.invoke(IpcChannel.App_GetBinaryPath, name),
   installUVBinary: () => ipcRenderer.invoke(IpcChannel.App_InstallUvBinary),
   installBunBinary: () => ipcRenderer.invoke(IpcChannel.App_InstallBunBinary),
+  installOvmsBinary: () => ipcRenderer.invoke(IpcChannel.App_InstallOvmsBinary),
   protocol: {
     onReceiveData: (callback: (data: { url: string; params: any }) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: { url: string; params: any }) => {
@@ -361,14 +556,29 @@ const api = {
       }
     }
   },
+  externalApps: {
+    detectInstalled: (): Promise<ExternalAppInfo[]> => ipcRenderer.invoke(IpcChannel.ExternalApps_DetectInstalled)
+  },
   nutstore: {
     getSSOUrl: () => ipcRenderer.invoke(IpcChannel.Nutstore_GetSsoUrl),
     decryptToken: (token: string) => ipcRenderer.invoke(IpcChannel.Nutstore_DecryptToken, token),
     getDirectoryContents: (token: string, path: string) =>
       ipcRenderer.invoke(IpcChannel.Nutstore_GetDirectoryContents, token, path)
   },
+  network: {
+    fetchProxy: (config: NetworkFetchConfig) => callApiServer('/api/v1/network/fetch', config),
+    search: (config: LocalSearchRequest) => callApiServer('/api/v1/network/search', config)
+  },
+  httpProxy: {
+    get: (config: HttpProxyConfig) => callApiServer('/api/v1/network/http-get', config),
+    post: (config: HttpProxyConfig) =>
+      callApiServer('/api/v1/network/http-post', {
+        ...config,
+        body: config.body ?? config.data
+      })
+  },
   searchService: {
-    openSearchWindow: (uid: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_Open, uid),
+    openSearchWindow: (uid: string, show?: boolean) => ipcRenderer.invoke(IpcChannel.SearchWindow_Open, uid, show),
     closeSearchWindow: (uid: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_Close, uid),
     openUrlInSearchWindow: (uid: string, url: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_OpenUrl, uid, url)
   },
@@ -376,7 +586,18 @@ const api = {
     setOpenLinkExternal: (webviewId: number, isExternal: boolean) =>
       ipcRenderer.invoke(IpcChannel.Webview_SetOpenLinkExternal, webviewId, isExternal),
     setSpellCheckEnabled: (webviewId: number, isEnable: boolean) =>
-      ipcRenderer.invoke(IpcChannel.Webview_SetSpellCheckEnabled, webviewId, isEnable)
+      ipcRenderer.invoke(IpcChannel.Webview_SetSpellCheckEnabled, webviewId, isEnable),
+    printToPDF: (webviewId: number) => ipcRenderer.invoke(IpcChannel.Webview_PrintToPDF, webviewId),
+    saveAsHTML: (webviewId: number) => ipcRenderer.invoke(IpcChannel.Webview_SaveAsHTML, webviewId),
+    onFindShortcut: (callback: (payload: WebviewKeyEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: WebviewKeyEvent) => {
+        callback(payload)
+      }
+      ipcRenderer.on(IpcChannel.Webview_SearchHotkey, listener)
+      return () => {
+        ipcRenderer.off(IpcChannel.Webview_SearchHotkey, listener)
+      }
+    }
   },
   storeSync: {
     subscribe: () => ipcRenderer.invoke(IpcChannel.StoreSync_Subscribe),
@@ -400,11 +621,24 @@ const api = {
       ipcRenderer.invoke(IpcChannel.Selection_ProcessAction, actionItem, isFullScreen),
     closeActionWindow: () => ipcRenderer.invoke(IpcChannel.Selection_ActionWindowClose),
     minimizeActionWindow: () => ipcRenderer.invoke(IpcChannel.Selection_ActionWindowMinimize),
-    pinActionWindow: (isPinned: boolean) => ipcRenderer.invoke(IpcChannel.Selection_ActionWindowPin, isPinned)
+    pinActionWindow: (isPinned: boolean) => ipcRenderer.invoke(IpcChannel.Selection_ActionWindowPin, isPinned),
+    // [Windows only] Electron bug workaround - can be removed once https://github.com/electron/electron/issues/48554 is fixed
+    resizeActionWindow: (deltaX: number, deltaY: number, direction: string) =>
+      ipcRenderer.invoke(IpcChannel.Selection_ActionWindowResize, deltaX, deltaY, direction)
+  },
+  agentTools: {
+    respondToPermission: (payload: {
+      requestId: string
+      behavior: 'allow' | 'deny'
+      updatedInput?: Record<string, unknown>
+      message?: string
+      updatedPermissions?: PermissionUpdate[]
+    }) => ipcRenderer.invoke(IpcChannel.AgentToolPermission_Response, payload)
   },
   quoteToMainWindow: (text: string) => ipcRenderer.invoke(IpcChannel.App_QuoteToMain, text),
   setDisableHardwareAcceleration: (isDisable: boolean) =>
     ipcRenderer.invoke(IpcChannel.App_SetDisableHardwareAcceleration, isDisable),
+  setUseSystemTitleBar: (isActive: boolean) => ipcRenderer.invoke(IpcChannel.App_SetUseSystemTitleBar, isActive),
   trace: {
     saveData: (topicId: string) => ipcRenderer.invoke(IpcChannel.TRACE_SAVE_DATA, topicId),
     getData: (topicId: string, traceId: string, modelName?: string) =>
@@ -453,7 +687,8 @@ const api = {
   },
   ocr: {
     ocr: (file: SupportedOcrFile, provider: OcrProvider): Promise<OcrResult> =>
-      ipcRenderer.invoke(IpcChannel.OCR_ocr, file, provider)
+      ipcRenderer.invoke(IpcChannel.OCR_ocr, file, provider),
+    listProviders: (): Promise<string[]> => ipcRenderer.invoke(IpcChannel.OCR_ListProviders)
   },
   cherryai: {
     generateSignature: (params: { method: string; path: string; query: string; body: Record<string, any> }) =>
@@ -473,6 +708,90 @@ const api = {
         ipcRenderer.removeListener(channel, listener)
       }
     }
+  },
+  apiServer: {
+    getStatus: (): Promise<GetApiServerStatusResult> => ipcRenderer.invoke(IpcChannel.ApiServer_GetStatus),
+    start: (): Promise<StartApiServerStatusResult> => ipcRenderer.invoke(IpcChannel.ApiServer_Start),
+    restart: (): Promise<RestartApiServerStatusResult> => ipcRenderer.invoke(IpcChannel.ApiServer_Restart),
+    stop: (): Promise<StopApiServerStatusResult> => ipcRenderer.invoke(IpcChannel.ApiServer_Stop),
+    onReady: (callback: () => void): (() => void) => {
+      const listener = () => {
+        callback()
+      }
+      ipcRenderer.on(IpcChannel.ApiServer_Ready, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.ApiServer_Ready, listener)
+      }
+    }
+  },
+  claudeCodePlugin: {
+    install: (options: InstallPluginOptions): Promise<PluginResult<PluginMetadata>> =>
+      ipcRenderer.invoke(IpcChannel.ClaudeCodePlugin_Install, options),
+    uninstall: (options: UninstallPluginOptions): Promise<PluginResult<void>> =>
+      ipcRenderer.invoke(IpcChannel.ClaudeCodePlugin_Uninstall, options),
+    uninstallPackage: (options: UninstallPluginPackageOptions): Promise<PluginResult<UninstallPluginPackageResult>> =>
+      ipcRenderer.invoke(IpcChannel.ClaudeCodePlugin_UninstallPackage, options),
+    listInstalled: (agentId: string): Promise<PluginResult<InstalledPlugin[]>> =>
+      ipcRenderer.invoke(IpcChannel.ClaudeCodePlugin_ListInstalled, agentId),
+    writeContent: (options: WritePluginContentOptions): Promise<PluginResult<void>> =>
+      ipcRenderer.invoke(IpcChannel.ClaudeCodePlugin_WriteContent, options),
+    installFromZip: (options: InstallFromZipOptions): Promise<PluginResult<InstallFromSourceResult>> =>
+      ipcRenderer.invoke(IpcChannel.ClaudeCodePlugin_InstallFromZip, options),
+    installFromDirectory: (options: InstallFromDirectoryOptions): Promise<PluginResult<InstallFromSourceResult>> =>
+      ipcRenderer.invoke(IpcChannel.ClaudeCodePlugin_InstallFromDirectory, options)
+  },
+  localTransfer: {
+    getState: (): Promise<LocalTransferState> => ipcRenderer.invoke(IpcChannel.LocalTransfer_ListServices),
+    startScan: (): Promise<LocalTransferState> => ipcRenderer.invoke(IpcChannel.LocalTransfer_StartScan),
+    stopScan: (): Promise<LocalTransferState> => ipcRenderer.invoke(IpcChannel.LocalTransfer_StopScan),
+    connect: (payload: LocalTransferConnectPayload): Promise<LanHandshakeAckMessage> =>
+      ipcRenderer.invoke(IpcChannel.LocalTransfer_Connect, payload),
+    disconnect: (): Promise<void> => ipcRenderer.invoke(IpcChannel.LocalTransfer_Disconnect),
+    onServicesUpdated: (callback: (state: LocalTransferState) => void): (() => void) => {
+      const channel = IpcChannel.LocalTransfer_ServicesUpdated
+      const listener = (_: Electron.IpcRendererEvent, state: LocalTransferState) => callback(state)
+      ipcRenderer.on(channel, listener)
+      return () => {
+        ipcRenderer.removeListener(channel, listener)
+      }
+    },
+    onClientEvent: (callback: (event: LanClientEvent) => void): (() => void) => {
+      const channel = IpcChannel.LocalTransfer_ClientEvent
+      const listener = (_: Electron.IpcRendererEvent, event: LanClientEvent) => callback(event)
+      ipcRenderer.on(channel, listener)
+      return () => {
+        ipcRenderer.removeListener(channel, listener)
+      }
+    },
+    sendFile: (filePath: string): Promise<LanFileCompleteMessage> =>
+      ipcRenderer.invoke(IpcChannel.LocalTransfer_SendFile, { filePath }),
+    cancelTransfer: (): Promise<void> => ipcRenderer.invoke(IpcChannel.LocalTransfer_CancelTransfer)
+  },
+  openclaw: {
+    checkInstalled: (): Promise<{ installed: boolean; path: string | null; needsMigration: boolean }> =>
+      ipcRenderer.invoke(IpcChannel.OpenClaw_CheckInstalled),
+    install: (): Promise<OperationResult> => ipcRenderer.invoke(IpcChannel.OpenClaw_Install),
+    uninstall: (): Promise<OperationResult> => ipcRenderer.invoke(IpcChannel.OpenClaw_Uninstall),
+    startGateway: (port?: number): Promise<OperationResult> =>
+      ipcRenderer.invoke(IpcChannel.OpenClaw_StartGateway, port),
+    stopGateway: (): Promise<OperationResult> => ipcRenderer.invoke(IpcChannel.OpenClaw_StopGateway),
+    getStatus: (): Promise<{ status: OpenClawGatewayStatus; port: number }> =>
+      ipcRenderer.invoke(IpcChannel.OpenClaw_GetStatus),
+    checkHealth: (): Promise<OpenClawHealthInfo> => ipcRenderer.invoke(IpcChannel.OpenClaw_CheckHealth),
+    getDashboardUrl: (): Promise<string> => ipcRenderer.invoke(IpcChannel.OpenClaw_GetDashboardUrl),
+    syncConfig: (provider: Provider, primaryModel: Model): Promise<OperationResult> =>
+      ipcRenderer.invoke(IpcChannel.OpenClaw_SyncConfig, provider, primaryModel),
+    getChannels: (): Promise<OpenClawChannelInfo[]> => ipcRenderer.invoke(IpcChannel.OpenClaw_GetChannels),
+    checkUpdate: (): Promise<{
+      hasUpdate: boolean
+      currentVersion: string | null
+      latestVersion: string | null
+      message?: string
+    }> => ipcRenderer.invoke(IpcChannel.OpenClaw_CheckUpdate),
+    performUpdate: (): Promise<OperationResult> => ipcRenderer.invoke(IpcChannel.OpenClaw_PerformUpdate)
+  },
+  analytics: {
+    trackTokenUsage: (data: TokenUsageData) => ipcRenderer.invoke(IpcChannel.Analytics_TrackTokenUsage, data)
   }
 }
 

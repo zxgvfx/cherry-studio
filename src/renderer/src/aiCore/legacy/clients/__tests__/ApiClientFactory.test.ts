@@ -1,5 +1,4 @@
-import { Provider } from '@renderer/types'
-import { isOpenAIProvider } from '@renderer/utils'
+import type { Provider } from '@renderer/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AihubmixAPIClient } from '../aihubmix/AihubmixAPIClient'
@@ -59,16 +58,33 @@ vi.mock('../aws/AwsBedrockAPIClient', () => ({
   AwsBedrockAPIClient: vi.fn().mockImplementation(() => ({}))
 }))
 
+vi.mock('@renderer/services/AssistantService.ts', () => ({
+  getDefaultAssistant: () => {
+    return {
+      id: 'default',
+      name: 'default',
+      emoji: '😀',
+      prompt: '',
+      topics: [],
+      messages: [],
+      type: 'assistant',
+      regularPhrases: [],
+      settings: {}
+    }
+  }
+}))
+
 // Mock the models config to prevent circular dependency issues
 vi.mock('@renderer/config/models', () => ({
   findTokenLimit: vi.fn(),
   isReasoningModel: vi.fn(),
+  isOpenAILLMModel: vi.fn(),
   SYSTEM_MODELS: {
     silicon: [],
     defaultModel: []
   },
   isOpenAIModel: vi.fn(() => false),
-  glm45FlashModel: {},
+  qwen3Next80BModel: {},
   qwen38bModel: {}
 }))
 
@@ -200,38 +216,6 @@ describe('ApiClientFactory', () => {
       expect(AihubmixAPIClient).toHaveBeenCalledWith(provider)
       expect(AnthropicAPIClient).not.toHaveBeenCalled()
       expect(client).toBeDefined()
-    })
-  })
-
-  describe('isOpenAIProvider', () => {
-    it('should return true for openai type', () => {
-      const provider = createTestProvider('openai', 'openai')
-      expect(isOpenAIProvider(provider)).toBe(true)
-    })
-
-    it('should return true for azure-openai type', () => {
-      const provider = createTestProvider('azure-openai', 'azure-openai')
-      expect(isOpenAIProvider(provider)).toBe(true)
-    })
-
-    it('should return true for unknown type (fallback to OpenAI)', () => {
-      const provider = createTestProvider('unknown', 'unknown')
-      expect(isOpenAIProvider(provider)).toBe(true)
-    })
-
-    it('should return false for vertexai type', () => {
-      const provider = createTestProvider('vertex', 'vertexai')
-      expect(isOpenAIProvider(provider)).toBe(false)
-    })
-
-    it('should return false for anthropic type', () => {
-      const provider = createTestProvider('anthropic', 'anthropic')
-      expect(isOpenAIProvider(provider)).toBe(false)
-    })
-
-    it('should return false for gemini type', () => {
-      const provider = createTestProvider('gemini', 'gemini')
-      expect(isOpenAIProvider(provider)).toBe(false)
     })
   })
 })

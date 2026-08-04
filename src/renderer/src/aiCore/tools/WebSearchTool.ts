@@ -1,9 +1,97 @@
 import { REFERENCE_PROMPT } from '@renderer/config/prompts'
 import WebSearchService from '@renderer/services/WebSearchService'
-import { WebSearchProvider, WebSearchProviderResponse } from '@renderer/types'
-import { ExtractResults } from '@renderer/utils/extract'
+import type { WebSearchProvider, WebSearchProviderResponse } from '@renderer/types'
+import type { ExtractResults } from '@renderer/utils/extract'
 import { type InferToolInput, type InferToolOutput, tool } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
+
+import type { BuiltinTool, BuiltinToolContext } from './BuiltinToolRegistry'
+
+/**
+ * Per-result content cap (characters). A single web page can easily contain
+ * 4k-8k+ tokens; without a cap the full content of every result is serialized
+ * into the tool output and silently bloats the context window.
+ */
+const MAX_CHARS_PER_RESULT = 4000
+
+/**
+ * Overall budget (characters) shared across all results in a single search.
+ * Roughly mirrors Open WebUI's hard cap strategy so that a handful of large
+ * pages can't dominate the whole context window.
+ */
+const MAX_TOTAL_CONTENT_CHARS = 24_000
+
+function truncateContent(text: string, max: number): string {
+  if (!text || text.length <= max) return text || ''
+  if (max <= 0) return ''
+  return `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]`
+}
+
+/**
+ * Builds the citation-formatted tool output shared by both the direct and the
+ * pre-extracted web search tools, applying per-result and total content caps.
+ */
+function buildWebSearchModelOutput(
+  results: WebSearchProviderResponse,
+  emptySummary: string
+): { type: 'content'; value: Array<{ type: 'text'; text: string }> } {
+  let summary = emptySummary
+  if (results.query && results.results.length > 0) {
+    summary = `Found ${results.results.length} relevant sources. Use [number] format to cite specific information.`
+  }
+
+  const imageUrlPattern = /!\[.*?\]\((https?:\/\/[^)]+)\)/g
+  const allImageUrls: string[] = []
+  let remainingBudget = MAX_TOTAL_CONTENT_CHARS
+
+  const citationData = results.results.map((result, index) => {
+    const imgs: string[] = []
+    let match: RegExpExecArray | null
+    imageUrlPattern.lastIndex = 0
+    while ((match = imageUrlPattern.exec(result.content || '')) !== null) {
+      imgs.push(match[1])
+    }
+    allImageUrls.push(...imgs)
+
+    // Image URLs are already extracted above, so truncating the raw content is safe.
+    const perResultLimit = Math.min(MAX_CHARS_PER_RESULT, remainingBudget)
+    const content = truncateContent(result.content || '', perResultLimit)
+    remainingBudget = Math.max(0, remainingBudget - content.length)
+
+    return {
+      number: index + 1,
+      title: result.title,
+      content,
+      url: result.url,
+      ...(imgs.length > 0 ? { images: imgs } : {})
+    }
+  })
+
+  const hasImages = allImageUrls.length > 0
+
+  const referenceContent = `\`\`\`json\n${JSON.stringify(citationData, null, 2)}\n\`\`\``
+  const fullInstructions = REFERENCE_PROMPT.replace(
+    '{question}',
+    "Based on the search results, please answer the user's question with proper citations."
+  ).replace('{references}', referenceContent)
+
+  const value: Array<{ type: 'text'; text: string }> = [
+    { type: 'text', text: summary },
+    { type: 'text', text: fullInstructions }
+  ]
+
+  if (hasImages) {
+    value.push({
+      type: 'text',
+      text:
+        'IMPORTANT: The search results contain real image URLs in the "images" field. ' +
+        'When the user asks for reference images/photos/pictures, you MUST display them using markdown image syntax: ![description](url). ' +
+        'Show the most relevant images directly in your response. Do NOT just provide text links — render images inline.'
+    })
+  }
+
+  return { type: 'content', value }
+}
 
 /**
  * 使用预提取关键词的网络搜索工具
@@ -20,17 +108,17 @@ export const webSearchToolWithPreExtractedKeywords = (
   const webSearchProvider = WebSearchService.getWebSearchProvider(webSearchProviderId)
 
   return tool({
-    name: 'builtin_web_search',
-    description: `Search the web and return citable sources using pre-analyzed search intent.
+    description: `Web search tool for finding current information, news, and real-time data from the internet.
 
-Pre-extracted search keywords: "${extractedKeywords.question.join(', ')}"${
-      extractedKeywords.links
+This tool has been configured with search parameters based on the conversation context:
+- Prepared queries: ${extractedKeywords.question.map((q) => `"${q}"`).join(', ')}${
+      extractedKeywords.links?.length
         ? `
-Relevant links: ${extractedKeywords.links.join(', ')}`
+- Relevant URLs: ${extractedKeywords.links.join(', ')}`
         : ''
     }
 
-Call this tool to execute the search. You can optionally provide additional context to refine the search.`,
+You can use this tool as-is to search with the prepared queries, or provide additionalContext to refine or replace the search terms.`,
 
     inputSchema: z.object({
       additionalContext: z
@@ -70,43 +158,8 @@ Call this tool to execute the search. You can optionally provide additional cont
 
       return searchResults
     },
-    toModelOutput: (results) => {
-      let summary = 'No search needed based on the query analysis.'
-      if (results.query && results.results.length > 0) {
-        summary = `Found ${results.results.length} relevant sources. Use [number] format to cite specific information.`
-      }
-
-      const citationData = results.results.map((result, index) => ({
-        number: index + 1,
-        title: result.title,
-        content: result.content,
-        url: result.url
-      }))
-
-      // 🔑 返回引用友好的格式，复用 REFERENCE_PROMPT 逻辑
-      const referenceContent = `\`\`\`json\n${JSON.stringify(citationData, null, 2)}\n\`\`\``
-      const fullInstructions = REFERENCE_PROMPT.replace(
-        '{question}',
-        "Based on the search results, please answer the user's question with proper citations."
-      ).replace('{references}', referenceContent)
-      return {
-        type: 'content',
-        value: [
-          {
-            type: 'text',
-            text: 'This tool searches for relevant information and formats results for easy citation. The returned sources should be cited using [1], [2], etc. format in your response.'
-          },
-          {
-            type: 'text',
-            text: summary
-          },
-          {
-            type: 'text',
-            text: fullInstructions
-          }
-        ]
-      }
-    }
+    toModelOutput: ({ output: results }) =>
+      buildWebSearchModelOutput(results, 'No search needed based on the query analysis.')
   })
 }
 
@@ -198,7 +251,59 @@ Call this tool to execute the search. You can optionally provide additional cont
 //   })
 // }
 
-// export type WebSearchToolWithExtractionOutput = InferToolOutput<ReturnType<typeof webSearchToolWithExtraction>>
+/**
+ * LLM 驱动的网络搜索工具
+ * 无需预分析，由主 LLM 直接提供搜索查询
+ */
+export const webSearchToolDirect = (webSearchProviderId: WebSearchProvider['id'], requestId: string) => {
+  const webSearchProvider = WebSearchService.getWebSearchProvider(webSearchProviderId)
 
-export type WebSearchToolOutput = InferToolOutput<ReturnType<typeof webSearchToolWithPreExtractedKeywords>>
-export type WebSearchToolInput = InferToolInput<ReturnType<typeof webSearchToolWithPreExtractedKeywords>>
+  return tool({
+    description:
+      'Search the web for current information, news, and real-time data. ' +
+      'Use this when you need up-to-date information or facts not in your training data. ' +
+      'You can provide multiple search queries to get comprehensive results from different angles in a single call. ' +
+      "Tips: use concise, keyword-rich queries; try both English and the user's language for better coverage.",
+
+    inputSchema: z.object({
+      queries: z
+        .array(z.string())
+        .min(1)
+        .max(3)
+        .describe(
+          'Search queries to execute (1-3). Use multiple queries with different angles for better coverage. ' +
+            'Example: ["GitHub most starred agent 2026", "AI agent framework GitHub stars ranking"]'
+        ),
+      urls: z.array(z.string()).optional().describe('Specific URLs to fetch and summarize')
+    }),
+
+    execute: async ({ queries, urls }) => {
+      const extractResults: ExtractResults = {
+        websearch: {
+          question: queries,
+          links: urls
+        }
+      }
+      return await WebSearchService.processWebsearch(webSearchProvider!, extractResults, requestId)
+    },
+    toModelOutput: ({ output: results }) => buildWebSearchModelOutput(results, 'No results found.')
+  })
+}
+
+export const webSearchBuiltinTool: BuiltinTool = {
+  name: 'builtin_web_search',
+  isEnabled: (assistant) => !!assistant.webSearchProviderId,
+  create: (context: BuiltinToolContext) => {
+    if (context.intentKeywords) {
+      const keywords = { question: context.intentKeywords.question, links: context.intentKeywords.links }
+      if (keywords.question[0] === 'not_needed') {
+        keywords.question = [context.userContent]
+      }
+      return webSearchToolWithPreExtractedKeywords(context.assistant.webSearchProviderId!, keywords, context.requestId)
+    }
+    return webSearchToolDirect(context.assistant.webSearchProviderId!, context.requestId)
+  }
+}
+
+export type WebSearchToolOutput = InferToolOutput<ReturnType<typeof webSearchToolDirect>>
+export type WebSearchToolInput = InferToolInput<ReturnType<typeof webSearchToolDirect>>

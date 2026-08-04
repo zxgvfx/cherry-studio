@@ -1,80 +1,421 @@
 {
-  "agents": {
+  "agent": {
     "add": {
-      "button": "Agregar al asistente",
-      "knowledge_base": {
-        "label": "Base de conocimiento",
-        "placeholder": "Seleccionar base de conocimiento"
+      "description": "Maneja tareas complejas con varias herramientas",
+      "error": {
+        "failed": "Error al añadir agente",
+        "invalid_agent": "Agent inválido"
       },
-      "name": {
-        "label": "Nombre",
-        "placeholder": "Ingrese el nombre"
+      "model": {
+        "supported_providers": "Proveedores Admitidos",
+        "tooltip": "Actualmente, solo los modelos que admiten puntos finales de Anthropic están disponibles para la función Agente.",
+        "view_providers": "Ver proveedores compatibles"
       },
-      "prompt": {
-        "label": "Palabra clave",
-        "placeholder": "Ingrese la palabra clave",
-        "variables": {
-          "tip": {
-            "content": "{{date}}:\tFecha\n{{time}}:\tHora\n{{datetime}}:\tFecha y hora\n{{system}}:\tSistema operativo\n{{arch}}:\tArquitectura de CPU\n{{language}}:\tIdioma\n{{model_name}}:\tNombre del modelo\n{{username}}:\tNombre de usuario",
-            "title": "Variables disponibles"
-          }
-        }
-      },
-      "title": "Crear agente inteligente",
-      "unsaved_changes_warning": "Tiene contenido no guardado, ¿está seguro de que desea cerrar?"
-    },
-    "delete": {
-      "popup": {
-        "content": "¿Está seguro de que desea eliminar este agente inteligente?"
+      "title": "Agregar Agente",
+      "type": {
+        "placeholder": "Seleccionar tipo de Agente"
       }
     },
+    "askUserQuestion": {
+      "answered": "respondido",
+      "customPlaceholder": "Introduce tu respuesta...",
+      "loading": "Cargando preguntas...",
+      "multiSelect": "Selección múltiple",
+      "next": "Siguiente",
+      "noQuestions": "No hay preguntas disponibles",
+      "other": "Otro",
+      "previous": "Anterior",
+      "submit": "Enviar",
+      "title": "Preguntas del Agente"
+    },
+    "delete": {
+      "content": "Eliminar este Agente forzará la terminación y eliminación de todas las sesiones bajo este Agente. ¿Está seguro?",
+      "error": {
+        "failed": "Error al eliminar el agente"
+      },
+      "title": "Eliminar Agent"
+    },
     "edit": {
-      "model": {
-        "select": {
-          "title": "Seleccionar modelo"
+      "title": "Agent de edición"
+    },
+    "empty": {
+      "description": "Crea un agente para gestionar tareas complejas con herramientas impulsadas por IA.",
+      "title": "Aún no hay agentes"
+    },
+    "get": {
+      "error": {
+        "failed": "No se pudo obtener el agente.",
+        "null_id": "El ID del agente es nulo."
+      }
+    },
+    "gitBash": {
+      "autoDetected": "Usando Git Bash detectado automáticamente",
+      "autoDiscoveredHint": "Auto-descubierto",
+      "clear": {
+        "button": "Borrar ruta personalizada"
+      },
+      "customPath": "Usando ruta personalizada: {{path}}",
+      "error": {
+        "description": "Se requiere Git Bash para ejecutar agentes en Windows. El agente no puede funcionar sin él. Instale Git para Windows desde",
+        "recheck": "Volver a verificar la instalación de Git Bash",
+        "required": "Se requiere la ruta de Git Bash en Windows",
+        "title": "Git Bash Requerido"
+      },
+      "found": {
+        "title": "Git Bash configurado"
+      },
+      "notFound": "Git Bash no encontrado. Por favor, instálalo primero.",
+      "pick": {
+        "button": "Seleccionar ruta de Git Bash",
+        "failed": "No se pudo configurar la ruta de Git Bash",
+        "invalidPath": "El archivo seleccionado no es un ejecutable válido de Git Bash (bash.exe).",
+        "title": "Seleccionar ejecutable de Git Bash"
+      },
+      "placeholder": "Seleccionar la ruta de bash.exe",
+      "success": "¡Git Bash detectado con éxito!",
+      "tooltip": "Se requiere Git Bash para ejecutar agentes en Windows. Instálalo desde git-scm.com si no está disponible."
+    },
+    "input": {
+      "placeholder": "Introduce tu mensaje aquí, envía con {{key}} - @ seleccionar ruta, / seleccionar comando"
+    },
+    "list": {
+      "error": {
+        "failed": "Error al listar agentes."
+      }
+    },
+    "reorder": {
+      "error": {
+        "failed": "Error al reordenar los agentes"
+      }
+    },
+    "server": {
+      "error": {
+        "not_running": "El servidor de API está habilitado pero no funciona correctamente."
+      }
+    },
+    "session": {
+      "accessible_paths": {
+        "add": "Agregar directorio",
+        "default_hint": "Predeterminado: {{path}}",
+        "duplicate": "Este directorio ya está incluido.",
+        "empty": "Selecciona al menos un directorio al que el agente pueda acceder.",
+        "error": {
+          "at_least_one": "Por favor, seleccione al menos un directorio accesible."
+        },
+        "label": "Directorios accesibles",
+        "select_failed": "Error al seleccionar el directorio."
+      },
+      "add": {
+        "title": "Agregar una sesión"
+      },
+      "allowed_tools": {
+        "empty": "No hay herramientas disponibles para este agente.",
+        "helper": "Elige qué herramientas quedan preaprobadas. Las no seleccionadas requerirán aprobación manual antes de usarse.",
+        "label": "Herramientas preaprobadas",
+        "placeholder": "Seleccionar herramientas preaprobadas"
+      },
+      "create": {
+        "error": {
+          "failed": "Error al añadir una sesión"
         }
       },
-      "title": "Editar agente inteligente"
-    },
-    "export": {
-      "agent": "Exportar Agente"
-    },
-    "import": {
-      "button": "Importar",
-      "error": {
-        "fetch_failed": "Error al obtener los datos de la URL",
-        "invalid_format": "Formato de proxy no válido: faltan campos obligatorios",
-        "url_required": "Por favor, introduzca la URL"
+      "delete": {
+        "content": "¿Estás seguro de eliminar esta sesión?",
+        "error": {
+          "failed": "Error al eliminar la sesión",
+          "last": "Debe mantenerse al menos una sesión"
+        },
+        "title": "Eliminar sesión"
       },
-      "file_filter": "Archivos JSON",
-      "select_file": "Seleccionar archivo",
-      "title": "Importar desde el exterior",
-      "type": {
-        "file": "Archivo",
-        "url": "URL"
+      "edit": {
+        "title": "Sesión de edición"
       },
-      "url_placeholder": "Ingrese la URL JSON"
-    },
-    "manage": {
-      "title": "Administrar agentes inteligentes"
-    },
-    "my_agents": "Mis agentes inteligentes",
-    "search": {
-      "no_results": "No se encontraron agentes relacionados"
+      "get": {
+        "error": {
+          "failed": "Error al obtener la sesión",
+          "null_id": "El ID de sesión es nulo"
+        }
+      },
+      "label_one": "Sesión",
+      "label_other": "Sesiones",
+      "reorder": {
+        "error": {
+          "failed": "Error al reordenar las sesiones"
+        }
+      },
+      "update": {
+        "error": {
+          "failed": "Error al actualizar la sesión"
+        }
+      }
     },
     "settings": {
-      "title": "Configuración del Agente"
+      "advance": {
+        "envVars": {
+          "description": "Establece variables de entorno personalizadas para el tiempo de ejecución del agente.",
+          "helper": "Introduce variables de entorno personalizadas (una por línea, formato: CLAVE=valor)",
+          "label": "Variables de entorno"
+        },
+        "maxTurns": {
+          "description": "Establece el número de rondas de solicitud/respuesta que el agente ejecutará automáticamente.",
+          "helper": "Cuanto mayor es el valor, más tiempo puede funcionar de forma autónoma; cuanto menor es el valor, más fácil es de controlar.",
+          "label": "Límite máximo de turnos de conversación"
+        },
+        "permissionMode": {
+          "description": "Cómo el agente de control maneja las situaciones que requieren autorización.",
+          "label": "modo de permisos",
+          "options": {
+            "acceptEdits": "Aceptar ediciones automáticamente",
+            "bypassPermissions": "Omitir verificación de permisos",
+            "default": "Predeterminado (preguntar antes de continuar)",
+            "plan": "Modo de planificación (requiere aprobación del plan)"
+          },
+          "placeholder": "Seleccionar modo de permisos"
+        },
+        "title": "Configuración avanzada"
+      },
+      "essential": "Configuraciones esenciales",
+      "permissionMode": {
+        "tab": "Modo de permiso",
+        "title": "Modo de permisos"
+      },
+      "plugins": {
+        "available": {
+          "title": "Complementos disponibles"
+        },
+        "confirm": {
+          "uninstall": "¿Estás seguro de que quieres desinstalar este complemento?"
+        },
+        "empty": {
+          "available": "No se encontró ningún complemento que coincida. Intenta ajustar la búsqueda o los filtros de categoría."
+        },
+        "error": {
+          "install": "Error al instalar el complemento",
+          "load": "Error al cargar el complemento",
+          "load_more": "Error al cargar más complementos",
+          "uninstall": "Error al desinstalar el complemento"
+        },
+        "filter": {
+          "all": "Todas las categorías"
+        },
+        "install": {
+          "button": "Instalar",
+          "title": "Instalar complementos"
+        },
+        "installed": {
+          "empty": "Aún no se ha instalado ningún complemento. Explora los complementos disponibles para comenzar.",
+          "title": "Plugins Instalados"
+        },
+        "installing": "Instalando...",
+        "plugin_upload": {
+          "all_failed": "Todos los componentes {{failed}} fallaron al instalarse",
+          "error": "La instalación falló",
+          "format_hint": "Admite paquetes de complementos (.claude-plugin/plugin.json)",
+          "hint": "Arrastra y suelta aquí el ZIP del plugin o haz clic para seleccionar",
+          "invalid_format": "Por favor, sube un archivo ZIP",
+          "partial_success": "Plugin \"{{name}}\" parcialmente instalado: {{installed}} instalado, {{failed}} falló",
+          "select_folder": "Seleccionar carpeta",
+          "select_folder_title": "Seleccionar Carpeta de Complementos",
+          "success": "Plugin \"{{name}}\" instalado con éxito ({{count}} componentes)",
+          "success_multi": "Instalados {{count}} componentes de {{packages}} paquetes",
+          "uploading": "Cargando e instalando..."
+        },
+        "results": "Encontrados {{count}} complementos",
+        "search": {
+          "placeholder": "Buscar complemento..."
+        },
+        "standalone_plugins": "Plugins independientes",
+        "success": {
+          "install": "Complemento instalado con éxito",
+          "uninstall": "Complemento desinstalado correctamente",
+          "uninstall_package": "Paquete \"{{name}}\" desinstalado correctamente"
+        },
+        "tab": "complemento",
+        "type": {
+          "agent": "agente",
+          "agents": "Agente",
+          "all": "todo",
+          "command": "comando",
+          "commands": "comando",
+          "skills": "habilidad"
+        },
+        "uninstall": "Desinstalar",
+        "uninstall_package": "Desinstalar paquete",
+        "uninstall_package_confirm": "¿Estás seguro de que quieres desinstalar el paquete completo \"{{name}}\"? Esto eliminará {{count}} componente(s).",
+        "uninstalling": "Desinstalando..."
+      },
+      "prompt": "Configuración de indicaciones",
+      "tooling": {
+        "mcp": {
+          "description": "Conecta servidores MCP para desbloquear herramientas adicionales que puedes aprobar arriba.",
+          "empty": "No se detectaron servidores MCP. Añade uno desde la página de configuración de MCP.",
+          "inactiveTooltip": "Este servidor MCP no está activo. Por favor, primero inícielo.",
+          "manageHint": "¿Necesitas configuración avanzada? Visita Configuración → Servidores MCP.",
+          "toggle": "Alternar {{name}}"
+        },
+        "permissionMode": {
+          "acceptEdits": {
+            "description": "Las ediciones de archivos y las operaciones del sistema de archivos se aprueban automáticamente.",
+            "title": "Aceptar automáticamente las ediciones de archivos"
+          },
+          "bypassPermissions": {
+            "description": "Todos los mensajes de permiso se omiten — úsalo con precaución.",
+            "title": "Omitir verificaciones de permisos",
+            "warning": "Usar con precaución: todas las herramientas se ejecutarán sin pedir aprobación."
+          },
+          "confirmChange": {
+            "description": "Cambiar de modo actualiza las herramientas aprobadas automáticamente.",
+            "title": "¿Cambiar modo de permisos?"
+          },
+          "default": {
+            "description": "Se aplican los controles de permisos normales.",
+            "title": "Predeterminado (preguntar antes de continuar)"
+          },
+          "helper": "Especifica cómo el agente maneja la autorización de uso de herramientas",
+          "placeholder": "Seleccionar modo de permisos",
+          "plan": {
+            "description": "Claude solo puede usar herramientas de solo lectura y presenta un plan antes de ejecutarlo.",
+            "title": "Modo de planificación (próximamente)"
+          },
+          "title": "Modo de permisos"
+        },
+        "preapproved": {
+          "autoBadge": "Añadido por modo",
+          "autoDescription": "Esta herramienta está aprobada automáticamente por el modo de permisos actual.",
+          "autoDisabledTooltip": "Auto-aprobado por \"{{mode}}\" y no se puede desactivar.",
+          "empty": "Ninguna herramienta coincide con tus filtros.",
+          "mcpBadge": "herramienta MCP",
+          "requiresApproval": "Requiere aprobación cuando está deshabilitado",
+          "search": "Herramientas de búsqueda",
+          "toggle": "Alternar {{name}}"
+        }
+      },
+      "tools": {
+        "approved": "aprobado",
+        "caution": "Herramientas preaprobadas omiten la revisión humana. Habilita solo herramientas de confianza.",
+        "description": "Elige qué herramientas pueden ejecutarse sin aprobación manual.",
+        "requiresPermission": "Requiere permiso cuando no está preaprobado.",
+        "tab": "Herramientas preaprobadas",
+        "title": "Herramientas",
+        "toggle": "{{defaultValue}}"
+      },
+      "toolsMcp": {
+        "mcp": {
+          "title": "Servidores MCP"
+        },
+        "tab": "Herramientas",
+        "tools": {
+          "title": "Herramientas preaprobadas"
+        }
+      }
     },
-    "sorting": {
-      "title": "Ordenar"
+    "sidebar_title": "Agentes",
+    "todo": {
+      "panel": {
+        "title": "{{completed}}/{{total}} tareas completadas"
+      },
+      "status": {
+        "completed": "Completado",
+        "in_progress": "En progreso",
+        "pending": "Pendiente"
+      }
     },
-    "tag": {
-      "agent": "Agente",
-      "default": "Predeterminado",
-      "new": "Nuevo",
-      "system": "Sistema"
+    "toolPermission": {
+      "aria": {
+        "allowAllRequest": "Permitir siempre esta herramienta",
+        "allowRequest": "Permitir solicitud de herramienta",
+        "denyRequest": "Denegar solicitud de herramienta",
+        "hideDetails": "Ocultar detalles de la herramienta",
+        "runWithOptions": "Ejecutar con opciones adicionales",
+        "showDetails": "Mostrar detalles de la herramienta"
+      },
+      "button": {
+        "allowAll": "Permitir siempre",
+        "cancel": "Cancelar",
+        "run": "Correr"
+      },
+      "confirmation": "¿Estás seguro de que quieres ejecutar esta herramienta de Claude?",
+      "defaultDenyMessage": "El usuario denegó el permiso para esta herramienta.",
+      "defaultDescription": "Ejecuta código o acciones del sistema en tu entorno. Asegúrate de que el comando parezca seguro antes de ejecutarlo.",
+      "error": {
+        "sendFailed": "No se pudo enviar tu decisión. Por favor, inténtalo de nuevo."
+      },
+      "executing": "Ejecutando...",
+      "expired": "Caducado",
+      "inputPreview": "Vista previa de entrada de herramienta",
+      "pending": "Pendiente ({{seconds}}s)",
+      "permissionExpired": "Solicitud de permiso expirada. Esperando nuevas instrucciones...",
+      "requiresElevatedPermissions": "Esta herramienta requiere permisos elevados.",
+      "suggestion": {
+        "permissionUpdateMultiple": "Aprobar puede actualizar varios permisos de sesión si elegiste permitir siempre esta herramienta.",
+        "permissionUpdateSingle": "Aprobar puede actualizar los permisos de tu sesión si elegiste permitir siempre esta herramienta."
+      },
+      "toast": {
+        "denied": "La solicitud de herramienta fue denegada.",
+        "timeout": "La solicitud de herramienta expiró antes de recibir la aprobación."
+      },
+      "toolPendingFallback": "Herramienta",
+      "waiting": "Esperando la decisión de permiso de la herramienta..."
     },
-    "title": "Agente"
+    "tools": {
+      "builtin": {
+        "Bash": {
+          "description": "Ejecuta comandos de shell en tu entorno"
+        },
+        "Edit": {
+          "description": "Realiza ediciones dirigidas a archivos específicos"
+        },
+        "Glob": {
+          "description": "Encuentra archivos basándose en coincidencias de patrones"
+        },
+        "Grep": {
+          "description": "Busca patrones en el contenido de archivos"
+        },
+        "MultiEdit": {
+          "description": "Realiza varias ediciones en un solo archivo de forma atómica"
+        },
+        "NotebookEdit": {
+          "description": "Modifica las celdas del cuaderno de Jupyter"
+        },
+        "NotebookRead": {
+          "description": "Lee y muestra el contenido de cuadernos Jupyter"
+        },
+        "Read": {
+          "description": "Lee el contenido de los archivos"
+        },
+        "Task": {
+          "description": "Ejecuta un subagente para manejar tareas complejas de varios pasos"
+        },
+        "TodoWrite": {
+          "description": "Crea y gestiona listas de tareas estructuradas"
+        },
+        "WebFetch": {
+          "description": "Obtiene contenido desde una URL especificada"
+        },
+        "WebSearch": {
+          "description": "Realiza búsquedas web con filtrado por dominio"
+        },
+        "Write": {
+          "description": "Crea o sobrescribe archivos"
+        }
+      }
+    },
+    "type": {
+      "label": "Tipo de Agente",
+      "unknown": "Tipo desconocido"
+    },
+    "update": {
+      "error": {
+        "failed": "Error al actualizar el agente"
+      }
+    },
+    "warning": {
+      "enable_and_start": "Habilitar e iniciar",
+      "enable_server": "Habilitar el servidor API para usar agentes.",
+      "enable_server_description": "El servidor de la API debe estar habilitado para que los agentes funcionen. Puede habilitarlo directamente o configurarlo en los ajustes.",
+      "server_not_running": "El servidor API está habilitado pero no se está ejecutando. Por favor, compruebe la configuración del servidor.",
+      "server_not_running_description": "El servidor de la API debe estar en ejecución para que los agentes funcionen. Puede iniciarlo directamente o comprobar los ajustes."
+    }
   },
   "apiServer": {
     "actions": {
@@ -116,6 +457,7 @@
     "messages": {
       "apiKeyCopied": "Clave API copiada al portapapeles",
       "apiKeyRegenerated": "Clave API regenerada",
+      "notEnabled": "El servidor de API no está habilitado.",
       "operationFailed": "Falló la operación del Servidor API: ",
       "restartError": "Error al reiniciar el Servidor API: ",
       "restartFailed": "Falló el reinicio del Servidor API: ",
@@ -132,6 +474,41 @@
     },
     "title": "Servidor API"
   },
+  "appMenu": {
+    "about": "Acerca de",
+    "close": "Cerrar ventana",
+    "copy": "Copiar",
+    "cut": "Cortar",
+    "delete": "Eliminar",
+    "documentation": "Documentación",
+    "edit": "Editar",
+    "feedback": "Retroalimentación",
+    "file": "Archivo",
+    "forceReload": "Forzar recarga",
+    "front": "Traer todo al frente",
+    "help": "Ayuda",
+    "hide": "Ocultar",
+    "hideOthers": "Ocultar Otros",
+    "minimize": "Minimizar",
+    "paste": "Pegar",
+    "quit": "Abandonar",
+    "redo": "Rehacer",
+    "releases": "Lanzamientos",
+    "reload": "Recargar",
+    "resetZoom": "Tamaño Real",
+    "selectAll": "Seleccionar todo",
+    "services": "Servicios",
+    "toggleDevTools": "Alternar herramientas de desarrollo",
+    "toggleFullscreen": "Activar pantalla completa",
+    "undo": "Deshacer",
+    "unhide": "Mostrar todo",
+    "view": "Vista",
+    "website": "Sitio web",
+    "window": "Ventana",
+    "zoom": "Zoom",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar"
+  },
   "assistants": {
     "abbr": "Asistente",
     "clear": {
@@ -143,6 +520,9 @@
     },
     "delete": {
       "content": "Eliminar el asistente borrará todos los temas y archivos asociados. ¿Está seguro de que desea continuar?",
+      "error": {
+        "remain_one": "No se puede eliminar el último asistente"
+      },
       "title": "Eliminar Asistente"
     },
     "edit": {
@@ -154,6 +534,95 @@
     "list": {
       "showByList": "Mostrar en lista",
       "showByTags": "Mostrar por etiquetas"
+    },
+    "presets": {
+      "add": {
+        "button": "Añadir al asistente",
+        "knowledge_base": {
+          "label": "Base de conocimientos",
+          "placeholder": "Seleccionar base de conocimientos"
+        },
+        "name": {
+          "label": "Nombre",
+          "placeholder": "Introducir nombre"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "placeholder": "Introducir prompt",
+          "variables": {
+            "tip": {
+              "content": "{{date}}:\tFecha\n{{time}}:\tHora\n{{datetime}}:\tFecha y hora\n{{system}}:\tSistema operativo\n{{arch}}:\tArquitectura CPU\n{{language}}:\tIdioma\n{{model_name}}:\tNombre del modelo\n{{username}}:\tNombre de usuario",
+              "title": "Variables disponibles"
+            }
+          }
+        },
+        "title": "Crear asistente",
+        "unsaved_changes_warning": "Tienes cambios sin guardar. ¿Estás seguro de que quieres cerrar?"
+      },
+      "delete": {
+        "popup": {
+          "content": "¿Estás seguro de que quieres eliminar este asistente?"
+        }
+      },
+      "edit": {
+        "model": {
+          "select": {
+            "title": "Seleccionar modelo"
+          }
+        },
+        "title": "Editar asistente"
+      },
+      "export": {
+        "agent": "Exportar asistente"
+      },
+      "import": {
+        "button": "Importar",
+        "error": {
+          "fetch_failed": "Error al obtener datos desde la URL",
+          "file_required": "Por favor, selecciona primero un archivo",
+          "invalid_format": "Formato de asistente inválido: faltan campos obligatorios",
+          "url_required": "Por favor introduce una URL"
+        },
+        "file_filter": "Archivos JSON",
+        "select_file": "Seleccionar archivo",
+        "title": "Importar desde externo",
+        "type": {
+          "file": "Archivo",
+          "url": "URL"
+        },
+        "url_placeholder": "Introducir URL JSON"
+      },
+      "manage": {
+        "batch_delete": {
+          "button": "Eliminación por lotes",
+          "confirm": "¿Estás seguro de que quieres eliminar los {{count}} asistentes seleccionados?"
+        },
+        "batch_export": {
+          "button": "Exportar"
+        },
+        "mode": {
+          "manage": "Gestionar",
+          "sort": "Ordenar"
+        },
+        "title": "Gestionar asistentes"
+      },
+      "my_agents": "Mis asistentes",
+      "search": {
+        "no_results": "No se encontraron asistentes relacionados"
+      },
+      "settings": {
+        "title": "Configuración de asistentes"
+      },
+      "sorting": {
+        "title": "Ordenar"
+      },
+      "tag": {
+        "agent": "Asistente",
+        "default": "Por defecto",
+        "new": "Nuevo",
+        "system": "Sistema"
+      },
+      "title": "Biblioteca de asistentes"
     },
     "save": {
       "success": "Guardado exitosamente",
@@ -171,10 +640,28 @@
           "tip": "El agente utilizará la capacidad del modelo grande para el reconocimiento de intenciones y decidirá si necesita invocar la base de conocimientos para responder. Esta función dependerá de las capacidades del modelo"
         }
       },
+      "max_tool_calls": {
+        "label": "Llamadas Máximas de Herramientas",
+        "tip": "Número máximo de llamadas a herramientas permitidas en una sola conversación. Valores más altos permiten operaciones de múltiples pasos más complejas, pero pueden incrementar el uso de tokens y el tiempo de respuesta."
+      },
       "mcp": {
         "description": "Servidor MCP habilitado por defecto",
         "enableFirst": "Habilite este servidor en la configuración de MCP primero",
         "label": "Servidor MCP",
+        "mode": {
+          "auto": {
+            "description": "La IA descubre y utiliza herramientas automáticamente",
+            "label": "Auto"
+          },
+          "disabled": {
+            "description": "Sin herramientas MCP",
+            "label": "Discapacitado"
+          },
+          "manual": {
+            "description": "Seleccionar servidores MCP específicos",
+            "label": "Manual"
+          }
+        },
         "noServersAvailable": "No hay servidores MCP disponibles. Agregue un servidor en la configuración",
         "title": "Configuración MCP"
       },
@@ -182,13 +669,23 @@
       "more": "Configuración del Asistente",
       "prompt": "Configuración de Palabras Clave",
       "reasoning_effort": {
+        "auto": "Automóvil",
+        "auto_description": "Determinar flexiblemente el esfuerzo de razonamiento",
         "default": "Por defecto",
+        "default_description": "Depender del comportamiento predeterminado del modelo, sin ninguna configuración.",
         "high": "Largo",
+        "high_description": "Razonamiento de alto nivel",
         "label": "Longitud de Cadena de Razonamiento",
         "low": "Corto",
+        "low_description": "Razonamiento de bajo nivel",
         "medium": "Medio",
+        "medium_description": "Razonamiento de nivel medio",
         "minimal": "minimal",
-        "off": "Apagado"
+        "minimal_description": "Razonamiento mínimo",
+        "off": "Apagado",
+        "off_description": "Deshabilitar razonamiento",
+        "xhigh": "Extra Alta",
+        "xhigh_description": "Razonamiento de extra alto nivel"
       },
       "regular_phrases": {
         "add": "Agregar frase",
@@ -251,6 +748,7 @@
     "added": "Agregado",
     "case_sensitive": "Distingue mayúsculas y minúsculas",
     "collapse": "Colapsar",
+    "download": "Descargar",
     "includes_user_questions": "Incluye preguntas del usuario",
     "manage": "Administrar",
     "select_model": "Seleccionar Modelo",
@@ -263,11 +761,20 @@
   "chat": {
     "add": {
       "assistant": {
+        "description": "Conversaciones diarias y preguntas y respuestas rápidas",
         "title": "Agregar asistente"
+      },
+      "option": {
+        "title": "Seleccionar Tipo"
       },
       "topic": {
         "title": "Crear nuevo tema"
       }
+    },
+    "alerts": {
+      "create_agent": "Crea un agente para empezar",
+      "create_session": "Crear una sesión",
+      "select_agent": "Selecciona un agente"
     },
     "artifacts": {
       "button": {
@@ -326,15 +833,98 @@
       "file_not_supported_count": "{{count}} archivos no soportados",
       "generate_image": "Generar imagen",
       "generate_image_not_supported": "El modelo no soporta la generación de imágenes",
+      "gpt_image": {
+        "aspect_ratio": {
+          "16_9_description": "[to be translated]:Widescreen landscape (wallpapers, thumbnails)",
+          "1_1_description": "[to be translated]:Square (avatars, products)",
+          "2_3_description": "[to be translated]:DSLR portrait",
+          "3_2_description": "[to be translated]:DSLR landscape",
+          "3_4_description": "[to be translated]:Classic portrait (book covers)",
+          "4_3_description": "[to be translated]:Classic landscape (slides, cameras)",
+          "9_16_description": "[to be translated]:Widescreen portrait (mobile, Reels)",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Aspect ratio"
+        },
+        "input_images": {
+          "max": "[to be translated]:Image editing supports up to {{count}} input images"
+        },
+        "label": "[to be translated]:Image gen params",
+        "output_count": {
+          "label": "[to be translated]:Output count",
+          "value": "[to be translated]:{{count}} images"
+        },
+        "preview": {
+          "auto": "[to be translated]:auto size",
+          "auto_quality": "[to be translated]:auto quality",
+          "text": "[to be translated]:Generate at {{size}} · {{quality}}",
+          "text_with_count": "[to be translated]:Generate at {{size}} · {{quality}} · {{imageCount}}"
+        },
+        "quality": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model choose (usually high)",
+          "high": "[to be translated]:High",
+          "high_description": "[to be translated]:More detail, slower and more expensive",
+          "label": "[to be translated]:Image quality",
+          "low": "[to be translated]:Low",
+          "low_description": "[to be translated]:Fastest and cheapest output",
+          "medium": "[to be translated]:Medium",
+          "medium_description": "[to be translated]:Balanced speed and quality"
+        },
+        "resolution": {
+          "1k": "[to be translated]:1K",
+          "1k_description": "[to be translated]:Long edge 1024px, fastest & cheapest",
+          "2k": "[to be translated]:2K",
+          "2k_description": "[to be translated]:Long edge 2048px, common quality",
+          "3k": "[to be translated]:3K",
+          "3k_description": "[to be translated]:Long edge 3072px, high definition",
+          "4k": "[to be translated]:4K",
+          "4k_description": "[to be translated]:Long edge 3840px (max), highest detail",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Resolution"
+        },
+        "size": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Decided by model or source image",
+          "fixed_description": "[to be translated]:Generate at {{size}}",
+          "label": "[to be translated]:Image size"
+        }
+      },
       "knowledge_base": "Base de conocimientos",
       "new": {
         "context": "Limpiar contexto {{Command}}"
       },
+      "new_session": "Nueva Sesión {{Command}}",
       "new_topic": "Nuevo tema {{Command}}",
+      "paste_text_file_confirm": "¿Pegar en el cuadro de entrada?",
       "pause": "Pausar",
       "placeholder": "Escribe aquí tu mensaje...",
+      "placeholder_without_triggers": "Escribe tu mensaje aquí, presiona {{key}} para enviar",
+      "resource_panel": {
+        "categories": {
+          "agents": "Agentes",
+          "files": "Archivos",
+          "skills": "Habilidades"
+        },
+        "description": "Selecciona entre archivos, agentes o habilidades",
+        "loading": "Cargando...",
+        "no_file_found": {
+          "description": "No hay archivos disponibles en los directorios accesibles",
+          "label": "No se encontró ningún archivo"
+        },
+        "no_items_found": {
+          "description": "Sin archivos, agentes o habilidades disponibles",
+          "label": "No se encontraron elementos"
+        },
+        "title": "Recursos"
+      },
       "send": "Enviar",
       "settings": "Configuración",
+      "slash_commands": {
+        "description": "Comandos de sesión de agente con barra",
+        "title": "Comandos de barra"
+      },
       "thinking": {
         "budget_exceeds_max": "El presupuesto de pensamiento excede el número máximo de tokens",
         "label": "Pensando",
@@ -356,7 +946,11 @@
         "collapse": "Contraer",
         "collapse_in": "Agregar a la contracción",
         "collapse_out": "Eliminar de la contracción",
-        "expand": "Expandir"
+        "expand": "Expandir",
+        "file_not_found": "[to be translated]:File not found: {{path}}",
+        "open_file": "[to be translated]:Open File",
+        "open_file_error": "[to be translated]:Failed to open file: {{path}}",
+        "reveal_in_finder": "[to be translated]:Reveal in Finder"
       },
       "topics": "Temas",
       "translate": "Traducir a {{target_language}}",
@@ -600,6 +1194,7 @@
       },
       "export": {
         "image": "Exportar como imagen",
+        "image_saved": "Imagen guardada con éxito",
         "joplin": "Exportar a Joplin",
         "md": {
           "label": "Exportar como Markdown",
@@ -647,6 +1242,29 @@
         "yuque": "Exportar a Yuque"
       },
       "list": "Lista de temas",
+      "manage": {
+        "clear_selection": "Borrar selección",
+        "delete": {
+          "confirm": {
+            "content": "¿Estás seguro de que quieres eliminar {{count}} tema(s) seleccionado(s)? Esta acción no se puede deshacer.",
+            "title": "Eliminar Temas"
+          },
+          "success": "Eliminado(s) {{count}} tema(s)"
+        },
+        "deselect_all": "Deseleccionar todo",
+        "error": {
+          "at_least_one": "Al menos se debe mantener un tema."
+        },
+        "move": {
+          "button": "Mover",
+          "placeholder": "Seleccionar asistente de destino",
+          "success": "Movido(s) {{count}} tema(s)"
+        },
+        "pinned": "Temas Fijados",
+        "selected_count": "{{count}} seleccionado",
+        "title": "Administrar Temas",
+        "unpinned": "Temas no fijados"
+      },
       "move_to": "Mover a",
       "new": "Iniciar nueva conversación",
       "pin": "Fijar tema",
@@ -656,6 +1274,10 @@
         },
         "label": "Palabras clave del tema",
         "tips": "Palabras clave del tema: proporcionar indicaciones adicionales para el tema actual"
+      },
+      "search": {
+        "placeholder": "Buscar temas...",
+        "title": "Buscar"
       },
       "title": "Tema",
       "unpin": "Quitar fijación"
@@ -743,26 +1365,38 @@
     }
   },
   "common": {
+    "about": "sobre",
     "add": "Agregar",
+    "add_success": "Añadido con éxito",
     "advanced_settings": "Configuración avanzada",
+    "agent_one": "Agente",
+    "agent_other": "Agentes",
     "and": "y",
     "assistant": "Agente inteligente",
+    "assistant_one": "Asistente",
+    "assistant_other": "Asistente",
     "avatar": "Avatar",
     "back": "Atrás",
     "browse": "Examinar",
     "cancel": "Cancelar",
     "chat": "Chat",
     "clear": "Limpiar",
+    "clear_all": "Borrar todo",
+    "click_to_replace": "Haz clic para reemplazar",
     "close": "Cerrar",
     "collapse": "Colapsar",
+    "completed": "Completado",
     "confirm": "Confirmar",
     "copied": "Copiado",
     "copy": "Copiar",
     "copy_failed": "Error al copiar",
+    "current": "Actual",
     "cut": "Cortar",
     "default": "Predeterminado",
     "delete": "Eliminar",
     "delete_confirm": "¿Está seguro de que desea eliminarlo?",
+    "delete_failed": "Error al eliminar",
+    "delete_success": "Eliminación exitosa",
     "description": "Descripción",
     "detail": "Detalles",
     "disabled": "Desactivado",
@@ -772,16 +1406,31 @@
     "edit": "Editar",
     "enabled": "Activado",
     "error": "error",
+    "errors": {
+      "create_message": "Error al crear el mensaje",
+      "validation": "Fallo en la verificación"
+    },
     "expand": "Expandir",
+    "export": {
+      "excel": "Exportar a Excel"
+    },
     "file": {
       "not_supported": "Tipo de archivo no compatible {{type}}"
     },
     "footnote": "Nota al pie",
     "footnotes": "Notas al pie",
     "fullscreen": "En modo pantalla completa, presione F11 para salir",
+    "generate_random_seed": "Generar semilla aleatoria",
+    "get_embedding_dimension": "Obtener dimensión de incrustación",
     "go_to_settings": "Ir a la configuración",
+    "html_preview": "Vista previa de HTML",
     "i_know": "Entendido",
+    "ignore": "Ignorar",
+    "image_preview": "Vista previa de imagen",
+    "image_url": "URL de la imagen",
+    "image_url_or_upload": "Introduce la URL de la imagen o sube un archivo",
     "inspect": "Inspeccionar",
+    "invalid_value": "Valor inválido",
     "knowledge_base": "Base de conocimiento",
     "language": "Idioma",
     "loading": "Cargando...",
@@ -789,24 +1438,41 @@
     "models": "Modelos",
     "more": "Más",
     "name": "Nombre",
+    "next_match": "Próximo partido",
     "no_results": "Sin resultados",
     "none": "无",
+    "off": "Apagado",
+    "on": "En",
     "open": "Abrir",
+    "open_in": "[to be translated]:Open in {{name}}",
     "paste": "Pegar",
+    "placeholders": {
+      "select": {
+        "model": "Seleccionar modelo"
+      }
+    },
+    "powered_by": "Impulsado por",
     "preview": "Vista previa",
+    "previous_match": "Partido anterior",
     "prompt": "Prompt",
     "provider": "Proveedor",
     "reasoning_content": "Pensamiento profundo",
     "refresh": "Actualizar",
     "regenerate": "Regenerar",
+    "remove_image": "Quitar imagen",
     "rename": "Renombrar",
+    "required_field": "Campo obligatorio",
     "reset": "Restablecer",
+    "retry": "Reintentar",
     "save": "Guardar",
     "saved": "Guardado",
     "search": "Buscar",
     "select": "Seleccionar",
+    "select_all": "Seleccionar todo",
+    "selected": "Seleccionado",
     "selectedItems": "{{count}} elementos seleccionados",
     "selectedMessages": "{{count}} mensajes seleccionados",
+    "sessions": "Sesiones",
     "settings": "Configuración",
     "sort": {
       "pinyin": {
@@ -816,12 +1482,32 @@
       }
     },
     "stop": "Detener",
+    "subscribe": "Suscribirse",
     "success": "Éxito",
     "swap": "Intercambiar",
     "topics": "Temas",
+    "translate_text": "Traducir texto",
+    "unknown": "Desconocido",
+    "unnamed": "Sin nombre",
+    "unsubscribe": "Cancelar suscripción",
+    "update_success": "Actualización exitosa",
     "upload_files": "Subir archivo",
+    "upload_image": "Subir archivo de imagen",
+    "uploaded_image": "Imagen cargada",
     "warning": "Advertencia",
     "you": "Usuario"
+  },
+  "dialog": {
+    "all_files": "Todos los archivos",
+    "html_files": "Archivos HTML",
+    "open_file": "Abrir archivo",
+    "pdf_files": "Archivos PDF",
+    "png_image": "Imagen PNG",
+    "save_as_html": "Guardar como HTML",
+    "save_as_pdf": "Guardar como PDF",
+    "save_file": "Guardar archivo",
+    "select_folder": "Seleccionar carpeta",
+    "word_document": "Documento de Word"
   },
   "docs": {
     "title": "Documentación de Ayuda"
@@ -829,7 +1515,7 @@
   "endpoint_type": {
     "anthropic": "Anthropic",
     "gemini": "Gemini",
-    "image-generation": "Generación de imágenes",
+    "image-generation": "Generación de Imágenes (OpenAI)",
     "jina-rerank": "Reordenamiento Jina",
     "openai": "OpenAI",
     "openai-response": "Respuesta de OpenAI"
@@ -840,6 +1526,7 @@
     "backup": {
       "file_format": "Formato de archivo de copia de seguridad incorrecto"
     },
+    "base64DataTruncated": "Datos de imagen Base64 truncados, tamaño",
     "boundary": {
       "default": {
         "devtools": "Abrir el panel de depuración",
@@ -891,22 +1578,24 @@
     "modelType": "Tipo de modelo",
     "name": "Nombre de error",
     "no_api_key": "La clave API no está configurada",
+    "no_response": "Sin respuesta",
     "originalError": "Error original",
     "originalMessage": "mensaje original",
     "parameter": "parámetro",
-    "pause_placeholder": "Interrumpido",
     "prompt": "prompt",
     "provider": "proveedor",
     "providerId": "ID del proveedor",
     "provider_disabled": "El proveedor de modelos no está habilitado",
     "reason": "causa",
     "render": {
+      "block": "Este bloque de contenido no se pudo mostrar",
       "description": "Error al renderizar la fórmula, por favor, compruebe si el formato de la fórmula es correcto",
       "title": "Error de renderizado"
     },
     "requestBody": "Contenido de la solicitud",
     "requestBodyValues": "Cuerpo de la solicitud",
     "requestUrl": "Ruta de solicitud",
+    "request_timeout": "Solicitud agotada",
     "response": "respuesta",
     "responseBody": "Contenido de la respuesta",
     "responseHeaders": "Encabezados de respuesta",
@@ -916,9 +1605,12 @@
     "status": "Estado",
     "statusCode": "Código de estado",
     "statusText": "Texto de estado",
+    "stream_paused": "Interrumpido",
     "text": "Texto",
     "toolInput": "Herramienta de entrada",
     "toolName": "Nombre de la herramienta",
+    "truncated": "Datos truncados, tamaño original",
+    "truncatedBadge": "Truncado",
     "unknown": "Error desconocido",
     "usage": "Cantidad de uso",
     "user_message_not_found": "No se pudo encontrar el mensaje original del usuario",
@@ -956,12 +1648,18 @@
     },
     "document": "Documento",
     "edit": "Editar",
+    "error": {
+      "open_path": "No se puede abrir la ruta: {{path}}"
+    },
     "file": "Archivo",
     "image": "Imagen",
     "name": "Nombre del archivo",
     "open": "Abrir",
     "preview": {
-      "error": "No se pudo abrir el archivo"
+      "coming_soon": "[to be translated]:{{type}} preview is coming soon",
+      "error": "No se pudo abrir el archivo",
+      "model_3d": "[to be translated]:3D Model",
+      "point_cloud": "[to be translated]:Point Cloud"
     },
     "size": "Tamaño",
     "text": "Texto",
@@ -985,8 +1683,16 @@
       "message": "Localizar mensaje"
     },
     "search": {
+      "match": {
+        "substring": "Contiene",
+        "whole_word": "Palabra completa"
+      },
       "messages": "Buscar todos los mensajes",
       "placeholder": "Buscar tema o mensaje...",
+      "sort": {
+        "newest": "Más nuevo primero",
+        "oldest": "Más antiguos primero"
+      },
       "topics": {
         "empty": "No se encontraron temas relacionados, presione Enter para buscar todos los mensajes"
       }
@@ -1004,6 +1710,36 @@
     "generating": "Generando",
     "preview": "Vista previa",
     "split": "Dividir"
+  },
+  "import": {
+    "chatgpt": {
+      "assistant_name": "Importación de ChatGPT",
+      "button": "Seleccionar archivo",
+      "description": "Solo importa el texto de la conversación, no incluye imágenes ni archivos adjuntos",
+      "error": {
+        "invalid_json": "Formato de archivo JSON inválido",
+        "no_conversations": "No se encontraron conversaciones en el archivo",
+        "no_valid_conversations": "No hay conversaciones válidas para importar",
+        "unknown": "Error de importación, por favor verifica el formato del archivo"
+      },
+      "help": {
+        "step1": "1. Inicia sesión en ChatGPT, ve a Configuración > Controles de datos > Exportar datos",
+        "step2": "2. Espera el archivo de exportación por correo electrónico",
+        "step3": "3. Extrae el archivo descargado y busca conversations.json",
+        "title": "Cómo exportar conversaciones de ChatGPT"
+      },
+      "importing": "Importando conversaciones...",
+      "selecting": "Seleccionando archivo...",
+      "success": "Importadas con éxito {{topics}} conversaciones con {{messages}} mensajes",
+      "title": "Importar conversaciones de ChatGPT",
+      "untitled_conversation": "Conversación Sin Título"
+    },
+    "confirm": {
+      "button": "Seleccionar Archivo de Importación",
+      "label": "¿Estás seguro de que quieres importar datos externos?"
+    },
+    "content": "Selecciona el archivo de conversación de la aplicación externa para importar; actualmente solo admite archivos en formato JSON de ChatGPT",
+    "title": "Importar Conversaciones Externas"
   },
   "knowledge": {
     "add": {
@@ -1091,8 +1827,6 @@
     "notes": "Notas",
     "notes_placeholder": "Ingrese información adicional o contexto para esta base de conocimientos...",
     "provider_not_found": "El proveedor del modelo de la base de conocimientos ha sido perdido, esta base de conocimientos ya no es compatible, por favor cree una nueva base de conocimientos",
-    "quota": "Cupo restante de {{name}}: {{quota}}",
-    "quota_infinity": "Cupo restante de {{name}}: ilimitado",
     "rename": "Renombrar",
     "search": "Buscar en la base de conocimientos",
     "search_placeholder": "Ingrese el contenido de la consulta",
@@ -1349,6 +2083,9 @@
         "model": "Seleccione un modelo",
         "name": "Ingrese el nombre de la base de conocimiento"
       },
+      "excel": {
+        "export": "Error al exportar a Excel"
+      },
       "fetchTopicName": "Error al asignar nombre al tema",
       "get_embedding_dimensions": "Fallo al obtener las dimensiones de incrustación",
       "invalid": {
@@ -1388,6 +2125,9 @@
         "export": "Error al exportar la nota de Siyuan, verifique el estado de la conexión y revise la configuración según la documentación",
         "no_config": "No se ha configurado la dirección API o el token de Siyuan"
       },
+      "table": {
+        "invalid": "No se pueden recuperar datos de tabla válidos"
+      },
       "unknown": "Error desconocido",
       "yuque": {
         "export": "Error de exportación de Yuque, verifique el estado de conexión y la configuración según la documentación",
@@ -1417,6 +2157,9 @@
     },
     "message": {
       "code_style": "Estilo de código",
+      "compact": {
+        "title": "Conversación Compactada"
+      },
       "delete": {
         "content": "¿Está seguro de querer eliminar este mensaje?",
         "title": "Eliminar mensaje"
@@ -1440,6 +2183,7 @@
       "video": {
         "error": {
           "local_file_missing": "Ruta del archivo de video local no encontrada",
+          "playback_failed": "[to be translated]:Unable to play video: the local file may have been removed, or the remote link has expired",
           "unsupported_type": "Tipo de video no soportado",
           "youtube_url_missing": "URL del video de YouTube no encontrada"
         }
@@ -1458,7 +2202,8 @@
           "content": "Todos sus datos se perderán, si no tiene una copia de seguridad, no podrán ser recuperados, ¿desea continuar?",
           "title": "¡¡Pérdida de datos!!"
         }
-      }
+      },
+      "success": "Restablecimiento de datos exitoso"
     },
     "restore": {
       "failed": "Restauración fallida",
@@ -1471,6 +2216,9 @@
     },
     "searching": "Buscando en línea...",
     "success": {
+      "excel": {
+        "export": "Excel exportado con éxito"
+      },
       "joplin": {
         "export": "Exportado con éxito a Joplin"
       },
@@ -1499,14 +2247,73 @@
     "tools": {
       "abort_failed": "Error al interrumpir la llamada de la herramienta",
       "aborted": "Llamada de la herramienta interrumpida",
+      "approvalRequired": "La herramienta \"{{tool}}\" requiere aprobación",
       "autoApproveEnabled": "Esta herramienta tiene habilitada la aprobación automática",
       "cancelled": "Cancelado",
       "completed": "Completado",
       "error": "Se ha producido un error",
+      "groupHeader": "{{count}} llamadas a herramientas",
       "invoking": "En llamada",
+      "labels": {
+        "bash": "Bash",
+        "edit": "Editar",
+        "exitPlanMode": "ModoPlanDeSalida",
+        "glob": "Globo",
+        "grep": "Grep",
+        "mcpServerTool": "Herramienta del Servidor MCP",
+        "multiEdit": "MultiEdit",
+        "notebookEdit": "CuadernoEditar",
+        "readFile": "Leer archivo",
+        "search": "Buscar",
+        "skill": "Habilidad",
+        "task": "Tarea",
+        "todoWrite": "Todo Escribir",
+        "tool": "Herramienta",
+        "webFetch": "Obtención Web",
+        "webSearch": "Búsqueda en la web",
+        "write": "Escribir"
+      },
+      "noData": "No hay datos disponibles para esta herramienta.",
       "pending": "Pendiente",
       "preview": "Vista previa",
-      "raw": "Crudo"
+      "raw": "Crudo",
+      "runningCount": "{{count}} herramientas en ejecución",
+      "sections": {
+        "args": "Argumentos",
+        "command": "Comando",
+        "content": "Contenido",
+        "exitCode": "Código de Salida",
+        "input": "Entrada",
+        "output": "Salida",
+        "prompt": "Indicación",
+        "searchQuery": "Consulta de búsqueda",
+        "searchResults": "Resultados de búsqueda",
+        "stderr": "stderr",
+        "stdout": "stdout"
+      },
+      "status": {
+        "done": "Hecho",
+        "error": "Error",
+        "failed": "Fallido",
+        "running": "Corriendo",
+        "success": "Éxito"
+      },
+      "streaming": "Transmisión",
+      "truncated": "Salida truncada (original: {{size}})",
+      "units": {
+        "done_one": "{{count}} Hecho",
+        "done_other": "{{count}} Hecho",
+        "file_one": "{{count}} archivo",
+        "file_other": "{{count}} archivos",
+        "item_one": "{{count}} artículo",
+        "item_other": "{{count}} artículos",
+        "line_one": "{{count}} línea",
+        "line_other": "{{count}} líneas",
+        "plan_one": "{{count}} plan",
+        "plan_other": "{{count}} planes",
+        "result_one": "{{count}} resultado",
+        "result_other": "{{count}} resultados"
+      }
     },
     "topic": {
       "added": "Tema agregado con éxito"
@@ -1570,24 +2377,28 @@
     "title": "Mini programa"
   },
   "minapps": {
+    "ant-ling": "Ant Ling",
     "baichuan": "Baichuan",
     "baidu-ai-search": "Baidu AI Search",
     "chatglm": "ChatGLM",
     "dangbei": "Dangbei",
     "doubao": "Doubao",
-    "hailuo": "MINIMAX",
+    "hailuo": "Hailuo",
+    "ima": "ima",
     "metaso": "Metaso",
+    "minimax-agent": "MiniMax Agent CN",
+    "minimax-global": "MiniMax Agent",
     "nami-ai": "Nami AI",
     "nami-ai-search": "Nami AI Search",
     "qwen": "Qwen",
     "sensechat": "SenseChat",
+    "stepfun": "Stepfun",
     "tencent-yuanbao": "Yuanbao",
     "tiangong-ai": "Skywork",
     "wanzhi": "Wanzhi",
     "wenxin": "ERNIE",
     "wps-copilot": "WPS Copilot",
     "xiaoyi": "Xiaoyi",
-    "yuewen": "Yuewen",
     "zhihu": "Zhihu"
   },
   "miniwindow": {
@@ -1621,6 +2432,30 @@
       "pin": "Fijar en la parte superior"
     }
   },
+  "model3d": {
+    "download": "[to be translated]:Download model",
+    "exit_fullscreen": "[to be translated]:Exit fullscreen",
+    "fullscreen": "[to be translated]:Fullscreen",
+    "generating": "[to be translated]:Generating 3D model (image-to-3D, may take a few seconds)...",
+    "hint": "[to be translated]:Drag to rotate · Scroll to zoom · Right-click to pan",
+    "import_failed": "[to be translated]:Import to DCC failed",
+    "import_success": "[to be translated]:Imported to DCC",
+    "import_to_dcc": "[to be translated]:Import to DCC",
+    "importing": "[to be translated]:Importing...",
+    "load_error": "[to be translated]:Failed to load 3D model",
+    "no_file": "[to be translated]:No 3D model file available",
+    "no_image": "[to be translated]:Please upload an image (PNG with transparent background recommended) to generate a 3D model",
+    "progress_downloading": "[to be translated]:Downloading model file...",
+    "progress_failed": "[to be translated]:Generation failed",
+    "progress_processing": "[to be translated]:Generating 3D model...",
+    "progress_retry": "[to be translated]:retrying...",
+    "progress_saving": "[to be translated]:Saving model...",
+    "progress_submitted": "[to be translated]:Task submitted, waiting...",
+    "progress_waiting": "[to be translated]:Queued, waiting...",
+    "reset_camera": "[to be translated]:Reset camera",
+    "toggle_material": "[to be translated]:Toggle material",
+    "wireframe": "[to be translated]:Wireframe"
+  },
   "models": {
     "add_parameter": "Agregar parámetro",
     "all": "Todo",
@@ -1638,6 +2473,7 @@
     },
     "function_calling": "Llamada a función",
     "invalid_model": "Modelo inválido",
+    "json_parse_error": "Formato JSON no válido",
     "no_matches": "No hay modelos disponibles",
     "parameter_name": "Nombre del parámetro",
     "parameter_type": {
@@ -1680,6 +2516,24 @@
       "websearch": "Búsqueda en línea"
     }
   },
+  "motion": {
+    "downloading": "[to be translated]:Downloading animation files...",
+    "focus": "[to be translated]:Focus all",
+    "load_error": "[to be translated]:Failed to load FBX animation",
+    "loading": "[to be translated]:Loading animation...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate motion animation",
+    "pause": "[to be translated]:Pause",
+    "play": "[to be translated]:Play",
+    "processing": "[to be translated]:Generating motion animation...",
+    "retrying": "[to be translated]:retrying...",
+    "settings": {
+      "duration": "[to be translated]:Duration (s)",
+      "title": "[to be translated]:Motion Settings",
+      "variant_count": "[to be translated]:Variants"
+    },
+    "speed": "[to be translated]:Playback speed",
+    "submitted": "[to be translated]:Motion task submitted, waiting..."
+  },
   "navbar": {
     "expand": "Expandir cuadro de diálogo",
     "hide_sidebar": "Ocultar barra lateral",
@@ -1695,10 +2549,17 @@
     "provider_settings": "Ir a la configuración del proveedor"
   },
   "notes": {
+    "auto_rename": {
+      "empty_note": "La nota está vacía, no se puede generar un nombre",
+      "failed": "Error al generar el nombre de la nota",
+      "label": "Generar nombre de nota",
+      "success": "Se ha generado correctamente el nombre de la nota"
+    },
     "characters": "carácter",
     "collapse": "ocultar",
     "content_placeholder": "Introduzca el contenido de la nota...",
     "copyContent": "copiar contenido",
+    "crossPlatformRestoreWarning": "Configuración multiplataforma restaurada, pero el directorio de notas está vacío. Por favor, copia tus archivos de notas en: {{path}}",
     "delete": "eliminar",
     "delete_confirm": "¿Estás seguro de que deseas eliminar este {{type}}?",
     "delete_folder_confirm": "¿Está seguro de que desea eliminar la carpeta \"{{name}}\" y todo su contenido?",
@@ -1706,20 +2567,32 @@
     "drop_markdown_hint": "Arrastre y suelte archivos o carpetas de .md aquí para importar",
     "empty": "Sin notas por el momento",
     "expand": "expandir",
+    "exportToWord": "Exportar a Word",
     "export_failed": "Exportación a la base de conocimientos fallida",
     "export_knowledge": "exportar notas a la base de conocimientos",
     "export_success": "Exportado con éxito a la base de conocimientos",
+    "export_to_word_failed": "Error al exportar a Word",
     "folder": "carpeta",
     "new_folder": "Nueva carpeta",
     "new_note": "Crear nota nueva",
     "no_content_to_copy": "No hay contenido para copiar",
+    "no_content_to_export": "Sin contenido para exportar",
     "no_file_selected": "Por favor, seleccione el archivo a subir",
+    "no_note_selected": "Por favor, selecciona primero una nota.",
     "no_valid_files": "No se ha cargado un archivo válido",
     "open_folder": "abrir carpeta externa",
     "open_outside": "Abrir desde el exterior",
     "rename": "renombrar",
     "rename_changed": "Debido a políticas de seguridad, el nombre del archivo ha cambiado de {{original}} a {{final}}",
     "save": "Guardar en notas",
+    "search": {
+      "both": "Nombre + Contenido",
+      "content": "contenido",
+      "found_results": "Se encontraron {{count}} resultados (nombre: {{nameCount}}, contenido: {{contentCount}})",
+      "more_matches": "Una coincidencia",
+      "searching": "Buscando...",
+      "show_less": "Recoger"
+    },
     "settings": {
       "data": {
         "apply": "aplicación",
@@ -1776,6 +2649,8 @@
     "sort_updated_asc": "Fecha de actualización (de más antigua a más reciente)",
     "sort_updated_desc": "Fecha de actualización (de más nuevo a más antiguo)",
     "sort_z2a": "Nombre de archivo (Z-A)",
+    "spell_check": "comprobación ortográfica",
+    "spell_check_tooltip": "Habilitar/deshabilitar revisión ortográfica",
     "star": "Notas guardadas",
     "starred_notes": "notas guardadas",
     "title": "notas",
@@ -1784,11 +2659,17 @@
     "untitled_folder": "Nueva carpeta",
     "untitled_note": "Nota sin título",
     "upload_failed": "Error al cargar la nota",
-    "upload_success": "Nota cargada con éxito"
+    "upload_files": "Subir archivos",
+    "upload_folder": "Carpeta de subida",
+    "upload_success": "Nota cargada con éxito",
+    "uploading_files": "Subiendo {{count}} archivos..."
   },
   "notification": {
     "assistant": "Respuesta del asistente",
     "knowledge": {
+      "batch_error": "{{failed}} elementos no pudieron procesarse",
+      "batch_mixed": "{{succeeded}} elementos tuvieron éxito, {{failed}} elementos fallaron",
+      "batch_success": "{{succeeded}} elementos procesados correctamente",
       "error": "{{error}}",
       "success": "Se agregó correctamente {{type}} a la base de conocimientos"
     },
@@ -1802,6 +2683,7 @@
       "provider": {
         "cannot_remove_builtin": "No se puede eliminar el proveedor integrado",
         "existing": "El proveedor ya existe",
+        "get_providers": "Error al obtener proveedores disponibles",
         "not_found": "El proveedor de OCR no existe",
         "update_failed": "Actualización de la configuración fallida"
       },
@@ -1824,6 +2706,160 @@
       "title": "Tiempo de Actividad"
     },
     "title": "Ollama"
+  },
+  "openclaw": {
+    "checking_installation": "Comprobando la instalación de OpenClaw...",
+    "description": "Integra los proveedores de Cherry Studio con OpenClaw Gateway para habilitar agentes de codificación con IA como Claude Code, Qwen-Coder y más.",
+    "error": {
+      "select_provider_model": "Por favor, selecciona primero un proveedor y un modelo."
+    },
+    "gateway": {
+      "port": "Puerto",
+      "restart": "Reiniciar",
+      "start": "Iniciar Gateway",
+      "status": "Estado",
+      "stop": "Detente",
+      "version": "Versión"
+    },
+    "git_missing": {
+      "description": "OpenClaw requiere Git para instalar algunas dependencias. Por favor, instala Git primero y luego haz clic en Instalar de nuevo.",
+      "download_button": "Descargar Git",
+      "hint": "macOS: brew install git | Windows: Descarga desde git-scm.com (asegúrate de agregar Git al PATH durante la instalación)",
+      "title": "Git Requerido"
+    },
+    "install_progress": "Progreso de instalación",
+    "installed_at": "OpenClaw instalado en",
+    "migration": {
+      "description": "Se ha detectado una versión desactualizada de OpenClaw instalada a través de npm. Por favor, reinstala para obtener la última versión oficial.",
+      "install_button": "Reinstalar OpenClaw",
+      "title": "OpenClaw Necesita Actualización"
+    },
+    "model_config": {
+      "auth_token": "Token de autenticación",
+      "auth_token_hint": "Token para autenticación de puerta de enlace. Dejar vacío para desactivar la autenticación.",
+      "auth_token_placeholder": "Introduce o genera un token",
+      "generate_token": "Generar",
+      "model": "Modelo",
+      "provider": "Proveedor",
+      "select_model": "Selecciona un modelo",
+      "select_provider": "Seleccione un proveedor",
+      "sync_hint": "El proveedor y el modelo seleccionados se sincronizarán con el archivo de configuración de OpenClaw.",
+      "title": "Configuración del modelo"
+    },
+    "node_missing": {
+      "description": "OpenClaw requiere Node.js/npm. Por favor, instala Node.js primero y luego reinicia Cherry Studio.",
+      "download_button": "Descargar Node.js",
+      "hint": "macOS: brew install node | Windows: Descarga la versión LTS desde nodejs.org",
+      "title": "Node.js Requerido"
+    },
+    "node_version_low": {
+      "description": "OpenClaw requiere Node.js 22.0 o superior. Tu versión actual es v{{version}}. Por favor, actualiza Node.js primero.",
+      "hint": "nvm: nvm install 22 && nvm use 22 | mise: mise use node@22",
+      "title": "Versión de Node.js demasiado baja"
+    },
+    "not_installed": {
+      "description": "OpenClaw no está instalado en tu sistema. Por favor, instálalo primero para usar esta función.",
+      "install_button": "Instalar OpenClaw",
+      "install_guide_title": "Guía de Instalación",
+      "macos_linux_title": "macOS / Linux",
+      "refresh": "Actualizar",
+      "step2_hint": "Después de la instalación, haz clic en el botón Actualizar de arriba para detectar OpenClaw",
+      "step2_title": "Paso 2: Verificar la instalación",
+      "title": "OpenClaw No Instalado",
+      "windows_title": "Windows"
+    },
+    "quick_actions": {
+      "check_update": "Buscar actualizaciones",
+      "open_dashboard": "Abrir Panel de Control",
+      "title": "Acciones Rápidas",
+      "uninstall": "Desinstalar",
+      "view_docs": "Ver Documentación"
+    },
+    "status": {
+      "error": "Error",
+      "running": "Corriendo",
+      "starting": "Comenzando",
+      "stopped": "Detenido"
+    },
+    "tips": {
+      "permissions": "OpenClaw tiene permisos elevados del sistema. Usar solo en entornos de confianza",
+      "title": "Consejos",
+      "token_usage": "El modo de agente IA puede consumir más tokens. Por favor, monitoree su uso"
+    },
+    "title": "OpenClaw",
+    "uninstall_confirm": "¿Estás seguro de que quieres desinstalar OpenClaw? Presiona OK para confirmar.",
+    "uninstall_progress": "Desinstalación en progreso",
+    "uninstalled": {
+      "description": "OpenClaw se ha desinstalado correctamente.",
+      "title": "Desinstalación completada"
+    },
+    "uninstalling": {
+      "description": "Por favor espera mientras se desinstala OpenClaw...",
+      "title": "Desinstalando OpenClaw"
+    },
+    "update": {
+      "available": "Nueva versión disponible: v{{latest}} (actual: v{{current}})",
+      "checking": "Comprobando actualizaciones...",
+      "confirm_button": "Actualizar ahora",
+      "failed": "Error al verificar actualizaciones",
+      "modal_title": "Actualización de OpenClaw",
+      "success": "¡Actualización completada con éxito!",
+      "up_to_date": "Ya está actualizado (v{{current}})",
+      "updating": "Actualizando..."
+    }
+  },
+  "ovms": {
+    "action": {
+      "install": "Instalar",
+      "installing": "Instalando",
+      "reinstall": "Reinstalar",
+      "run": "Ejecutar OVMS",
+      "starting": "Iniciando",
+      "stop": "Detener OVMS",
+      "stopping": "Deteniendo"
+    },
+    "description": "<div><p>1. Descargar modelo OV.</p><p>2. Agregar modelo en 'Administrador'.</p><p>¡Solo compatible con Windows!</p><p>Ruta de instalación de OVMS: '%USERPROFILE%\\.cherrystudio\\ovms' .</p><p>Consulte la <a href=https://github.com/openvinotoolkit/model_server/blob/c55551763d02825829337b62c2dcef9339706f79/docs/deploying_server_baremetal.md>Guía de Intel OVMS</a></p></dev>",
+    "download": {
+      "button": "Descargar",
+      "error": "Selección fallida",
+      "model_id": {
+        "label": "ID del modelo:",
+        "model_id_pattern": "El ID del modelo debe comenzar con OpenVINO/",
+        "placeholder": "Requerido, por ejemplo, OpenVINO/Qwen3-8B-int4-ov",
+        "required": "Por favor, ingrese el ID del modelo"
+      },
+      "model_name": {
+        "label": "Nombre del modelo:",
+        "placeholder": "Requerido, por ejemplo, Qwen3-8B-int4-ov",
+        "required": "Por favor, ingrese el nombre del modelo"
+      },
+      "model_source": "Fuente del modelo:",
+      "model_task": "Tarea del modelo:",
+      "success": "Descarga exitosa",
+      "success_desc": "El modelo \"{{modelName}}\"-\"{{modelId}}\" se descargó exitosamente, por favor vaya a la interfaz de administración de OVMS para agregar el modelo",
+      "tip": "El modelo se está descargando, a veces toma varias horas. Por favor espere pacientemente...",
+      "title": "Descargar modelo Intel OpenVINO"
+    },
+    "failed": {
+      "install": "Error al instalar OVMS:",
+      "install_code_100": "Error desconocido",
+      "install_code_101": "Solo compatible con CPU Intel(R) Core(TM) Ultra",
+      "install_code_102": "Solo compatible con Windows",
+      "install_code_103": "Error al descargar el tiempo de ejecución de OVMS",
+      "install_code_104": "Error al descomprimir el tiempo de ejecución de OVMS",
+      "install_code_105": "Error al limpiar el tiempo de ejecución de OVMS",
+      "install_code_106": "Error al crear run.bat",
+      "install_code_110": "Error al limpiar el antiguo runtime de OVMS",
+      "run": "Error al ejecutar OVMS:",
+      "stop": "Error al detener OVMS:"
+    },
+    "status": {
+      "not_installed": "OVMS no instalado",
+      "not_running": "OVMS no está en ejecución",
+      "running": "OVMS en ejecución",
+      "unknown": "Estado de OVMS desconocido"
+    },
+    "title": "Intel OVMS"
   },
   "paintings": {
     "aspect_ratio": "Relación de aspecto",
@@ -1852,14 +2888,42 @@
       }
     },
     "custom_size": "Tamaño personalizado",
+    "dmxapi": {
+      "generating_tip": "Generando con el modelo oficial, el tiempo de espera estimado es de 2-5 minutos para obtener los mejores resultados. Por favor, verifica los registros del backend de DMXAPI para conocer el costo de esta operación.",
+      "style": ", Estilo:",
+      "style_types": {
+        "25d_animation": "Animación 2.5D",
+        "3d_cartoon": "Caricatura 3D",
+        "american_retro": "Retro Americano",
+        "baroque": "Barroco",
+        "cartoon_illustration": "Ilustración de caricatura",
+        "chinese_gongbi": "Gongbi chino",
+        "clay": "Arcilla",
+        "cyberpunk": "Ciberpunk",
+        "felt": "Fieltro",
+        "flat": "Plano",
+        "fresh_anime": "Anime Fresco",
+        "ghibli": "Ghibli",
+        "japanese_anime": "Anime japonés",
+        "little_people_book": "Libro de Little People",
+        "monet_garden": "Jardín Monet",
+        "oil_painting": "Pintura al óleo",
+        "pixar": "Pixar",
+        "pixel_art": "Arte de píxeles",
+        "poetic_ancient": "Poético Antiguo",
+        "psychedelic": "Psicodélico",
+        "sketch": "Boceto",
+        "street_art": "Arte urbano",
+        "texture": "Textura",
+        "ukiyo_e": "Ukiyo-e",
+        "watercolor": "Acuarela",
+        "wood_carving": "Talla en madera",
+        "yarn_doll": "Muñeca de hilo"
+      }
+    },
     "edit": {
       "image_file": "Imagen editada",
-      "magic_prompt_option_tip": "Optimización inteligente de las palabras clave de edición",
-      "model_tip": "La edición local solo es compatible con las versiones V_2 y V_2_TURBO",
-      "number_images_tip": "Número de resultados de edición generados",
-      "rendering_speed_tip": "Controla el equilibrio entre velocidad y calidad de renderizado, solo aplicable a la versión V_3",
-      "seed_tip": "Controla la aleatoriedad de los resultados de edición",
-      "style_type_tip": "Estilo de la imagen editada, solo aplicable para la versión V_2 y posteriores"
+      "image_required": "Por favor, sube primero una imagen para editar"
     },
     "generate": {
       "height": "Altura",
@@ -1876,6 +2940,7 @@
       "style_type_tip": "Estilo de generación de imágenes, solo aplicable para la versión V_2 y posteriores",
       "width": "Ancho"
     },
+    "generate_failed": "Error al generar la imagen",
     "generated_image": "Generar imagen",
     "go_to_settings": "Ir a configuración",
     "guidance_scale": "Escala de guía",
@@ -1886,6 +2951,7 @@
     "image_file_required": "Por favor, carga una imagen primero",
     "image_file_retry": "Vuelve a cargar la imagen",
     "image_handle_required": "Por favor, suba primero una imagen",
+    "image_mix_failed": "Error al mezclar imágenes",
     "image_placeholder": "No hay imágenes por ahora",
     "image_retry": "Reintentar",
     "image_size_options": {
@@ -1895,6 +2961,7 @@
     "inference_steps_tip": "Número de pasos de inferencia a realizar. Cuantos más pasos, mejor la calidad pero más tiempo tarda",
     "input_image": "Imagen de entrada",
     "input_parameters": "Parámetros de entrada",
+    "invalid_image_url": "Formato de URL de imagen inválido",
     "learn_more": "Más información",
     "magic_prompt_option": "Mejora de indicación",
     "mode": {
@@ -1916,6 +2983,7 @@
     "no_image_generation_model": "No hay modelos disponibles para generación de imágenes. Por favor, agregue un modelo y configure el tipo de punto final como {{endpoint_type}}",
     "number_images": "Cantidad de imágenes generadas",
     "number_images_tip": "Número de imágenes generadas por vez (1-4)",
+    "operation_failed": "Operación fallida, por favor inténtelo de nuevo más tarde",
     "paint_course": "Tutorial",
     "per_image": "Por imagen",
     "per_images": "Por imagen",
@@ -1923,6 +2991,16 @@
       "allow_adult": "Permitir adultos",
       "allow_all": "Permitir todos",
       "allow_none": "No permitir ninguno"
+    },
+    "ppio": {
+      "edit_prompt_tip": "Especifica el objeto o área a eliminar de la imagen, ej: 'perro' o 'sombrero'",
+      "mask_image": "Imagen de máscara",
+      "mask_image_tip": "Indica el área a borrar. Las áreas a borrar deben ser blancas, las áreas a mantener negras",
+      "output_format": "Formato de salida",
+      "resolution": "Resolución objetivo",
+      "seed_tip": "Semilla aleatoria, misma semilla y parámetros producen imágenes similares, -1 significa aleatorio",
+      "use_pre_llm_tip": "Activa la expansión de texto para optimizar el prompt. Recomendado para prompts cortos, desactivar para largos",
+      "watermark_tip": "Si agregar marca de agua a las imágenes generadas, desactivado por defecto"
     },
     "pricing": "Precios",
     "prompt_enhancement": "Mejora del prompt",
@@ -1966,6 +3044,7 @@
     "required_field": "Campo obligatorio",
     "seed": "Semilla aleatoria",
     "seed_desc_tip": "Las mismas semilla y descripción generan imágenes similares. Establezca -1 para que cada generación sea diferente",
+    "seed_random": "Aleatorio",
     "seed_tip": "La misma semilla y la misma sugerencia generarán imágenes similares",
     "select_model": "Seleccionar modelo",
     "style_type": "Estilo",
@@ -1991,11 +3070,89 @@
       "resemblance": "Similitud",
       "resemblance_tip": "Controla el nivel de similitud entre el resultado ampliado y la imagen original",
       "seed_tip": "Controla la aleatoriedad del resultado de la ampliación"
+    },
+    "watermark": "Agregar marca de agua",
+    "zhipu": {
+      "custom_size_divisible": "El tamaño personalizado debe ser divisible por 16",
+      "custom_size_hint": "El ancho y la altura deben estar entre 512px y 2048px, ser divisibles por 16 y el total de píxeles no puede exceder 2^21px.",
+      "custom_size_pixels": "El total de píxeles de tamaño personalizado no puede exceder 2,097,152",
+      "custom_size_range": "El tamaño personalizado debe estar entre 512px y 2048px",
+      "custom_size_required": "Por favor, establece el ancho y la altura personalizados.",
+      "image_sizes": {
+        "1024x1024_default": "1024x1024 (Predeterminado)",
+        "1152x864": "1152x864",
+        "1344x768": "1344x768",
+        "1440x720": "1440x720",
+        "720x1440": "720x1440",
+        "768x1344": "768x1344",
+        "864x1152": "864x1152"
+      },
+      "quality_options": {
+        "hd": "HD",
+        "standard_default": "Estándar (Predeterminado)"
+      }
     }
+  },
+  "plugins": {
+    "actions": "Operación",
+    "agents": "Agente",
+    "all_categories": "Todas las categorías",
+    "all_types": "todo",
+    "category": "Categoría",
+    "commands": "comando",
+    "confirm_uninstall": "¿Estás seguro de que quieres desinstalar {{name}}?",
+    "confirm_uninstall_package": "¿Estás seguro de que deseas desinstalar el paquete {{name}} y todos sus componentes?",
+    "content_saved": "Contenido del plugin guardado exitosamente",
+    "detail": {
+      "allowed_tools": "Herramientas Permitidas",
+      "author": "Autor",
+      "content": "Contenido",
+      "description": "Descripción",
+      "file": "Archivo",
+      "installed": "Instalado",
+      "metadata": "Metadatos",
+      "size": "Tamaño",
+      "source": "Fuente",
+      "tags": "Etiquetas",
+      "tools": "Herramientas"
+    },
+    "install": "instalación",
+    "install_plugins_from_browser": "Explora los complementos disponibles para empezar a usar",
+    "installing": "Instalando...",
+    "name": "Nombre",
+    "no_description": "Sin descripción",
+    "no_installed_plugins": "Aún no se ha instalado ningún complemento",
+    "no_results": "No se encontró el complemento",
+    "no_results_skills": "No se encontraron habilidades",
+    "search_placeholder": "Buscar complemento...",
+    "search_placeholder_skills": "Habilidades de búsqueda...",
+    "showing_results": "Mostrar {{count}} complementos",
+    "showing_results_one": "Mostrar {{count}} complementos",
+    "showing_results_other": "Mostrar {{count}} complementos",
+    "showing_results_plural": "Mostrar {{count}} complementos",
+    "showing_results_skills": "Mostrando {{count}} habilidad",
+    "showing_results_skills_one": "Mostrando {{count}} habilidad",
+    "showing_results_skills_other": "Mostrando {{count}} habilidades",
+    "showing_results_skills_plural": "Mostrando {{count}} habilidades",
+    "skills": "habilidad",
+    "sort": {
+      "downloads": "Descargas",
+      "label": "Ordenar",
+      "relevance": "Relevancia",
+      "stars": "Estrellas"
+    },
+    "standalone_plugins": "Complementos Independientes",
+    "title": "[to be translated]:Plugin Tools",
+    "try_different_search": "Por favor, intenta ajustar la búsqueda o los filtros de categoría.",
+    "type": "tipo",
+    "uninstall": "Desinstalar",
+    "uninstall_package": "Desinstalar Paquete",
+    "uninstalling": "Desinstalando..."
   },
   "preview": {
     "copy": {
-      "image": "Copiar como imagen"
+      "image": "Copiar como imagen",
+      "src": "Copia la fuente de la imagen"
     },
     "dialog": "Abrir la ventana de vista previa",
     "label": "Vista previa",
@@ -2016,6 +3173,7 @@
   },
   "provider": {
     "302ai": "302.AI",
+    "ai-gateway": "Puerta de enlace de IA",
     "aihubmix": "AiHubMix",
     "aionly": "AiOnly",
     "alayanew": "Alaya NeW",
@@ -2026,6 +3184,7 @@
     "baidu-cloud": "Baidu Nube Qiánfān",
     "burncloud": "BurnCloud",
     "cephalon": "Cephalon",
+    "cerebras": "Cerebras AI",
     "cherryin": "CherryIN",
     "copilot": "GitHub Copiloto",
     "dashscope": "Álibaba Nube BaiLiàn",
@@ -2039,13 +3198,17 @@
     "gpustack": "GPUStack",
     "grok": "Grok",
     "groq": "Groq",
+    "huggingface": "Hugging Face",
     "hunyuan": "Tencent Hùnyuán",
     "hyperbolic": "Hiperbólico",
     "infini": "Infini",
     "jina": "Jina",
     "lanyun": "Tecnología Lanyun",
     "lmstudio": "Estudio LM",
-    "minimax": "Minimax",
+    "longcat": "Totoro",
+    "mimo": "Xiaomi MiMo",
+    "minimax": "Minimax CN",
+    "minimax-global": "MiniMax",
     "mistral": "Mistral",
     "modelscope": "ModelScope Módulo",
     "moonshot": "Lanzamiento Lunar",
@@ -2056,13 +3219,15 @@
     "ollama": "Ollama",
     "openai": "OpenAI",
     "openrouter": "OpenRouter",
+    "ovms": "Intel OVMS",
     "perplexity": "Perplejidad",
-    "ph8": "Plataforma Abierta de Grandes Modelos PH8",
+    "ph8": "PH8",
     "poe": "Poe",
     "ppio": "PPIO Cloud Piao",
     "qiniu": "Qiniu AI",
     "qwenlm": "QwenLM",
     "silicon": "Silicio Fluido",
+    "sophnet": "SophNet",
     "stepfun": "Función Salto",
     "tencent-cloud-ti": "Tencent Nube TI",
     "together": "Juntos",
@@ -2071,6 +3236,7 @@
     "voyageai": "Voyage AI",
     "xirang": "Telecom Nube XiRang",
     "yi": "Cero Uno Todo",
+    "zai": "Z.ai",
     "zhinao": "360 Inteligente",
     "zhipu": "BigModel"
   },
@@ -2306,6 +3472,19 @@
       "undo": "Revocar"
     }
   },
+  "sam3": {
+    "complete": "[to be translated]:3D model generation complete",
+    "confirm_generate": "[to be translated]:Generate 3D Model",
+    "generating": "[to be translated]:Generating 3D model...",
+    "launch_error": "[to be translated]:Failed to launch SAM3 annotation window",
+    "manual_mode": "[to be translated]:SAM3 Manual Annotation",
+    "need_image": "[to be translated]:Please attach an image first for SAM3 annotation",
+    "need_image_auto": "[to be translated]:Auto mode requires an attached image",
+    "need_mcp": "[to be translated]:Auto mode requires MCP tools. Please enable MCP (auto or manual mode) in assistant settings.",
+    "retry": "[to be translated]:Retry",
+    "server_unavailable": "[to be translated]:SAM3 server is unavailable",
+    "waiting_annotation": "[to be translated]:Waiting for annotation in SAM3 window..."
+  },
   "selection": {
     "action": {
       "builtin": {
@@ -2316,6 +3495,11 @@
         "search": "Buscar",
         "summary": "Resumen",
         "translate": "Traducir"
+      },
+      "prompt": {
+        "explain": "Por favor, explica el siguiente contenido. Requisitos: Responde en {{language}}; no incluyas ninguna explicación de esta instrucción, solo da la respuesta directamente:",
+        "refine": "Por favor, optimiza o pulsa el contenido del usuario envuelto en la etiqueta XML <INPUT>, manteniendo el significado y la integridad del contenido original. Requisitos: tu salida debe estar en el mismo idioma que la entrada del usuario; no incluyas ninguna explicación de este mensaje, solo da la respuesta directamente; no imprimas etiquetas XML, imprime el contenido optimizado directamente:",
+        "summary": "Por favor, resume el siguiente contenido. Requisitos: responder en {{language}}; no incluyas ninguna explicación de este mensaje, solo da la respuesta directamente:"
       },
       "translate": {
         "smart_translate_tips": "Traducción inteligente: el contenido se traducirá primero al idioma de destino; si el contenido ya está en el idioma de destino, se traducirá al idioma alternativo"
@@ -2494,6 +3678,10 @@
   },
   "settings": {
     "about": {
+      "careers": {
+        "button": "Vista",
+        "title": "Carreras"
+      },
       "checkUpdate": {
         "available": "Actualizar ahora",
         "label": "Comprobar actualizaciones"
@@ -2509,15 +3697,14 @@
       },
       "description": "Una asistente de IA creada para los creadores",
       "downloading": "Descargando actualización...",
+      "enterprise": {
+        "title": "Empresa"
+      },
       "feedback": {
         "button": "Enviar feedback",
         "title": "Enviar comentarios"
       },
       "label": "Acerca de nosotros",
-      "license": {
-        "button": "Ver",
-        "title": "Licencia"
-      },
       "releases": {
         "button": "Ver",
         "title": "Registro de cambios"
@@ -2551,6 +3738,8 @@
       "model_params": "Parámetros del modelo",
       "title": "Asistente predeterminado"
     },
+    "centralized": "[to be translated]:Managed",
+    "centralized_config_readonly": "[to be translated]:Managed by Administrator",
     "data": {
       "app_data": {
         "copy_data_option": "Copiar datos: se reiniciará automáticamente y se copiarán los datos del directorio original al nuevo directorio",
@@ -2562,6 +3751,7 @@
         "label": "Datos de la aplicación",
         "migration_title": "Migración de datos",
         "new_path": "Nueva ruta",
+        "open": "Directorio abierto",
         "original_path": "Ruta original",
         "path_change_failed": "Error al cambiar el directorio de datos",
         "path_changed_without_copy": "La ruta se ha cambiado correctamente",
@@ -2609,6 +3799,7 @@
         "basic": "Configuración básica",
         "cloud_storage": "Configuración de almacenamiento en la nube",
         "export_settings": "Configuración de exportación",
+        "import_settings": "Importar configuración",
         "third_party": "Conexiones de terceros"
       },
       "export_menu": {
@@ -2625,8 +3816,74 @@
         "title": "Exportar configuración del menú",
         "yuque": "Exportar a Yuque"
       },
+      "export_to_phone": {
+        "confirm": {
+          "button": "Seleccionar archivo de copia de seguridad"
+        },
+        "content": "Exportar parte de los datos, incluidos los registros de chat y la configuración. Tenga en cuenta que el proceso de copia de seguridad puede tardar un tiempo; gracias por su paciencia.",
+        "lan": {
+          "connected": "Conectado",
+          "connection_failed": "Conexión fallida",
+          "content": "Asegúrate de que el ordenador y el móvil estén en la misma red para usar la transferencia por LAN. Abre la aplicación Cherry Studio y escanea este código QR.",
+          "device_list_title": "Dispositivos de red local",
+          "discovered_devices": "Dispositivos descubiertos",
+          "error": {
+            "file_too_large": "Archivo demasiado grande, se admite un máximo de 500 MB",
+            "init_failed": "Falló la inicialización",
+            "invalid_file_type": "Solo se admiten archivos ZIP",
+            "no_file": "Ningún archivo seleccionado",
+            "no_ip": "No se puede obtener la dirección IP",
+            "not_connected": "Por favor, completa primero el apretón de manos.",
+            "send_failed": "Error al enviar el archivo"
+          },
+          "file_transfer": {
+            "cancelled": "Transferencia cancelada",
+            "failed": "Error en la transferencia del archivo: {{message}}",
+            "progress": "Enviando... {{progress}}%",
+            "success": "Archivo enviado con éxito"
+          },
+          "handshake": {
+            "button": "Apretón de manos",
+            "failed": "Error de handshake: {{message}}",
+            "in_progress": "Estrechando manos...",
+            "success": "Handshake completado con {{device}}",
+            "test_message_received": "Recibido pong de {{device}}",
+            "test_message_sent": "Enviado payload de prueba hello world"
+          },
+          "idle_hint": "Escaneo pausado. Inicia el escaneo para encontrar pares de Cherry Studio en tu red local.",
+          "ip_addresses": "Direcciones IP",
+          "last_seen": "Visto por última vez a las {{time}}",
+          "metadata": "Metadatos",
+          "no_connection_warning": "Por favor, abre Transferencia LAN en la aplicación móvil Cherry Studio.",
+          "no_devices": "Aún no se han encontrado pares en LAN",
+          "scan_devices": "Escanear dispositivos",
+          "scanning_hint": "Escaneando tu red local en busca de pares de Cherry Studio...",
+          "send_file": "Enviar archivo",
+          "status": {
+            "completed": "Transferencia completada",
+            "connected": "Conectado",
+            "connecting": "Conectando...",
+            "disconnected": "Desconectado",
+            "error": "Error de conexión",
+            "initializing": "Inicializando conexión...",
+            "preparing": "Preparando transferencia...",
+            "sending": "Transfiriendo {{progress}}%"
+          },
+          "status_badge_idle": "Ocioso",
+          "status_badge_scanning": "Escaneando",
+          "stop_scan": "Detener escaneo",
+          "title": "Transferencia de red local",
+          "transfer_progress": "Progreso de transferencia"
+        },
+        "title": "Exportar al teléfono"
+      },
       "hour_interval_one": "{{count}} hora",
       "hour_interval_other": "{{count}} horas",
+      "import_settings": {
+        "button": "Importar archivo Json",
+        "chatgpt": "Importar desde ChatGPT",
+        "title": "Importar datos de aplicaciones externas"
+      },
       "joplin": {
         "check": {
           "button": "Revisar",
@@ -3099,7 +4356,11 @@
     "developer": {
       "enable_developer_mode": "Habilitar modo de desarrollador",
       "help": "Una vez habilitado el modo de desarrollador, se podrá utilizar la función de cadena de llamadas para ver el flujo de datos del proceso de invocación del modelo.",
-      "title": "Modo de Desarrollador"
+      "password_incorrect": "[to be translated]:Incorrect password, please try again",
+      "password_placeholder": "[to be translated]:Developer password",
+      "password_required": "[to be translated]:Enter Developer Password",
+      "title": "Modo de Desarrollador",
+      "user_not_allowed": "[to be translated]:Current system user is not authorized for developer mode"
     },
     "display": {
       "assistant": {
@@ -3208,6 +4469,9 @@
       },
       "view_webdav_settings": "Ver configuración WebDAV"
     },
+    "groq": {
+      "title": "Configuración de Groq"
+    },
     "hardware_acceleration": {
       "confirm": {
         "content": "La desactivación de la aceleración por hardware requiere reiniciar la aplicación para que surta efecto, ¿desea reiniciar ahora?",
@@ -3283,12 +4547,15 @@
       "builtinServers": "Servidores integrados",
       "builtinServersDescriptions": {
         "brave_search": "Una implementación de servidor MCP que integra la API de búsqueda de Brave, proporcionando funciones de búsqueda web y búsqueda local. Requiere configurar la variable de entorno BRAVE_API_KEY",
+        "browser": "Controla una ventana Electron headless mediante Chrome DevTools Protocol. Herramientas: abrir URL, ejecutar JS de una línea, reiniciar sesión.",
+        "didi_mcp": "Servidor DiDi MCP que proporciona servicios de transporte incluyendo búsqueda de mapas, estimación de precios, gestión de pedidos y seguimiento de conductores. Disponible solo en China Continental. Requiere configurar la variable de entorno DIDI_API_KEY",
         "dify_knowledge": "Implementación del servidor MCP de Dify, que proporciona una API sencilla para interactuar con Dify. Se requiere configurar la clave de Dify.",
         "fetch": "Servidor MCP para obtener el contenido de la página web de una URL",
         "filesystem": "Servidor Node.js que implementa el protocolo de contexto del modelo (MCP) para operaciones del sistema de archivos. Requiere configuración del directorio permitido para el acceso",
         "mcp_auto_install": "Instalación automática del servicio MCP (versión beta)",
         "memory": "Implementación básica de memoria persistente basada en un grafo de conocimiento local. Esto permite que el modelo recuerde información relevante del usuario entre diferentes conversaciones. Es necesario configurar la variable de entorno MEMORY_FILE_PATH.",
         "no": "sin descripción",
+        "nowledge_mem": "Requiere que la aplicación Nowledge Mem se ejecute localmente. Mantiene chats de IA, herramientas, notas, agentes y archivos en memoria privada en tu computadora. Descárgala desde https://mem.nowledge.co/",
         "python": "Ejecuta código Python en un entorno sandbox seguro. Usa Pyodide para ejecutar Python, compatible con la mayoría de las bibliotecas estándar y paquetes de cálculo científico.",
         "sequentialthinking": "Una implementación de servidor MCP que proporciona herramientas para la resolución dinámica y reflexiva de problemas mediante un proceso de pensamiento estructurado"
       },
@@ -3306,6 +4573,7 @@
         "description": "No habilitar funciones del servicio MCP",
         "label": "No utilizar servidor MCP"
       },
+      "discover": "Descubrir",
       "duplicateName": "Ya existe un servidor con el mismo nombre",
       "editJson": "Editar JSON",
       "editMcpJson": "Editar configuración MCP",
@@ -3315,6 +4583,10 @@
       "errors": {
         "32000": "El servidor MCP no se pudo iniciar, verifique si los parámetros están completos según la guía",
         "toolNotFound": "Herramienta no encontrada {{name}}"
+      },
+      "fetch": {
+        "button": "Obtener Servidores",
+        "success": "Servidores MCP obtenidos con éxito"
       },
       "findMore": "Más servidores MCP",
       "headers": "Encabezados",
@@ -3328,9 +4600,15 @@
       "jsonModeHint": "Edite la representación JSON de la configuración del servidor MCP. Asegúrese de que el formato sea correcto antes de guardar.",
       "jsonSaveError": "Fallo al guardar la configuración JSON",
       "jsonSaveSuccess": "Configuración JSON guardada exitosamente",
+      "lanyun": {
+        "description": "Plataforma Cloud de Tecnología Lanyun Servicio MCP",
+        "name": "Lanyun Technology"
+      },
       "logoUrl": "URL del logotipo",
+      "logs": "Registros",
       "longRunning": "Modo de ejecución prolongada",
       "longRunningTooltip": "Una vez habilitado, el servidor admite tareas de larga duración, reinicia el temporizador de tiempo de espera al recibir notificaciones de progreso y amplía el tiempo máximo de espera hasta 10 minutos.",
+      "marketplaces": "Mercados",
       "missingDependencies": "Faltan, instalelas para continuar",
       "more": {
         "awesome": "Lista seleccionada de servidores MCP",
@@ -3347,6 +4625,7 @@
       "name": "Nombre",
       "newServer": "Servidor MCP",
       "noDescriptionAvailable": "Sin descripción disponible por ahora",
+      "noLogs": "Aún no hay registros",
       "noServers": "No se han configurado servidores",
       "not_support": "El modelo no es compatible",
       "npx_list": {
@@ -3362,6 +4641,12 @@
         "usage": "Uso",
         "version": "Versión"
       },
+      "oauth": {
+        "callback": {
+          "message": "Puede cerrar esta página y volver a Cherry Studio",
+          "title": "Autenticación Exitosa"
+        }
+      },
       "prompts": {
         "arguments": "Argumentos",
         "availablePrompts": "Indicaciones disponibles",
@@ -3370,9 +4655,16 @@
         "noPromptsAvailable": "No hay indicaciones disponibles",
         "requiredField": "Campo obligatorio"
       },
+      "protocolInstallWarning": {
+        "command": "Comando de inicio",
+        "message": "Este MCP fue instalado desde una fuente externa a través del protocolo. Ejecutar herramientas desconocidas puede dañar tu computadora.",
+        "run": "Correr",
+        "title": "¿Ejecutar MCP externo?"
+      },
       "provider": "Proveedor",
       "providerPlaceholder": "Nombre del proveedor",
       "providerUrl": "URL del proveedor",
+      "providers": "Proveedores",
       "registry": "Repositorio de paquetes",
       "registryDefault": "Predeterminado",
       "registryTooltip": "Seleccione un repositorio para instalar paquetes, útil para resolver problemas de red con el repositorio predeterminado.",
@@ -3395,6 +4687,7 @@
       "searchNpx": "Buscar MCP",
       "serverPlural": "Servidores",
       "serverSingular": "Servidor",
+      "servers": "Servidores MCP",
       "sse": "Eventos enviados por el servidor (sse)",
       "startError": "Inicio fallido",
       "stdio": "Entrada/Salida estándar (stdio)",
@@ -3407,6 +4700,14 @@
         "getToken": "Obtener token de API",
         "getTokenDescription": "Obtener un token de API personal desde su cuenta",
         "noServersAvailable": "No hay servidores MCP disponibles",
+        "providerDescriptions": {
+          "302ai": "302.Servicio MCP de la Plataforma AI",
+          "bailian": "Servicio MCP de la Plataforma Bailian de Alibaba Cloud",
+          "lanyun": "Plataforma en la nube de tecnología Lanyun Servicio MCP",
+          "mcprouter": "Plataforma de Enrutamiento MCP Servicio MCP",
+          "modelscope": "Servicio MCP de la Plataforma ModelScope",
+          "tokenflux": "Servicio MCP de la Plataforma TokenFlux"
+        },
         "selectProvider": "Seleccionar proveedor:",
         "setToken": "Ingrese su token",
         "success": "Servidor MCP sincronizado correctamente",
@@ -3427,7 +4728,7 @@
       "tagsPlaceholder": "Ingrese etiquetas",
       "timeout": "Tiempo de espera",
       "timeoutTooltip": "Tiempo de espera (en segundos) para las solicitudes a este servidor; el valor predeterminado es 60 segundos",
-      "title": "Configuración del MCP",
+      "title": "Servidores MCP",
       "tools": {
         "autoApprove": {
           "label": "Aprobación automática",
@@ -3499,9 +4800,6 @@
       "title": "Configuración de mensajes",
       "use_serif_font": "Usar fuente serif"
     },
-    "mineru": {
-      "api_key": "MinerU ahora ofrece un cupo gratuito de 500 páginas diarias, no es necesario que ingrese una clave."
-    },
     "miniapps": {
       "cache_change_notice": "Los cambios surtirán efecto cuando el número de miniaplicaciones abiertas aumente o disminuya hasta alcanzar el valor configurado",
       "cache_description": "Establece el número máximo de miniaplicaciones que pueden permanecer activas simultáneamente",
@@ -3544,6 +4842,13 @@
       "open_link_external": {
         "title": "Abrir enlace en nueva ventana del navegador"
       },
+      "region": {
+        "auto": "Detección automática",
+        "cn": "China",
+        "description": "Los pequeños programas que no son compatibles se filtran según la región.",
+        "global": "global",
+        "title": "Filtro de área de la miniaplicación"
+      },
       "reset_tooltip": "Restablecer a los valores predeterminados",
       "sidebar_description": "Configura si se muestra o no en la barra lateral la miniaplicación activa",
       "sidebar_title": "Visualización de miniaplicaciones activas en la barra lateral",
@@ -3579,6 +4884,10 @@
           "placeholder": "Por ejemplo, GPT-3.5",
           "tooltip": "Por ejemplo, GPT-4"
         },
+        "stream_output": {
+          "label": "[to be translated]:Stream Output",
+          "tooltip": "[to be translated]:When enabled, this model streams output token-by-token; when disabled, it waits for the full result and returns it at once. Takes priority over the assistant setting."
+        },
         "supported_text_delta": {
           "label": "salida de texto incremental",
           "tooltip": "Cuando el modelo no sea compatible, desactive este botón."
@@ -3609,6 +4918,13 @@
         "timeout": "Tiempo de espera agotado",
         "title": "Verificación de salud del modelo",
         "use_all_keys": "Usar todas las claves"
+      },
+      "context_summary": {
+        "enable": "[to be translated]:Enable context summary compression",
+        "enable_tooltip": "[to be translated]:When enabled, earlier conversation turns are compressed into summaries using the Quick Model above, reducing token usage. The model can retrieve full details via a tool.",
+        "full_turns": "[to be translated]:Full content turns",
+        "full_turns_tooltip": "[to be translated]:Number of recent turns to keep full content. Earlier turns use summaries.",
+        "label": "[to be translated]:Context Summary"
       },
       "default_assistant_model": "Modelo predeterminado del asistente",
       "default_assistant_model_description": "Modelo utilizado al crear nuevos asistentes, si el asistente no tiene un modelo asignado, se utiliza este modelo",
@@ -3677,10 +4993,15 @@
         "default": "Predeterminado",
         "flex": "Flexible",
         "on_demand": "según demanda",
-        "performance": "rendimiento",
         "priority": "prioridad",
         "tip": "Especifica el nivel de latencia utilizado para procesar la solicitud",
         "title": "Nivel de servicio"
+      },
+      "stream_options": {
+        "include_usage": {
+          "tip": "Si se incluye el uso de tokens (aplicable solo a la API de Completions de chat de OpenAI)",
+          "title": "Incluir uso"
+        }
       },
       "summary_text_mode": {
         "auto": "Automático",
@@ -3730,9 +5051,13 @@
         "logout_failed": "Error al cerrar sesión, inténtalo de nuevo",
         "logout_success": "Cierre de sesión exitoso en Anthropic",
         "oauth": "Web OAuth",
+        "oauth_disabled_warning": "Anthropic ha suspendido temporalmente el uso de Claude a través de OAuth. Este método de autenticación no está disponible actualmente. Por favor, utiliza una clave API por ahora.",
         "start_auth": "Comenzar autorización",
         "submit_code": "Iniciar sesión completado"
       },
+      "anthropic_api_host": "Dirección API de Anthropic",
+      "anthropic_api_host_preview": "Vista previa de Anthropic: {{url}}",
+      "anthropic_api_host_tooltip": "Rellenar solo cuando el proveedor proporcione una dirección base compatible con Claude.",
       "api": {
         "key": {
           "check": {
@@ -3751,6 +5076,14 @@
           }
         },
         "options": {
+          "anthropic_cache": {
+            "cache_last_n": "Caché de los últimos N mensajes",
+            "cache_last_n_help": "Almacenar en caché los últimos N mensajes de la conversación (excluyendo los mensajes del sistema)",
+            "cache_system": "Mensaje del Sistema de Caché",
+            "cache_system_help": "Si se debe almacenar en caché el mensaje del sistema",
+            "token_threshold": "Umbral de Token de Caché",
+            "token_threshold_help": "Los mensajes que superen este recuento de tokens se almacenarán en caché. Establecer en 0 para desactivar el almacenamiento en caché."
+          },
           "array_content": {
             "help": "¿Admite el proveedor que el campo content del mensaje sea de tipo array?",
             "label": "Contenido del mensaje compatible con formato de matriz"
@@ -3771,15 +5104,22 @@
           "stream_options": {
             "help": "¿Admite el proveedor el parámetro stream_options?",
             "label": "Admite stream_options"
+          },
+          "verbosity": {
+            "help": "Si el proveedor admite el parámetro de verbosidad",
+            "label": "Soporte de verbosidad"
           }
         },
         "url": {
           "preview": "Vista previa: {{url}}",
           "reset": "Restablecer",
-          "tip": "Ignorar v1 al final con /, forzar uso de dirección de entrada con # al final"
+          "tip": "Añada # al final para deshabilitar la versión de la API que se añade automáticamente."
         }
       },
       "api_host": "Dirección API",
+      "api_host_no_valid": "La dirección de la API no es válida",
+      "api_host_preview": "Vista previa: {{url}}",
+      "api_host_tooltip": "Sobrescribir solo cuando el proveedor necesite una dirección compatible con OpenAI personalizada.",
       "api_key": {
         "label": "Clave API",
         "tip": "Separar múltiples claves con comas"
@@ -3788,6 +5128,12 @@
       "aws-bedrock": {
         "access_key_id": "ID de clave de acceso de AWS",
         "access_key_id_help": "Su ID de clave de acceso de AWS, utilizado para acceder al servicio AWS Bedrock",
+        "api_key": "Clave de API de Bedrock",
+        "api_key_help": "Tu clave de API de AWS Bedrock para autenticación",
+        "auth_type": "Tipo de autenticación",
+        "auth_type_api_key": "Clave de API de Bedrock",
+        "auth_type_help": "Elige entre credenciales IAM o autenticación con clave API de Bedrock",
+        "auth_type_iam": "Credenciales de IAM",
         "description": "AWS Bedrock es un servicio de modelos fundamentales completamente gestionado proporcionado por Amazon, que admite diversos modelos avanzados de lenguaje de gran tamaño.",
         "region": "Región de AWS",
         "region_help": "Su región de servicio AWS, por ejemplo us-east-1",
@@ -3800,6 +5146,7 @@
           "tip": "Versión de la API de Azure OpenAI; si desea usar la API de respuesta, ingrese una versión de vista previa"
         }
       },
+      "balance": "Saldo disponible",
       "basic_auth": {
         "label": "Autenticación HTTP",
         "password": {
@@ -3858,10 +5205,18 @@
         "title": "Eliminar proveedor"
       },
       "dmxapi": {
+        "platform_enterprise": "ssvip.DMXAPI.com (Empresa)",
+        "platform_international": "www.DMXAPI.com (Internacional)",
+        "platform_official": "www.DMXAPI.cn (CNY)",
         "select_platform": "Seleccionar Plataforma"
       },
       "docs_check": "Ver",
       "docs_more_details": "Obtener más detalles",
+      "filter": {
+        "agent": "Soporte de Agente",
+        "all": "Todos los Proveedores"
+      },
+      "filter_agent": "Proveedores compatibles con el agente de filtrado",
       "get_api_key": "Haga clic aquí para obtener la clave",
       "misc": "otro",
       "no_models_for_check": "No hay modelos disponibles para revisar (por ejemplo, modelos de conversación)",
@@ -3872,10 +5227,29 @@
         "title": "Nota del modelo"
       },
       "oauth": {
+        "balance": "Saldo",
         "button": "Iniciar sesión con la cuenta de {{provider}}",
+        "cherryIn": {
+          "description": "Inicia sesión con tu servidor New-API autoalojado mediante OAuth 2.0 (PKCE)",
+          "logged_in": "Conectado a través de OAuth",
+          "login_button": "Iniciar sesión con OAuth",
+          "logout_button": "Cerrar sesión",
+          "title": "Inicio de sesión con OAuth"
+        },
+        "connect": "Conectar {{provider}}",
         "description": "Este servicio es proporcionado por <website>{{provider}}</website>",
         "error": "Fallo en la autenticación",
-        "official_website": "Sitio web oficial"
+        "logged_in": "Conectado",
+        "logout": "Cerrar sesión",
+        "logout_confirm": "¿Estás seguro de que quieres cerrar sesión?",
+        "logout_success": "Cierre de sesión exitoso",
+        "logout_warning": "Desconectado localmente, pero la revocación del token del servidor puede haber fallado",
+        "official_website": "Sitio web oficial",
+        "provided_by": "Proporcionado por",
+        "provided_by_suffix": "I’m ready—please provide the text you’d like translated into Spanish.",
+        "requests": "Solicitudes",
+        "topup": "Recargar",
+        "usage_title": "Uso"
       },
       "openai": {
         "alert": "El proveedor de OpenAI ya no admite el método de llamada antiguo; si utiliza una API de terceros, cree un nuevo proveedor"
@@ -3916,7 +5290,8 @@
         "none": "No usar proxy",
         "system": "Proxy del sistema",
         "title": "Modo de proxy"
-      }
+      },
+      "tip": "Admite coincidencia parcial (*.test.com, 192.168.0.0/16)"
     },
     "quickAssistant": {
       "click_tray_to_show": "Haz clic en el icono de la bandeja para iniciar",
@@ -3931,6 +5306,7 @@
       "confirm": "Confirmar",
       "forward": "Adelante",
       "multiple": "Selección múltiple",
+      "noResult": "No se encontraron resultados",
       "page": "Página",
       "select": "Seleccionar",
       "title": "Menú de acceso rápido"
@@ -3968,6 +5344,7 @@
       "reset_to_default": "Restablecer a predeterminado",
       "search_message": "Buscar mensaje",
       "search_message_in_chat": "Buscar mensajes en la conversación actual",
+      "select_model": "Select Model",
       "selection_assistant_select_text": "Asistente de selección de texto: obtener palabras",
       "selection_assistant_toggle": "Activar/desactivar el asistente de selección de texto",
       "show_app": "Mostrar aplicación",
@@ -3979,6 +5356,26 @@
       "zoom_in": "Ampliar interfaz",
       "zoom_out": "Reducir interfaz",
       "zoom_reset": "Restablecer zoom"
+    },
+    "skills": {
+      "add": "[to be translated]:Add Skill",
+      "contentLabel": "[to be translated]:Content",
+      "contentPlaceholder": "[to be translated]:Enter skill instructions in Markdown",
+      "delete": "[to be translated]:Delete Skill",
+      "deleteConfirm": "[to be translated]:This skill will be permanently deleted. Continue?",
+      "descriptionLabel": "[to be translated]:Description",
+      "descriptionPlaceholder": "[to be translated]:Describe what this skill does",
+      "edit": "[to be translated]:Edit Skill",
+      "empty": "[to be translated]:No skills configured yet",
+      "filePathLabel": "[to be translated]:File Path",
+      "filePathPlaceholder": "[to be translated]:Path to a local .md file",
+      "nameLabel": "[to be translated]:Name",
+      "namePlaceholder": "[to be translated]:Enter skill name",
+      "selectFile": "[to be translated]:Browse",
+      "sourceFile": "[to be translated]:File Reference",
+      "sourceInline": "[to be translated]:Inline Content",
+      "sourceLabel": "[to be translated]:Content Source",
+      "title": "[to be translated]:Skills"
     },
     "theme": {
       "color_primary": "Color del tema",
@@ -4015,10 +5412,8 @@
         "image_provider": "Proveedor de servicios OCR",
         "paddleocr": {
           "aistudio_access_token": "Token de acceso de la comunidad de AI Studio",
-          "aistudio_url_label": "Comunidad de AI Studio",
           "api_url": "URL de la API",
-          "serving_doc_url_label": "Documentación de PaddleOCR Serving",
-          "tip": "Puede consultar la documentación oficial de PaddleOCR para implementar un servicio local, o implementar un servicio en la nube en la Comunidad de PaddlePaddle AI Studio. En este último caso, proporcione el token de acceso de la Comunidad de AI Studio."
+          "api_url_label": "Obtener el token de acceso y la URL de la API"
         },
         "system": {
           "win": {
@@ -4031,6 +5426,12 @@
         "title": "Servicio OCR"
       },
       "preprocess": {
+        "paddleocr": {
+          "aistudio_access_token": "Token de acceso de la Comunidad AI Studio",
+          "api_url": "URL de la API",
+          "api_url_label": "Obtener el token de acceso y la URL de la API",
+          "paddleocr_url_label": "Sitio web oficial de PaddleOCR"
+        },
         "provider": "Proveedor de servicios de preprocesamiento de documentos",
         "provider_placeholder": "Seleccionar un proveedor de servicios de preprocesamiento de documentos",
         "title": "Preprocesamiento de documentos",
@@ -4038,6 +5439,12 @@
       },
       "title": "Configuración de Herramientas",
       "websearch": {
+        "api_key_required": {
+          "content": "{{provider}} requiere una clave de API para funcionar. ¿Te gustaría configurarla ahora?",
+          "ok": "Configurar",
+          "title": "Se requiere clave de API"
+        },
+        "api_providers": "Proveedores de API",
         "apikey": "Clave API",
         "blacklist": "Lista negra",
         "blacklist_description": "Los resultados de los siguientes sitios web no aparecerán en los resultados de búsqueda",
@@ -4077,9 +5484,24 @@
           },
           "title": "Compresión de resultados de búsqueda"
         },
+        "content_fetch_mode": {
+          "full": "[to be translated]:Fetch Full Content",
+          "help": "[to be translated]:Use 'Snippet Only' mode for internal networks that cannot access external websites to avoid freezing",
+          "label": "[to be translated]:Content Fetch Mode",
+          "snippet": "[to be translated]:Snippet Only (Recommended for Intranet)",
+          "tip": "[to be translated]:Choose how to fetch search result content. 'Snippet Only' uses short summaries returned by the search engine without accessing target websites; 'Fetch Full Content' visits each search result page to get complete content"
+        },
         "content_limit": "Límite de longitud del contenido",
         "content_limit_tooltip": "Limita la longitud del contenido en los resultados de búsqueda; el contenido que exceda el límite será truncado",
+        "default_provider": "Proveedor Predeterminado",
         "free": "Gratis",
+        "is_default": "Por defecto",
+        "local_provider": {
+          "hint": "Inicia sesión en el sitio web para obtener mejores resultados de búsqueda y personalizar tu configuración de búsqueda.",
+          "open_settings": "Abrir configuración de {{provider}}",
+          "settings": "Configuración de búsqueda local"
+        },
+        "local_providers": "Proveedores locales",
         "no_provider_selected": "Seleccione un proveedor de búsqueda antes de comprobar",
         "overwrite": "Sobrescribir búsqueda del proveedor",
         "overwrite_tooltip": "Forzar el uso del proveedor de búsqueda en lugar del modelo de lenguaje grande",
@@ -4090,6 +5512,7 @@
         "search_provider": "Proveedor de búsqueda",
         "search_provider_placeholder": "Seleccione un proveedor de búsqueda",
         "search_with_time": "Buscar con fecha",
+        "set_as_default": "Establecer como predeterminado",
         "subscribe": "Suscripción a lista negra",
         "subscribe_add": "Añadir suscripción",
         "subscribe_add_failed": "Error al agregar la fuente de suscripción",
@@ -4177,13 +5600,19 @@
       "show": "Mostrar bandera del sistema",
       "title": "Bandera"
     },
+    "use_system_title_bar": {
+      "confirm": {
+        "content": "Cambiar el estilo de la barra de título requiere reiniciar la aplicación para que surta efecto. ¿Desea reiniciar ahora?",
+        "title": "Reinicio requerido"
+      },
+      "title": "Usar la barra de título del sistema (Linux)"
+    },
     "zoom": {
       "reset": "Restablecer",
       "title": "Escala"
     }
   },
   "title": {
-    "agents": "Agentes",
     "apps": "Aplicaciones",
     "code": "Código",
     "files": "Archivos",
@@ -4193,8 +5622,10 @@
     "mcp-servers": "Servidores MCP",
     "memories": "Memorias",
     "notes": "notas",
+    "openclaw": "OpenClaw",
     "paintings": "Pinturas",
     "settings": "Configuración",
+    "store": "Biblioteca de asistentes",
     "translate": "Traducir"
   },
   "trace": {
@@ -4254,6 +5685,8 @@
     "detected": {
       "language": "Detección automática"
     },
+    "detected_source": "Detectado",
+    "detecting": "Detectando...",
     "empty": "El contenido de traducción está vacío",
     "error": {
       "chat_qwen_mt": "El modelo Qwen MT no está disponible para uso en conversaciones, por favor vaya a la página de traducción.",
@@ -4306,6 +5739,7 @@
       "not_pair": "El idioma de origen es diferente al idioma configurado",
       "same": "El idioma de origen y el idioma de destino son iguales"
     },
+    "language_settings": "Configuración de idioma",
     "menu": {
       "description": "Traducir el contenido del campo de entrada actual"
     },
@@ -4315,6 +5749,7 @@
     "output": {
       "placeholder": "Traducción"
     },
+    "preferred_target": "Objetivo Preferido",
     "processing": "Traduciendo...",
     "settings": {
       "autoCopy": "Copiar automáticamente después de completar la traducción",
@@ -4328,6 +5763,7 @@
       "scroll_sync": "Configuración de sincronización de desplazamiento",
       "title": "Configuración de traducción"
     },
+    "stop": "Detener Traducción",
     "success": {
       "custom": {
         "delete": "Eliminado correctamente",
@@ -4350,7 +5786,17 @@
     "later": "Más tarde",
     "message": "Nueva versión {{version}} disponible, ¿desea instalarla ahora?",
     "noReleaseNotes": "Sin notas de la versión",
+    "saveDataError": "Error al guardar los datos, inténtalo de nuevo",
     "title": "Actualización"
+  },
+  "video": {
+    "download": "[to be translated]:Download video",
+    "downloading": "[to be translated]:Downloading video...",
+    "generating": "[to be translated]:Generating video...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate a video",
+    "processing": "[to be translated]:Generating video...",
+    "retrying": "[to be translated]:retrying...",
+    "submitted": "[to be translated]:Video task submitted, waiting..."
   },
   "warning": {
     "missing_provider": "El proveedor no existe, se ha revertido al proveedor predeterminado {{provider}}. Esto podría causar problemas."

@@ -1,14 +1,9 @@
-import {
+import type {
   Content,
-  createPartFromUri,
   File,
   FunctionCall,
   GenerateContentConfig,
   GenerateImagesConfig,
-  GoogleGenAI,
-  HarmBlockThreshold,
-  HarmCategory,
-  Modality,
   Model as GeminiModel,
   Part,
   SafetySetting,
@@ -16,6 +11,7 @@ import {
   ThinkingConfig,
   Tool
 } from '@google/genai'
+import { createPartFromUri, GoogleGenAI, HarmBlockThreshold, HarmCategory, Modality } from '@google/genai'
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
 import {
@@ -26,11 +22,9 @@ import {
   isVisionModel
 } from '@renderer/config/models'
 import { estimateTextTokens } from '@renderer/services/TokenService'
-import {
+import type {
   Assistant,
-  EFFORT_RATIO,
   FileMetadata,
-  FileTypes,
   FileUploadResponse,
   GenerateImageParams,
   MCPCallToolResponse,
@@ -38,12 +32,13 @@ import {
   MCPToolResponse,
   Model,
   Provider,
-  ToolCallResponse,
-  WebSearchSource
+  ToolCallResponse
 } from '@renderer/types'
-import { ChunkType, LLMWebSearchCompleteChunk, TextStartChunk, ThinkingStartChunk } from '@renderer/types/chunk'
-import { Message } from '@renderer/types/newMessage'
-import {
+import { EFFORT_RATIO, FILE_TYPE, WEB_SEARCH_SOURCE } from '@renderer/types'
+import type { LLMWebSearchCompleteChunk, TextStartChunk, ThinkingStartChunk } from '@renderer/types/chunk'
+import { ChunkType } from '@renderer/types/chunk'
+import type { Message } from '@renderer/types/newMessage'
+import type {
   GeminiOptions,
   GeminiSdkMessageParam,
   GeminiSdkParams,
@@ -59,12 +54,13 @@ import {
   mcpToolsToGeminiTools
 } from '@renderer/utils/mcp-tools'
 import { findFileBlocks, findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
-import { defaultTimeout, MB } from '@shared/config/constant'
+import { DEFAULT_TIMEOUT, MB } from '@shared/config/constant'
+import { getTrailingApiVersion, withoutTrailingApiVersion } from '@shared/utils'
 import { t } from 'i18next'
 
-import { GenericChunk } from '../../middleware/schemas'
+import type { GenericChunk } from '../../middleware/schemas'
 import { BaseApiClient } from '../BaseApiClient'
-import { RequestTransformer, ResponseChunkTransformer } from '../types'
+import type { RequestTransformer, ResponseChunkTransformer } from '../types'
 
 const logger = loggerService.withContext('GeminiAPIClient')
 
@@ -121,7 +117,7 @@ export class GeminiAPIClient extends BaseApiClient<
         aspectRatio: imageSize,
         abortSignal: signal,
         httpOptions: {
-          timeout: defaultTimeout
+          timeout: DEFAULT_TIMEOUT
         }
       }
       const response = await sdk.models.generateImages({
@@ -202,18 +198,24 @@ export class GeminiAPIClient extends BaseApiClient<
     return models
   }
 
+  override getBaseURL(): string {
+    return withoutTrailingApiVersion(super.getBaseURL())
+  }
+
   override async getSdkInstance() {
     if (this.sdkInstance) {
       return this.sdkInstance
     }
 
+    const apiVersion = this.getApiVersion()
+
     this.sdkInstance = new GoogleGenAI({
       vertexai: false,
       apiKey: this.apiKey,
-      apiVersion: this.getApiVersion(),
+      apiVersion,
       httpOptions: {
         baseUrl: this.getBaseURL(),
-        apiVersion: this.getApiVersion(),
+        apiVersion,
         headers: {
           ...this.provider.extra_headers
         }
@@ -227,7 +229,14 @@ export class GeminiAPIClient extends BaseApiClient<
     if (this.provider.isVertex) {
       return 'v1'
     }
-    return 'v1beta'
+
+    // Extract trailing API version from the URL
+    const trailingVersion = getTrailingApiVersion(this.provider.apiHost || '')
+    if (trailingVersion) {
+      return trailingVersion
+    }
+
+    return ''
   }
 
   /**
@@ -338,7 +347,7 @@ export class GeminiAPIClient extends BaseApiClient<
     const fileBlocks = findFileBlocks(message)
     for (const fileBlock of fileBlocks) {
       const file = fileBlock.file
-      if (file.type === FileTypes.IMAGE) {
+      if (file.type === FILE_TYPE.IMAGE) {
         const base64Data = await window.api.file.base64Image(file.id + file.ext)
         parts.push({
           inlineData: {
@@ -352,7 +361,7 @@ export class GeminiAPIClient extends BaseApiClient<
         parts.push(await this.handlePdfFile(file))
         continue
       }
-      if ([FileTypes.TEXT, FileTypes.DOCUMENT].includes(file.type)) {
+      if ([FILE_TYPE.TEXT, FILE_TYPE.DOCUMENT].some((type) => file.type === type)) {
         const fileContent = await (await window.api.file.read(file.id + file.ext, true)).trim()
         parts.push({
           text: file.origin_name + '\n' + fileContent
@@ -451,26 +460,30 @@ export class GeminiAPIClient extends BaseApiClient<
   private getBudgetToken(assistant: Assistant, model: Model) {
     if (isSupportedThinkingTokenGeminiModel(model)) {
       const reasoningEffort = assistant?.settings?.reasoning_effort
+      const includeThoughts = reasoningEffort !== 'none'
 
-      // 如果thinking_budget是undefined，不思考
-      if (reasoningEffort === undefined) {
-        return GEMINI_FLASH_MODEL_REGEX.test(model.id)
-          ? {
-              thinkingConfig: {
-                thinkingBudget: 0
-              }
-            }
-          : {}
+      // undefined/default 都表示不显式开启 thoughts，避免默认将 Gemini thinking 暴露到 UI。
+      if (reasoningEffort === undefined || reasoningEffort === 'default') {
+        return {}
       }
 
       if (reasoningEffort === 'auto') {
         return {
           thinkingConfig: {
-            includeThoughts: true,
+            includeThoughts,
             thinkingBudget: -1
           }
         }
       }
+      if (reasoningEffort === 'none') {
+        return {
+          thinkingConfig: {
+            includeThoughts,
+            ...(GEMINI_FLASH_MODEL_REGEX.test(model.id) ? { thinkingBudget: 0 } : {})
+          } satisfies ThinkingConfig
+        }
+      }
+
       const effortRatio = EFFORT_RATIO[reasoningEffort]
       const { min, max } = findTokenLimit(model.id) || { min: 0, max: 0 }
       // 计算 budgetTokens，确保不低于 min
@@ -479,7 +492,7 @@ export class GeminiAPIClient extends BaseApiClient<
       return {
         thinkingConfig: {
           ...(budget > 0 ? { thinkingBudget: budget } : {}),
-          includeThoughts: true
+          includeThoughts
         } satisfies ThinkingConfig
       }
     }
@@ -681,7 +694,7 @@ export class GeminiAPIClient extends BaseApiClient<
                   type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                   llm_web_search: {
                     results: candidate.groundingMetadata,
-                    source: WebSearchSource.GEMINI
+                    source: WEB_SEARCH_SOURCE.GEMINI
                   }
                 } satisfies LLMWebSearchCompleteChunk)
               }

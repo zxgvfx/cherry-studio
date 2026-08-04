@@ -17,27 +17,16 @@ import {
   isVisionModel,
   isWebSearchModel
 } from '@renderer/config/models'
-import { isNewApiProvider } from '@renderer/config/providers'
 import { useDynamicLabelWidth } from '@renderer/hooks/useDynamicLabelWidth'
-import { Model, ModelCapability, ModelType, Provider } from '@renderer/types'
+import type { Model, ModelCapability, ModelType, Provider } from '@renderer/types'
 import { getDefaultGroupName, getDifference, getUnion, uniqueObjectArray } from '@renderer/utils'
-import {
-  Button,
-  Divider,
-  Flex,
-  Form,
-  Input,
-  InputNumber,
-  message,
-  Modal,
-  ModalProps,
-  Select,
-  Switch,
-  Tooltip
-} from 'antd'
+import { isEndpointTypeConfigurableProvider } from '@renderer/utils/provider'
+import type { ModalProps } from 'antd'
+import { Button, Divider, Flex, Form, Input, InputNumber, message, Modal, Select, Switch, Tag, Tooltip } from 'antd'
 import { cloneDeep } from 'lodash'
 import { ChevronDown, ChevronUp, RotateCcw, SaveIcon } from 'lucide-react'
-import { FC, useCallback, useEffect, useMemo, useState } from 'react'
+import type { FC } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -57,14 +46,27 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   const [modelCapabilities, setModelCapabilities] = useState(model.capabilities || [])
   const originalModelCapabilities = cloneDeep(model.capabilities || [])
   const [supportedTextDelta, setSupportedTextDelta] = useState(model.supported_text_delta)
+  const [streamOutput, setStreamOutput] = useState(model.streamOutput ?? true)
   const [hasUserModified, setHasUserModified] = useState(false)
+  const canConfigureEndpointType = isEndpointTypeConfigurableProvider(provider)
 
   const labelWidth = useDynamicLabelWidth([t('settings.models.add.endpoint_type.label')])
+  const endpointOptions = useMemo(
+    () =>
+      endpointTypeOptions.filter((opt) => {
+        if (provider.type === 'openai' || provider.type === 'azure-openai') {
+          return opt.value === 'openai' || opt.value === 'image-generation'
+        }
+        return true
+      }),
+    [provider.type]
+  )
 
   // 自动保存函数
   const autoSave = (overrides?: {
     capabilities?: ModelCapability[]
     supported_text_delta?: boolean
+    streamOutput?: boolean
     currencySymbol?: string
     isCustomCurrency?: boolean
   }) => {
@@ -79,9 +81,10 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       id: formValues.id || model.id,
       name: formValues.name || model.name,
       group: formValues.group || model.group,
-      endpoint_type: isNewApiProvider(provider) ? formValues.endpointType : model.endpoint_type,
+      endpoint_type: canConfigureEndpointType ? formValues.endpointType : model.endpoint_type,
       capabilities: overrides?.capabilities ?? modelCapabilities,
       supported_text_delta: overrides?.supported_text_delta ?? supportedTextDelta,
+      streamOutput: overrides?.streamOutput ?? streamOutput,
       pricing: {
         input_per_million_tokens: Number(formValues.input_per_million_tokens) || 0,
         output_per_million_tokens: Number(formValues.output_per_million_tokens) || 0,
@@ -98,9 +101,10 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       id: values.id || model.id,
       name: values.name || model.name,
       group: values.group || model.group,
-      endpoint_type: isNewApiProvider(provider) ? values.endpointType : model.endpoint_type,
+      endpoint_type: canConfigureEndpointType ? values.endpointType : model.endpoint_type,
       capabilities: modelCapabilities,
       supported_text_delta: supportedTextDelta,
+      streamOutput: streamOutput,
       pricing: {
         input_per_million_tokens: Number(values.input_per_million_tokens) || 0,
         output_per_million_tokens: Number(values.output_per_million_tokens) || 0,
@@ -245,10 +249,21 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   }
 
   return (
-    <Modal title={t('models.edit')} footer={null} transitionName="animation-move-down" centered {...props}>
+    <Modal
+      title={
+        <Flex align="center" gap={8}>
+          {t('models.edit')}
+          {model.isCentralized && <Tag color="gold">{t('settings.centralized_config_readonly', 'Managed')}</Tag>}
+        </Flex>
+      }
+      footer={null}
+      transitionName="animation-move-down"
+      centered
+      {...props}>
       <Form
         form={form}
-        labelCol={{ flex: isNewApiProvider(provider) ? labelWidth : '110px' }}
+        disabled={model.isCentralized}
+        labelCol={{ flex: canConfigureEndpointType ? labelWidth : '110px' }}
         labelAlign="left"
         colon={false}
         style={{ marginTop: 15 }}
@@ -256,7 +271,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
           id: model.id,
           name: model.name,
           group: model.group,
-          endpointType: model.endpoint_type,
+          endpointType: model.endpoint_type ?? 'openai',
           input_per_million_tokens: model.pricing?.input_per_million_tokens ?? 0,
           output_per_million_tokens: model.pricing?.output_per_million_tokens ?? 0,
           currencySymbol: symbols.includes(model.pricing?.currencySymbol || '$')
@@ -310,14 +325,14 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
           tooltip={t('settings.models.add.group_name.tooltip')}>
           <Input placeholder={t('settings.models.add.group_name.placeholder')} spellCheck={false} />
         </Form.Item>
-        {isNewApiProvider(provider) && (
+        {canConfigureEndpointType && (
           <Form.Item
             name="endpointType"
             label={t('settings.models.add.endpoint_type.label')}
             tooltip={t('settings.models.add.endpoint_type.tooltip')}
             rules={[{ required: true, message: t('settings.models.add.endpoint_type.required') }]}>
             <Select placeholder={t('settings.models.add.endpoint_type.placeholder')}>
-              {endpointTypeOptions.map((opt) => (
+              {endpointOptions.map((opt) => (
                 <Select.Option key={opt.value} value={opt.value}>
                   {t(opt.label)}
                 </Select.Option>
@@ -336,9 +351,11 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
               style={{ color: 'var(--color-text-3)' }}>
               {t('settings.moresetting.label')}
             </Button>
-            <Button type="primary" htmlType="submit" icon={<SaveIcon size={16} />}>
-              {t('common.save')}
-            </Button>
+            {!model.isCentralized && (
+              <Button type="primary" htmlType="submit" icon={<SaveIcon size={16} />}>
+                {t('common.save')}
+              </Button>
+            )}
           </Flex>
         </Form.Item>
         {showMoreSettings && (
@@ -360,6 +377,24 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
                   setSupportedTextDelta(checked)
                   // 直接传递新值给autoSave
                   autoSave({ supported_text_delta: checked })
+                }}
+              />
+            </Form.Item>
+            <Form.Item
+              style={{ marginBottom: 10 }}
+              labelCol={{ flex: 1 }}
+              label={t('settings.models.add.stream_output.label', '流式输出')}
+              tooltip={t(
+                'settings.models.add.stream_output.tooltip',
+                '开启后该模型逐字流式返回；关闭则等待生成完整结果后一次性返回。优先级高于助手设置。'
+              )}>
+              <Switch
+                checked={streamOutput}
+                style={{ marginLeft: 'auto' }}
+                size="small"
+                onChange={(checked) => {
+                  setStreamOutput(checked)
+                  autoSave({ streamOutput: checked })
                 }}
               />
             </Form.Item>

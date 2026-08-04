@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
-import {
+import type Anthropic from '@anthropic-ai/sdk'
+import type {
   Message,
   MessageCreateParams,
   MessageParam,
@@ -7,11 +7,15 @@ import {
   ToolUnion,
   ToolUseBlock
 } from '@anthropic-ai/sdk/resources'
-import { MessageStream } from '@anthropic-ai/sdk/resources/messages/messages'
-import AnthropicVertex from '@anthropic-ai/vertex-sdk'
+import type { MessageStream } from '@anthropic-ai/sdk/resources/messages/messages'
+import type AnthropicVertex from '@anthropic-ai/vertex-sdk'
 import type { BedrockClient } from '@aws-sdk/client-bedrock'
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
-import {
+import type { AzureOpenAI } from '@cherrystudio/openai'
+import type OpenAI from '@cherrystudio/openai'
+import type { ChatCompletionContentPartImage } from '@cherrystudio/openai/resources'
+import type { Stream } from '@cherrystudio/openai/streaming'
+import type {
   Content,
   CreateChatParameters,
   FunctionCall,
@@ -21,11 +25,8 @@ import {
   SendMessageParameters,
   Tool
 } from '@google/genai'
-import OpenAI, { AzureOpenAI } from 'openai'
-import { ChatCompletionContentPartImage } from 'openai/resources'
-import { Stream } from 'openai/streaming'
 
-import { EndpointType } from './index'
+import type { EndpointType } from './index'
 
 export type SdkInstance = OpenAI | AzureOpenAI | Anthropic | AnthropicVertex | GoogleGenAI | AwsBedrockSdkInstance
 export type SdkParams =
@@ -73,19 +74,21 @@ export type RequestOptions = Anthropic.RequestOptions | OpenAI.RequestOptions | 
  */
 
 type OpenAIParamsPurified = Omit<OpenAI.Chat.Completions.ChatCompletionCreateParams, 'reasoning_effort' | 'modalities'>
-
+type OpenAIReasoningEffort = NonNullable<OpenAI.ReasoningEffort> | 'auto'
 export type ReasoningEffortOptionalParams = {
   thinking?: { type: 'disabled' | 'enabled' | 'auto'; budget_tokens?: number }
   reasoning?: { max_tokens?: number; exclude?: boolean; effort?: string; enabled?: boolean } | OpenAI.Reasoning
-  reasoningEffort?: OpenAI.Chat.Completions.ChatCompletionCreateParams['reasoning_effort'] | 'none' | 'auto'
-  reasoning_effort?: OpenAI.Chat.Completions.ChatCompletionCreateParams['reasoning_effort'] | 'none' | 'auto'
+  reasoningEffort?: OpenAIReasoningEffort
+  // WARN: This field will be overwrite to undefined by aisdk if the provider is openai-compatible. Use reasoningEffort instead.
+  reasoning_effort?: OpenAIReasoningEffort
   enable_thinking?: boolean
   thinking_budget?: number
   incremental_output?: boolean
   enable_reasoning?: boolean
-  // nvidia
+  // nvidia, etc.
   chat_template_kwargs?: {
-    thinking: boolean
+    thinking?: boolean
+    enable_thinking?: boolean
   }
   extra_body?: {
     google?: {
@@ -94,7 +97,13 @@ export type ReasoningEffortOptionalParams = {
         include_thoughts?: boolean
       }
     }
+    thinking?: {
+      type: 'enabled' | 'disabled'
+    }
+    thinking_budget?: number
+    reasoning_effort?: OpenAIReasoningEffort
   }
+  disable_reasoning?: boolean
   // Add any other potential reasoning-related keys here if they exist
 }
 

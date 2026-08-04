@@ -9,11 +9,12 @@ import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI, type OpenAIProviderSettings } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { LanguageModelV2 } from '@ai-sdk/provider'
+import type { ProviderV3 } from '@ai-sdk/provider'
 import { createXai } from '@ai-sdk/xai'
-import { createOpenRouter } from '@openrouter/ai-sdk-provider'
-import { customProvider, Provider } from 'ai'
-import { z } from 'zod'
+import { type CherryInProviderSettings, createCherryIn } from '@cherrystudio/ai-sdk-provider'
+import { createOpenRouter, type OpenRouterProviderSettings } from '@openrouter/ai-sdk-provider'
+import { customProvider, wrapProvider } from 'ai'
+import * as z from 'zod'
 
 /**
  * 基础 Provider IDs
@@ -28,7 +29,9 @@ export const baseProviderIds = [
   'azure',
   'azure-responses',
   'deepseek',
-  'openrouter'
+  'openrouter',
+  'cherryin',
+  'cherryin-chat'
 ] as const
 
 /**
@@ -48,7 +51,7 @@ export const isBaseProvider = (id: ProviderId): id is BaseProviderId => {
 type BaseProvider = {
   id: BaseProviderId
   name: string
-  creator: (options: any) => Provider | LanguageModelV2
+  creator: (options: any) => ProviderV3
   supportsImageGeneration: boolean
 }
 
@@ -98,13 +101,30 @@ export const baseProviders = [
   {
     id: 'xai',
     name: 'xAI (Grok)',
-    creator: createXai,
+    creator: (options: Parameters<typeof createXai>[0]) => {
+      const provider = createXai(options)
+      return customProvider({
+        fallbackProvider: {
+          ...provider,
+          languageModel: (modelId: string) => provider.responses(modelId)
+        }
+      })
+    },
     supportsImageGeneration: true
   },
   {
     id: 'azure',
     name: 'Azure OpenAI',
-    creator: createAzure,
+    creator: (options: AzureOpenAIProviderSettings) => {
+      const provider = createAzure(options)
+      return customProvider({
+        fallbackProvider: {
+          // Cherry's "azure" path is the chat/deployment-based variant.
+          ...provider,
+          languageModel: (modelId: string) => provider.chat(modelId)
+        }
+      })
+    },
     supportsImageGeneration: true
   },
   {
@@ -130,7 +150,30 @@ export const baseProviders = [
   {
     id: 'openrouter',
     name: 'OpenRouter',
-    creator: createOpenRouter,
+    creator: (options?: OpenRouterProviderSettings) => {
+      const provider = createOpenRouter(options)
+      return wrapProvider({ provider, languageModelMiddleware: [] })
+    },
+    supportsImageGeneration: true
+  },
+  {
+    id: 'cherryin',
+    name: 'CherryIN',
+    creator: createCherryIn,
+    supportsImageGeneration: true
+  },
+  {
+    id: 'cherryin-chat',
+    name: 'CherryIN Chat',
+    creator: (options: CherryInProviderSettings) => {
+      const provider = createCherryIn(options)
+      return customProvider({
+        fallbackProvider: {
+          ...provider,
+          languageModel: (modelId: string) => provider.chat(modelId)
+        }
+      })
+    },
     supportsImageGeneration: true
   }
 ] as const satisfies BaseProvider[]

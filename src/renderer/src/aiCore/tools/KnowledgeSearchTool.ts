@@ -1,10 +1,12 @@
 import { REFERENCE_PROMPT } from '@renderer/config/prompts'
 import { processKnowledgeSearch } from '@renderer/services/KnowledgeService'
 import type { Assistant, KnowledgeReference } from '@renderer/types'
-import { ExtractResults, KnowledgeExtractResults } from '@renderer/utils/extract'
+import type { ExtractResults, KnowledgeExtractResults } from '@renderer/utils/extract'
 import { type InferToolInput, type InferToolOutput, tool } from 'ai'
 import { isEmpty } from 'lodash'
-import { z } from 'zod'
+import * as z from 'zod'
+
+import type { BuiltinTool, BuiltinToolContext } from './BuiltinToolRegistry'
 
 /**
  * 知识库搜索工具
@@ -13,17 +15,16 @@ import { z } from 'zod'
 export const knowledgeSearchTool = (
   assistant: Assistant,
   extractedKeywords: KnowledgeExtractResults,
-  topicId: string,
-  userMessage?: string
+  topicId: string
 ) => {
   return tool({
-    name: 'builtin_knowledge_search',
-    description: `Search the knowledge base for relevant information using pre-analyzed search intent.
+    description: `Knowledge base search tool for retrieving information from user's private knowledge base. This searches your local collection of documents, web content, notes, and other materials you have stored.
 
-Pre-extracted search queries: "${extractedKeywords.question.join(', ')}"
-Rewritten query: "${extractedKeywords.rewrite}"
+This tool has been configured with search parameters based on the conversation context:
+- Prepared queries: ${extractedKeywords.question.map((q) => `"${q}"`).join(', ')}
+- Query rewrite: "${extractedKeywords.rewrite}"
 
-Call this tool to execute the search. You can optionally provide additional context to refine the search.`,
+You can use this tool as-is, or provide additionalContext to refine the search focus within the knowledge base.`,
 
     inputSchema: z.object({
       additionalContext: z
@@ -33,14 +34,8 @@ Call this tool to execute the search. You can optionally provide additional cont
     }),
 
     execute: async ({ additionalContext }) => {
-      // try {
-      // 获取助手的知识库配置
       const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
-      const hasKnowledgeBase = !isEmpty(knowledgeBaseIds)
-      const knowledgeRecognition = assistant.knowledgeRecognition || 'on'
-
-      // 检查是否有知识库
-      if (!hasKnowledgeBase) {
+      if (isEmpty(knowledgeBaseIds)) {
         return []
       }
 
@@ -48,35 +43,17 @@ Call this tool to execute the search. You can optionally provide additional cont
       let finalRewrite = extractedKeywords.rewrite
 
       if (additionalContext?.trim()) {
-        // 如果大模型提供了额外上下文，使用更具体的描述
-        const cleanContext = additionalContext.trim()
-        if (cleanContext) {
-          finalQueries = [cleanContext]
-          finalRewrite = cleanContext
-        }
+        finalQueries = [additionalContext.trim()]
+        finalRewrite = additionalContext.trim()
       }
 
-      // 检查是否需要搜索
       if (finalQueries[0] === 'not_needed') {
         return []
       }
 
-      // 构建搜索条件
-      let searchCriteria: { question: string[]; rewrite: string }
-
-      if (knowledgeRecognition === 'off') {
-        // 直接模式：使用用户消息内容
-        const directContent = userMessage || finalQueries[0] || 'search'
-        searchCriteria = {
-          question: [directContent],
-          rewrite: directContent
-        }
-      } else {
-        // 自动模式：使用意图识别的结果
-        searchCriteria = {
-          question: finalQueries,
-          rewrite: finalRewrite
-        }
+      const searchCriteria = {
+        question: finalQueries,
+        rewrite: finalRewrite
       }
 
       // 构建 ExtractResults 对象
@@ -102,7 +79,7 @@ Call this tool to execute the search. You can optionally provide additional cont
       // 返回结果
       return knowledgeReferencesData
     },
-    toModelOutput: (results) => {
+    toModelOutput: ({ output: results }) => {
       let summary = 'No search needed based on the query analysis.'
       if (results.length > 0) {
         summary = `Found ${results.length} relevant sources. Use [number] format to cite specific information.`
@@ -134,7 +111,91 @@ Call this tool to execute the search. You can optionally provide additional cont
   })
 }
 
-export type KnowledgeSearchToolInput = InferToolInput<ReturnType<typeof knowledgeSearchTool>>
-export type KnowledgeSearchToolOutput = InferToolOutput<ReturnType<typeof knowledgeSearchTool>>
+/**
+ * LLM 驱动的知识库搜索工具
+ * 无需预分析，由主 LLM 直接提供搜索查询
+ * 工具描述中包含知识库大纲，帮助 LLM 判断是否需要搜索
+ */
+export const knowledgeSearchToolDirect = (assistant: Assistant, topicId: string) => {
+  const kbOutline =
+    assistant.knowledge_bases
+      ?.map((kb) => `- ${kb.name}${kb.description ? `: ${kb.description}` : ''} (${kb.documentCount ?? '?'} docs)`)
+      .join('\n') || ''
+
+  return tool({
+    description: `Search your private knowledge base for relevant documents and information.
+
+Available knowledge bases:
+${kbOutline}
+
+Use this tool when the user's question may be answered by stored documents, notes, or web content in the knowledge base.`,
+
+    inputSchema: z.object({
+      query: z.string().describe('Search query for the knowledge base')
+    }),
+
+    execute: async ({ query }) => {
+      const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
+      if (isEmpty(knowledgeBaseIds)) {
+        return []
+      }
+
+      const extractResults: ExtractResults = {
+        websearch: undefined,
+        knowledge: { question: [query], rewrite: query }
+      }
+
+      const knowledgeReferences = await processKnowledgeSearch(extractResults, knowledgeBaseIds, topicId)
+      return knowledgeReferences.map((ref: KnowledgeReference) => ({
+        id: ref.id,
+        content: ref.content,
+        sourceUrl: ref.sourceUrl,
+        type: ref.type,
+        file: ref.file,
+        metadata: ref.metadata
+      }))
+    },
+    toModelOutput: ({ output: results }) => {
+      let summary = 'No relevant documents found.'
+      if (results.length > 0) {
+        summary = `Found ${results.length} relevant sources. Use [number] format to cite specific information.`
+      }
+      const referenceContent = `\`\`\`json\n${JSON.stringify(results, null, 2)}\n\`\`\``
+      const fullInstructions = REFERENCE_PROMPT.replace(
+        '{question}',
+        "Based on the knowledge references, please answer the user's question with proper citations."
+      ).replace('{references}', referenceContent)
+
+      return {
+        type: 'content',
+        value: [
+          { type: 'text', text: summary },
+          { type: 'text', text: fullInstructions }
+        ]
+      }
+    }
+  })
+}
+
+export const knowledgeBuiltinTool: BuiltinTool = {
+  name: 'builtin_knowledge_search',
+  isEnabled: (assistant) => !isEmpty(assistant.knowledge_bases),
+  create: (context: BuiltinToolContext) => {
+    if (context.intentKeywords) {
+      const keywords: KnowledgeExtractResults =
+        context.intentKeywords.question && context.intentKeywords.question[0] !== 'not_needed'
+          ? {
+              question: context.intentKeywords.question,
+              rewrite: context.intentKeywords.rewrite || context.userContent
+            }
+          : { question: [context.userContent], rewrite: context.userContent }
+      return knowledgeSearchTool(context.assistant, keywords, context.topicId)
+    }
+    return knowledgeSearchToolDirect(context.assistant, context.topicId)
+  }
+}
+
+export type KnowledgeSearchToolInput = InferToolInput<ReturnType<typeof knowledgeSearchToolDirect>>
+export type KnowledgeSearchToolOutput = InferToolOutput<ReturnType<typeof knowledgeSearchToolDirect>>
 
 export default knowledgeSearchTool

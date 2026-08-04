@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-syntax */
 import type { LogContextData, LogLevel, LogSourceWithContext } from '@shared/config/logger'
 import { LEVEL, LEVEL_MAP } from '@shared/config/logger'
+import { IpcChannel } from '@shared/IpcChannel'
 
 import { getElectronAPI } from '../utils/houdini'
 
@@ -116,9 +117,10 @@ class LoggerService {
    * @param data - Additional data to log
    */
   private processLog(level: LogLevel, message: string, data: any[]): void {
+    let windowSource = this.window
     if (!this.window) {
       console.error('[LoggerService] window source not initialized, please initialize window source first')
-      return
+      windowSource = 'UNKNOWN'
     }
 
     const currentLevel = LEVEL_MAP[level]
@@ -167,7 +169,7 @@ class LoggerService {
     if (currentLevel >= LEVEL_MAP[this.logToMainLevel] || forceLogToMain) {
       const source: LogSourceWithContext = {
         process: 'renderer',
-        window: this.window,
+        window: windowSource,
         module: this.module
       }
 
@@ -182,7 +184,7 @@ class LoggerService {
 
       // In renderer process, use window.api.logToMain to send log to main process
       if (!IS_WORKER) {
-        window.api.logToMain(source, level, message, data)
+        window.electron.ipcRenderer.invoke(IpcChannel.App_LogToMain, source, level, message, data)
       } else {
         //TODO support worker to send log to main process
       }

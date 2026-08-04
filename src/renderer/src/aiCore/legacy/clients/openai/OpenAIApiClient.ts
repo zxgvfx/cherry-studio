@@ -1,17 +1,23 @@
+import type { AzureOpenAI } from '@cherrystudio/openai'
+import type OpenAI from '@cherrystudio/openai'
+import type {
+  ChatCompletionContentPart,
+  ChatCompletionContentPartRefusal,
+  ChatCompletionTool
+} from '@cherrystudio/openai/resources'
 import { loggerService } from '@logger'
+import { hasMultimodalContent, mcpResultToTextSummary } from '@renderer/aiCore/utils/mcp'
 import { DEFAULT_MAX_TOKENS } from '@renderer/config/constant'
 import {
   findTokenLimit,
   GEMINI_FLASH_MODEL_REGEX,
-  getOpenAIWebSearchParams,
-  getThinkModelType,
-  isClaudeReasoningModel,
+  getModelSupportedReasoningEffortOptions,
   isDeepSeekHybridInferenceModel,
   isDoubaoThinkingAutoModel,
-  isGeminiReasoningModel,
   isGPT5SeriesModel,
   isGrokReasoningModel,
   isNotSupportSystemMessageModel,
+  isOpenAIDeepResearchModel,
   isOpenAIOpenWeightModel,
   isOpenAIReasoningModel,
   isQwenAlwaysThinkModel,
@@ -28,38 +34,34 @@ import {
   isSupportedThinkingTokenQwenModel,
   isSupportedThinkingTokenZhipuModel,
   isVisionModel,
-  MODEL_SUPPORTED_REASONING_EFFORT,
   ZHIPU_RESULT_TOKENS
 } from '@renderer/config/models'
-import {
-  isSupportArrayContentProvider,
-  isSupportDeveloperRoleProvider,
-  isSupportEnableThinkingProvider,
-  isSupportStreamOptionsProvider
-} from '@renderer/config/providers'
 import { mapLanguageToQwenMTModel } from '@renderer/config/translate'
 import { processPostsuffixQwen3Model, processReqMessages } from '@renderer/services/ModelMessageService'
 import { estimateTextTokens } from '@renderer/services/TokenService'
 // For Copilot token
-import {
+import type {
   Assistant,
-  EFFORT_RATIO,
-  FileTypes,
-  isSystemProvider,
-  isTranslateAssistant,
   MCPCallToolResponse,
   MCPTool,
   MCPToolResponse,
   Model,
   OpenAIServiceTier,
   Provider,
-  SystemProviderIds,
-  ToolCallResponse,
-  WebSearchSource
+  ToolCallResponse
 } from '@renderer/types'
-import { ChunkType, TextStartChunk, ThinkingStartChunk } from '@renderer/types/chunk'
-import { Message } from '@renderer/types/newMessage'
 import {
+  EFFORT_RATIO,
+  FILE_TYPE,
+  isSystemProvider,
+  isTranslateAssistant,
+  SystemProviderIds,
+  WEB_SEARCH_SOURCE
+} from '@renderer/types'
+import type { TextStartChunk, ThinkingStartChunk } from '@renderer/types/chunk'
+import { ChunkType } from '@renderer/types/chunk'
+import type { Message } from '@renderer/types/newMessage'
+import type {
   OpenAIExtraBody,
   OpenAIModality,
   OpenAISdkMessageParam,
@@ -77,15 +79,47 @@ import {
   openAIToolsToMcpTool
 } from '@renderer/utils/mcp-tools'
 import { findFileBlocks, findImageBlocks } from '@renderer/utils/messageUtils/find'
+import {
+  isSupportArrayContentProvider,
+  isSupportDeveloperRoleProvider,
+  isSupportEnableThinkingProvider,
+  isSupportStreamOptionsProvider
+} from '@renderer/utils/provider'
 import { t } from 'i18next'
-import OpenAI, { AzureOpenAI } from 'openai'
-import { ChatCompletionContentPart, ChatCompletionContentPartRefusal, ChatCompletionTool } from 'openai/resources'
 
-import { GenericChunk } from '../../middleware/schemas'
-import { RequestTransformer, ResponseChunkTransformer, ResponseChunkTransformerContext } from '../types'
+import type { GenericChunk } from '../../middleware/schemas'
+import type { RequestTransformer, ResponseChunkTransformer, ResponseChunkTransformerContext } from '../types'
 import { OpenAIBaseClient } from './OpenAIBaseClient'
 
 const logger = loggerService.withContext('OpenAIApiClient')
+
+function normalizeOpenAIImageSource(rawSource: unknown): string {
+  if (typeof rawSource !== 'string') {
+    return ''
+  }
+
+  const trimmed = rawSource.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  if (
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('file://') ||
+    /^https?:\/\//i.test(trimmed)
+  ) {
+    return trimmed
+  }
+
+  const cleaned = trimmed.replace(/^['"]|['"]$/g, '').replace(/\s+/g, '')
+  const looksLikeBase64 = cleaned.length > 64 && /^[A-Za-z0-9+/]+={0,2}$/.test(cleaned)
+  if (looksLikeBase64) {
+    return `data:image/png;base64,${cleaned}`
+  }
+
+  return trimmed
+}
 
 export class OpenAIAPIClient extends OpenAIBaseClient<
   OpenAI | AzureOpenAI,
@@ -125,10 +159,20 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
       return {}
     }
 
+    if (isOpenAIDeepResearchModel(model)) {
+      return {
+        reasoning_effort: 'medium'
+      }
+    }
+
     const reasoningEffort = assistant?.settings?.reasoning_effort
 
     if (isSupportedThinkingTokenZhipuModel(model)) {
       return { thinking: { type: reasoningEffort ? 'enabled' : 'disabled' } }
+    }
+
+    if (reasoningEffort === 'default') {
+      return {}
     }
 
     if (!reasoningEffort) {
@@ -292,16 +336,15 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
     // Grok models/Perplexity models/OpenAI models
     if (isSupportedReasoningEffortModel(model)) {
       // 检查模型是否支持所选选项
-      const modelType = getThinkModelType(model)
-      const supportedOptions = MODEL_SUPPORTED_REASONING_EFFORT[modelType]
-      if (supportedOptions.includes(reasoningEffort)) {
+      const supportedOptions = getModelSupportedReasoningEffortOptions(model)?.filter((option) => option !== 'default')
+      if (supportedOptions?.includes(reasoningEffort)) {
         return {
           reasoning_effort: reasoningEffort
         }
       } else {
         // 如果不支持，fallback到第一个支持的值
         return {
-          reasoning_effort: supportedOptions[0]
+          reasoning_effort: supportedOptions?.[0]
         }
       }
     }
@@ -416,13 +459,11 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
     }
 
     for (const imageBlock of imageBlocks) {
-      if (isVision) {
-        if (imageBlock.file) {
-          const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
-          parts.push({ type: 'image_url', image_url: { url: image.data } })
-        } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
-          parts.push({ type: 'image_url', image_url: { url: imageBlock.url } })
-        }
+      if (imageBlock.file) {
+        const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
+        parts.push({ type: 'image_url', image_url: { url: image.data } })
+      } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
+        parts.push({ type: 'image_url', image_url: { url: imageBlock.url } })
       }
     }
 
@@ -432,12 +473,38 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
         continue
       }
 
-      if ([FileTypes.TEXT, FileTypes.DOCUMENT].includes(file.type)) {
+      if ([FILE_TYPE.TEXT, FILE_TYPE.DOCUMENT].some((type) => type === file.type)) {
+        const fileApi = window.api.file as any
+
+        // PDF 特殊处理：视觉模型直接发送原始 PDF（Higress 原生支持 PDF 文件分析）
+        if (file.ext === '.pdf' && isVision && fileApi.base64File) {
+          const rawPdf = await fileApi.base64File(file.id + file.ext)
+          if (rawPdf?.data) {
+            parts.push({
+              type: 'image_url',
+              image_url: { url: `data:${rawPdf.mime || 'application/pdf'};base64,${rawPdf.data}` }
+            })
+            continue
+          }
+        }
+
+        // 非视觉模型 或 PDF 原始发送失败：通过 pdfOcr 智能管线处理
+        // 后端先提取文本，如果页均字符密度 < 200，自动调用视觉模型 OCR
+        if (file.ext === '.pdf' && fileApi.pdfOcr) {
+          const ocrResult = await fileApi.pdfOcr(file.id + file.ext)
+          if (ocrResult.content && ocrResult.content.trim().length > 0) {
+            parts.push({ type: 'text', text: file.origin_name + '\n' + ocrResult.content })
+            continue
+          }
+        }
+
+        // 非 PDF 或 pdfOcr 不可用：直接读取文本
         const fileContent = await (await window.api.file.read(file.id + file.ext, true)).trim()
-        parts.push({
-          type: 'text',
-          text: file.origin_name + '\n' + fileContent
-        })
+        if (fileContent.length > 0) {
+          parts.push({ type: 'text', text: file.origin_name + '\n' + fileContent })
+        } else {
+          parts.push({ type: 'text', text: file.origin_name + '\n(content could not be extracted)' })
+        }
       }
     }
 
@@ -499,7 +566,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
       return {
         role: 'tool',
         tool_call_id: mcpToolResponse.toolCallId,
-        content: JSON.stringify(resp.content)
+        content: hasMultimodalContent(resp) ? mcpResultToTextSummary(resp) : JSON.stringify(resp.content)
       } as OpenAI.Chat.Completions.ChatCompletionToolMessageParam
     }
     return undefined
@@ -636,7 +703,6 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
           logger.warn('No user message. Some providers may not support.')
         }
 
-        // poe 需要通过用户消息传递 reasoningEffort
         const reasoningEffort = this.getReasoningEffort(assistant, model)
 
         const lastUserMsg = userMessages.findLast((m) => m.role === 'user')
@@ -646,22 +712,6 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
             const currentContent = lastUserMsg.content
 
             lastUserMsg.content = processPostsuffixQwen3Model(currentContent, qwenThinkModeEnabled)
-          }
-          if (this.provider.id === SystemProviderIds.poe) {
-            // 如果以后 poe 支持 reasoning_effort 参数了，可以删掉这部分
-            let suffix = ''
-            if (isGPT5SeriesModel(model) && reasoningEffort.reasoning_effort) {
-              suffix = ` --reasoning_effort ${reasoningEffort.reasoning_effort}`
-            } else if (isClaudeReasoningModel(model) && reasoningEffort.thinking?.budget_tokens) {
-              suffix = ` --thinking_budget ${reasoningEffort.thinking.budget_tokens}`
-            } else if (isGeminiReasoningModel(model) && reasoningEffort.extra_body?.google?.thinking_config) {
-              suffix = ` --thinking_budget ${reasoningEffort.extra_body.google.thinking_config.thinking_budget}`
-            }
-            // FIXME: poe 不支持多个text part，上传文本文件的时候用的不是file part而是text part，因此会出问题
-            // 临时解决方案是强制poe用string content，但是其实poe部分支持array
-            if (typeof lastUserMsg.content === 'string') {
-              lastUserMsg.content += suffix
-            }
           }
         }
 
@@ -718,9 +768,11 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
           ...modalities,
           // groq 有不同的 service tier 配置，不符合 openai 接口类型
           service_tier: this.getServiceTier(model) as OpenAIServiceTier,
+          // verbosity. getVerbosity ensures the returned value is valid.
+          verbosity: this.getVerbosity(model),
           ...this.getProviderSpecificParameters(assistant, model),
           ...reasoningEffort,
-          ...getOpenAIWebSearchParams(model, enableWebSearch),
+          // ...getOpenAIWebSearchParams(model, enableWebSearch),
           // OpenRouter usage tracking
           ...(this.provider.id === 'openrouter' ? { usage: { include: true } } : {}),
           ...extra_body,
@@ -755,7 +807,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
         hasBeenCollectedWebSearch = true
         return {
           results: annotations,
-          source: WebSearchSource.OPENAI
+          source: WEB_SEARCH_SOURCE.OPENAI
         }
       }
 
@@ -766,7 +818,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
         return {
           // @ts-ignore - citations may not be in standard type definitions
           results: chunk.citations,
-          source: WebSearchSource.GROK
+          source: WEB_SEARCH_SOURCE.GROK
         }
       }
 
@@ -777,7 +829,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
         return {
           // @ts-ignore - citations may not be in standard type definitions
           results: chunk.search_results,
-          source: WebSearchSource.PERPLEXITY
+          source: WEB_SEARCH_SOURCE.PERPLEXITY
         }
       }
 
@@ -788,7 +840,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
         return {
           // @ts-ignore - citations may not be in standard type definitions
           results: chunk.citations,
-          source: WebSearchSource.OPENROUTER
+          source: WEB_SEARCH_SOURCE.OPENROUTER
         }
       }
 
@@ -799,7 +851,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
         return {
           // @ts-ignore - web_search may not be in standard type definitions
           results: chunk.web_search,
-          source: WebSearchSource.ZHIPU
+          source: WEB_SEARCH_SOURCE.ZHIPU
         }
       }
 
@@ -810,7 +862,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
         return {
           // @ts-ignore - search_info may not be in standard type definitions
           results: chunk.search_info.search_results,
-          source: WebSearchSource.HUNYUAN
+          source: WEB_SEARCH_SOURCE.HUNYUAN
         }
       }
 
@@ -843,7 +895,12 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
      * - 有 finish_reason 时
      * - 无 finish_reason 但是流正常结束时
      */
-    const emitCompletionSignals = (controller: TransformStreamDefaultController<GenericChunk>) => {
+    let accumulatedText = ''
+    const bridgedGlbUrls = new Set<string>()
+    const emitCompletionSignals = async (
+      controller: TransformStreamDefaultController<GenericChunk>,
+      context?: ResponseChunkTransformerContext
+    ) => {
       if (isFinished) return
 
       if (toolCalls.length > 0) {
@@ -851,6 +908,44 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
           type: ChunkType.MCP_TOOL_CREATED,
           tool_calls: toolCalls
         })
+      }
+
+      const glbMatches = accumulatedText.match(/https?:\/\/[^\s\)\]\"]+?\.glb(?:\?[^\s\)\]\"]*)?/gi) || []
+      for (const glbUrl of glbMatches) {
+        if (bridgedGlbUrls.has(glbUrl)) continue
+        bridgedGlbUrls.add(glbUrl)
+        try {
+          const saveResp = await fetch('/api/v1/generate-3d/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              download_url: glbUrl,
+              format: 'glb'
+            })
+          })
+          const saveResult = await saveResp.json()
+          if (saveResult?.ok && saveResult.file) {
+            controller.enqueue({
+              type: ChunkType.MODEL_3D_COMPLETE,
+              file: saveResult.file,
+              format: saveResult.format || 'glb'
+            } as any)
+          } else {
+            logger.warn('[OpenAIChatStream] Failed to bridge GLB URL', {
+              providerId: context?.provider?.id,
+              modelId: (context as any)?.model?.id,
+              glbUrl,
+              error: saveResult?.error
+            })
+          }
+        } catch (error) {
+          logger.warn('[OpenAIChatStream] Failed to bridge GLB URL', {
+            providerId: context?.provider?.id,
+            modelId: (context as any)?.model?.id,
+            glbUrl,
+            error
+          })
+        }
       }
 
       const usage = lastUsageInfo || {
@@ -887,7 +982,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
 
         // if we've already seen finish_reason, emit completion signals. No matter whether we get usage or not.
         if (hasFinishReason && !isFinished) {
-          emitCompletionSignals(controller)
+          await emitCompletionSignals(controller, context)
           return
         }
 
@@ -944,7 +1039,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
                 hasFinishReason = true
                 // If we already have usage info, emit completion signals now
                 if (lastUsageInfo && lastUsageInfo.total_tokens > 0) {
-                  emitCompletionSignals(controller)
+                  await emitCompletionSignals(controller, context)
                 }
               }
               continue
@@ -989,6 +1084,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
 
             // 处理文本内容
             if (contentSource.content) {
+              accumulatedText += contentSource.content
               // logger.silly('since contentSource.content is trusy, try to enqueue TEXT_START and TEXT_DELTA')
               if (!accumulatingText) {
                 // logger.silly('enqueue TEXT_START')
@@ -1020,14 +1116,31 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
 
             // 处理图片内容 (e.g. from OpenRouter Gemini image generation models)
             if (contentSource.images && Array.isArray(contentSource.images)) {
+              const normalizedImages = contentSource.images
+                .map((image: any) =>
+                  normalizeOpenAIImageSource(image?.image_url?.url || image?.b64_json || image?.url || '')
+                )
+                .filter(Boolean)
+
+              const imageType: 'url' | 'base64' = normalizedImages.every((src) => src.startsWith('data:'))
+                ? 'base64'
+                : 'url'
+              logger.info('[OpenAIChatStream] Parsed image payload from chat stream', {
+                providerId: context.provider.id,
+                modelId: (context as any).model?.id,
+                imageCount: normalizedImages.length,
+                imageType,
+                sample: normalizedImages[0]?.slice(0, 100)
+              })
+
               controller.enqueue({
                 type: ChunkType.IMAGE_CREATED
               })
               controller.enqueue({
                 type: ChunkType.IMAGE_COMPLETE,
                 image: {
-                  type: 'base64',
-                  images: contentSource.images.map((image) => image.image_url?.url || '')
+                  type: imageType,
+                  images: normalizedImages
                 }
               })
             }
@@ -1086,7 +1199,7 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
               hasFinishReason = true
               // If we already have usage info, emit completion signals now
               if (lastUsageInfo && lastUsageInfo.total_tokens > 0) {
-                emitCompletionSignals(controller)
+                await emitCompletionSignals(controller, context)
               }
             }
           }
@@ -1094,11 +1207,11 @@ export class OpenAIAPIClient extends OpenAIBaseClient<
       },
 
       // 流正常结束时，检查是否需要发送完成信号
-      flush(controller) {
+      async flush(controller) {
         if (isFinished) return
 
         logger.debug('Stream ended without finish_reason, emitting fallback completion signals')
-        emitCompletionSignals(controller)
+        await emitCompletionSignals(controller, context)
       }
     })
   }

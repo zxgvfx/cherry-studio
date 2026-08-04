@@ -1,18 +1,23 @@
-import { languages } from './languages'
+import { codeLanguages } from './code-languages'
 
 export const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
 export const videoExts = ['.mp4', '.avi', '.mov', '.wmv', '.flv', '.mkv']
-export const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac']
+export const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a']
 export const documentExts = ['.pdf', '.doc', '.docx', '.pptx', '.xlsx', '.odt', '.odp', '.ods']
 export const thirdPartyApplicationExts = ['.draftsExport']
 export const bookExts = ['.epub']
+
+export const API_SERVER_DEFAULTS = {
+  HOST: '127.0.0.1',
+  PORT: 23333
+}
 
 /**
  * A flat array of all file extensions known by the linguist database.
  * This is the primary source for identifying code files.
  */
 const linguistExtSet = new Set<string>()
-for (const lang of Object.values(languages)) {
+for (const lang of Object.values(codeLanguages)) {
   if (lang.extensions) {
     for (const ext of lang.extensions) {
       linguistExtSet.add(ext)
@@ -197,13 +202,23 @@ export enum FeedUrl {
   GITHUB_LATEST = 'https://github.com/CherryHQ/cherry-studio/releases/latest/download'
 }
 
+export enum UpdateConfigUrl {
+  GITHUB = 'https://raw.githubusercontent.com/CherryHQ/cherry-studio/refs/heads/x-files/app-upgrade-config/app-upgrade-config.json',
+  GITCODE = 'https://raw.gitcode.com/CherryHQ/cherry-studio/raw/x-files%2Fapp-upgrade-config/app-upgrade-config.json'
+}
+
 export enum UpgradeChannel {
   LATEST = 'latest', // 最新稳定版本
   RC = 'rc', // 公测版本
   BETA = 'beta' // 预览版本
 }
 
-export const defaultTimeout = 10 * 1000 * 60
+export enum UpdateMirror {
+  GITHUB = 'github',
+  GITCODE = 'gitcode'
+}
+
+export const DEFAULT_TIMEOUT = 30 * 1000 * 60
 
 export const occupiedDirs = ['logs', 'Network', 'Partitions/webview/Network']
 
@@ -217,7 +232,10 @@ export enum codeTools {
   claudeCode = 'claude-code',
   geminiCli = 'gemini-cli',
   openaiCodex = 'openai-codex',
-  iFlowCli = 'iflow-cli'
+  iFlowCli = 'iflow-cli',
+  githubCopilotCli = 'github-copilot-cli',
+  kimiCli = 'kimi-cli',
+  openCode = 'opencode'
 }
 
 export enum terminalApps {
@@ -317,15 +335,15 @@ export const WINDOWS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     name: 'Command Prompt',
     command: (_: string, fullCommand: string) => ({
       command: 'cmd',
-      args: ['/c', 'start', 'cmd', '/k', fullCommand]
+      args: ['/c', fullCommand]
     })
   },
   {
     id: terminalApps.powershell,
     name: 'PowerShell',
     command: (_: string, fullCommand: string) => ({
-      command: 'cmd',
-      args: ['/c', 'start', 'powershell', '-NoExit', '-Command', `& '${fullCommand}'`]
+      command: 'powershell',
+      args: ['-NoExit', '-Command', `& "${fullCommand}"`]
     })
   },
   {
@@ -333,51 +351,58 @@ export const WINDOWS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     name: 'Windows Terminal',
     command: (_: string, fullCommand: string) => ({
       command: 'wt',
-      args: ['cmd', '/k', fullCommand]
+      args: ['-p', 'Command Prompt', '--', 'cmd', '/c', `"${fullCommand}"`]
     })
   },
   {
     id: terminalApps.wsl,
     name: 'WSL (Ubuntu/Debian)',
-    command: (_: string, fullCommand: string) => {
-      // Start WSL in a new window and execute the batch file from within WSL using cmd.exe
-      // The batch file will run in Windows context but output will be in WSL terminal
-      return {
-        command: 'cmd',
-        args: ['/c', 'start', 'wsl', '-e', 'bash', '-c', `cmd.exe /c '${fullCommand}' ; exec bash`]
-      }
-    }
+    command: (_: string, fullCommand: string) => ({
+      command: 'wsl',
+      args: ['bash', '-c', `cmd.exe /c '${fullCommand}' ; read -p 'Press Enter to exit'`]
+    })
   },
   {
     id: terminalApps.alacritty,
     name: 'Alacritty',
-    customPath: '', // Will be set by user in settings
+    customPath: '',
     command: (_: string, fullCommand: string) => ({
-      command: 'alacritty', // Will be replaced with customPath if set
-      args: ['-e', 'cmd', '/k', fullCommand]
+      command: 'alacritty',
+      args: ['-e', 'cmd', '/c', fullCommand]
     })
   },
   {
     id: terminalApps.wezterm,
     name: 'WezTerm',
-    customPath: '', // Will be set by user in settings
+    customPath: '',
     command: (_: string, fullCommand: string) => ({
-      command: 'wezterm', // Will be replaced with customPath if set
-      args: ['start', 'cmd', '/k', fullCommand]
+      command: 'wezterm',
+      args: ['start', '--', 'cmd', '/c', fullCommand]
     })
   }
 ]
+
+// Helper function to escape strings for AppleScript
+const escapeForAppleScript = (str: string): string => {
+  // In AppleScript strings, backslashes and double quotes need to be escaped
+  // When passed through osascript -e with single quotes, we need:
+  // 1. Backslash: \ -> \\
+  // 2. Double quote: " -> \"
+  return str
+    .replace(/\\/g, '\\\\') // Escape backslashes first
+    .replace(/"/g, '\\"') // Then escape double quotes
+}
 
 export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
   {
     id: terminalApps.systemDefault,
     name: 'Terminal',
     bundleId: 'com.apple.Terminal',
-    command: (directory: string, fullCommand: string) => ({
+    command: (_directory: string, fullCommand: string) => ({
       command: 'sh',
       args: [
         '-c',
-        `open -na Terminal && sleep 0.5 && osascript -e 'tell application "Terminal" to activate' -e 'tell application "Terminal" to do script "cd '${directory.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' && clear && ${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" in front window'`
+        `open -na Terminal && sleep 0.5 && osascript -e 'tell application "Terminal" to activate' -e 'tell application "Terminal" to do script "${escapeForAppleScript(fullCommand)}" in front window'`
       ]
     })
   },
@@ -385,11 +410,11 @@ export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     id: terminalApps.iterm2,
     name: 'iTerm2',
     bundleId: 'com.googlecode.iterm2',
-    command: (directory: string, fullCommand: string) => ({
+    command: (_directory: string, fullCommand: string) => ({
       command: 'sh',
       args: [
         '-c',
-        `open -na iTerm && sleep 0.8 && osascript -e 'on waitUntilRunning()\n  repeat 50 times\n    tell application "System Events"\n      if (exists process "iTerm2") then exit repeat\n    end tell\n    delay 0.1\n  end repeat\nend waitUntilRunning\n\nwaitUntilRunning()\n\ntell application "iTerm2"\n  if (count of windows) = 0 then\n    create window with default profile\n    delay 0.3\n  else\n    tell current window\n      create tab with default profile\n    end tell\n    delay 0.3\n  end if\n  tell current session of current window to write text "cd '${directory.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' && clear && ${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\n  activate\nend tell'`
+        `open -na iTerm && sleep 0.8 && osascript -e 'on waitUntilRunning()\n  repeat 50 times\n    tell application "System Events"\n      if (exists process "iTerm2") then exit repeat\n    end tell\n    delay 0.1\n  end repeat\nend waitUntilRunning\n\nwaitUntilRunning()\n\ntell application "iTerm2"\n  if (count of windows) = 0 then\n    create window with default profile\n    delay 0.3\n  else\n    tell current window\n      create tab with default profile\n    end tell\n    delay 0.3\n  end if\n  tell current session of current window to write text "${escapeForAppleScript(fullCommand)}"\n  activate\nend tell'`
       ]
     })
   },
@@ -397,11 +422,11 @@ export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     id: terminalApps.kitty,
     name: 'kitty',
     bundleId: 'net.kovidgoyal.kitty',
-    command: (directory: string, fullCommand: string) => ({
+    command: (_directory: string, fullCommand: string) => ({
       command: 'sh',
       args: [
         '-c',
-        `cd "${directory}" && open -na kitty --args --directory="${directory}" sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "kitty" to activate'`
+        `cd "${_directory}" && open -na kitty --args --directory="${_directory}" sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "kitty" to activate'`
       ]
     })
   },
@@ -409,11 +434,11 @@ export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     id: terminalApps.alacritty,
     name: 'Alacritty',
     bundleId: 'org.alacritty',
-    command: (directory: string, fullCommand: string) => ({
+    command: (_directory: string, fullCommand: string) => ({
       command: 'sh',
       args: [
         '-c',
-        `open -na Alacritty --args --working-directory "${directory}" -e sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "Alacritty" to activate'`
+        `open -na Alacritty --args --working-directory "${_directory}" -e sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "Alacritty" to activate'`
       ]
     })
   },
@@ -421,11 +446,11 @@ export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     id: terminalApps.wezterm,
     name: 'WezTerm',
     bundleId: 'com.github.wez.wezterm',
-    command: (directory: string, fullCommand: string) => ({
+    command: (_directory: string, fullCommand: string) => ({
       command: 'sh',
       args: [
         '-c',
-        `open -na WezTerm --args start --new-tab --cwd "${directory}" -- sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "WezTerm" to activate'`
+        `open -na WezTerm --args start --new-tab --cwd "${_directory}" -- sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "WezTerm" to activate'`
       ]
     })
   },
@@ -433,11 +458,11 @@ export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     id: terminalApps.ghostty,
     name: 'Ghostty',
     bundleId: 'com.mitchellh.ghostty',
-    command: (directory: string, fullCommand: string) => ({
+    command: (_directory: string, fullCommand: string) => ({
       command: 'sh',
       args: [
         '-c',
-        `cd "${directory}" && open -na Ghostty --args --working-directory="${directory}" -e sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "Ghostty" to activate'`
+        `cd "${_directory}" && open -na Ghostty --args --working-directory="${_directory}" -e sh -c "${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}; exec \\$SHELL" && sleep 0.5 && osascript -e 'tell application "Ghostty" to activate'`
       ]
     })
   },
@@ -445,7 +470,7 @@ export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
     id: terminalApps.tabby,
     name: 'Tabby',
     bundleId: 'org.tabby',
-    command: (directory: string, fullCommand: string) => ({
+    command: (_directory: string, fullCommand: string) => ({
       command: 'sh',
       args: [
         '-c',
@@ -453,8 +478,27 @@ export const MACOS_TERMINALS_WITH_COMMANDS: TerminalConfigWithCommand[] = [
           open -na Tabby --args open && sleep 0.3
         else
           open -na Tabby --args open && sleep 2
-        fi && osascript -e 'tell application "Tabby" to activate' -e 'set the clipboard to "cd \\"${directory.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}\\" && clear && ${fullCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"' -e 'tell application "System Events" to tell process "Tabby" to keystroke "v" using {command down}' -e 'tell application "System Events" to key code 36'`
+        fi && osascript -e 'tell application "Tabby" to activate' -e 'set the clipboard to "${escapeForAppleScript(fullCommand)}"' -e 'tell application "System Events" to tell process "Tabby" to keystroke "v" using {command down}' -e 'tell application "System Events" to key code 36'`
       ]
     })
   }
 ]
+
+// resources/scripts should be maintained manually
+export const HOME_CHERRY_DIR = '.cherrystudio'
+
+// Git Bash path configuration types
+export type GitBashPathSource = 'manual' | 'auto'
+
+export interface GitBashPathInfo {
+  path: string | null
+  source: GitBashPathSource | null
+}
+
+// CherryIN OAuth configuration
+export const CHERRYIN_CONFIG = {
+  CLIENT_ID: '2a348c87-bae1-4756-a62f-b2e97200fd6d',
+  ALLOWED_HOSTS: ['https://open.cherryin.ai', 'https://open.cherryin.dev'],
+  REDIRECT_URI: 'cherrystudio://oauth/callback',
+  SCOPES: 'openid profile email offline_access balance:read usage:read tokens:read tokens:write'
+}

@@ -1,4 +1,4 @@
-import {
+import type {
   ExternalToolResult,
   KnowledgeReference,
   MCPTool,
@@ -7,8 +7,20 @@ import {
   ToolUseResponse,
   WebSearchResponse
 } from '.'
-import { Response, ResponseError } from './newMessage'
-import { SdkToolCall } from './sdk'
+import type { Response, ResponseError } from './newMessage'
+import type { SdkToolCall } from './sdk'
+
+/**
+ * Provider metadata type for passing provider-specific data through chunks
+ * Currently used for passing thoughtSignature from Gemini through the chunk pipeline
+ */
+export interface ProviderMetadata {
+  google?: {
+    thoughtSignature?: string
+    [key: string]: unknown
+  }
+  [provider: string]: unknown
+}
 
 // Define Enum for Chunk Types
 // 目前用到的，并没有列出完整的生命周期
@@ -24,6 +36,7 @@ export enum ChunkType {
   MCP_TOOL_PENDING = 'mcp_tool_pending',
   MCP_TOOL_IN_PROGRESS = 'mcp_tool_in_progress',
   MCP_TOOL_COMPLETE = 'mcp_tool_complete',
+  MCP_TOOL_STREAMING = 'mcp_tool_streaming', // NEW: Streaming tool arguments
   EXTERNEL_TOOL_COMPLETE = 'externel_tool_complete',
   LLM_RESPONSE_CREATED = 'llm_response_created',
   LLM_RESPONSE_IN_PROGRESS = 'llm_response_in_progress',
@@ -47,7 +60,14 @@ export enum ChunkType {
   SEARCH_IN_PROGRESS_UNION = 'search_in_progress_union',
   SEARCH_COMPLETE_UNION = 'search_complete_union',
   VIDEO_SEARCHED = 'video.searched',
-  IMAGE_SEARCHED = 'image.searched'
+  IMAGE_SEARCHED = 'image.searched',
+  MODEL_3D_CREATED = 'model_3d.created',
+  MODEL_3D_PROGRESS = 'model_3d.progress',
+  MODEL_3D_COMPLETE = 'model_3d.complete',
+  VIDEO_GEN_CREATED = 'video_gen.created',
+  VIDEO_GEN_PROGRESS = 'video_gen.progress',
+  VIDEO_GEN_COMPLETE = 'video_gen.complete',
+  RAW = 'raw'
 }
 
 export interface LLMResponseCreatedChunk {
@@ -80,6 +100,11 @@ export interface TextStartChunk {
    * The ID of the chunk
    */
   chunk_id?: number
+
+  /**
+   * Provider metadata for passing provider-specific data (e.g., thoughtSignature for Gemini)
+   */
+  providerMetadata?: ProviderMetadata
 }
 export interface TextDeltaChunk {
   /**
@@ -96,6 +121,11 @@ export interface TextDeltaChunk {
    * The type of the chunk
    */
   type: ChunkType.TEXT_DELTA
+
+  /**
+   * Provider metadata for passing provider-specific data (e.g., thoughtSignature for Gemini)
+   */
+  providerMetadata?: ProviderMetadata
 }
 
 export interface TextCompleteChunk {
@@ -113,6 +143,11 @@ export interface TextCompleteChunk {
    * The type of the chunk
    */
   type: ChunkType.TEXT_COMPLETE
+
+  /**
+   * Provider metadata for passing provider-specific data (e.g., thoughtSignature for Gemini)
+   */
+  providerMetadata?: ProviderMetadata
 }
 
 export interface AudioStartChunk {
@@ -328,6 +363,20 @@ export interface MCPToolCompleteChunk {
   type: ChunkType.MCP_TOOL_COMPLETE
 }
 
+/**
+ * Streaming tool arguments chunk - emitted during tool-input-delta events
+ */
+export interface MCPToolStreamingChunk {
+  /**
+   * The type of the chunk
+   */
+  type: ChunkType.MCP_TOOL_STREAMING
+  /**
+   * The tool responses with streaming arguments
+   */
+  responses: (MCPToolResponse | NormalToolResponse)[]
+}
+
 export interface LLMResponseCompleteChunk {
   /**
    * The response
@@ -414,6 +463,59 @@ export interface ImageSearchedChunk {
   metadata: Record<string, any>
 }
 
+export interface Model3DCreatedChunk {
+  type: ChunkType.MODEL_3D_CREATED
+}
+
+export interface Model3DProgressChunk {
+  type: ChunkType.MODEL_3D_PROGRESS
+  progressText: string
+}
+
+export interface Model3DCompleteChunk {
+  type: ChunkType.MODEL_3D_COMPLETE
+  file: {
+    id: string
+    name: string
+    origin_name?: string
+    path: string
+    ext: string
+    size: number
+    type: string
+    created_at?: string
+  }
+  format: string
+}
+
+export interface VideoGenCreatedChunk {
+  type: ChunkType.VIDEO_GEN_CREATED
+}
+
+export interface VideoGenProgressChunk {
+  type: ChunkType.VIDEO_GEN_PROGRESS
+  progressText: string
+}
+
+export interface VideoGenCompleteChunk {
+  type: ChunkType.VIDEO_GEN_COMPLETE
+  /**
+   * 可播放的视频地址（通常是后端 /api/v1/files/serve 提供的本地视频，或远端直链）
+   */
+  url: string
+  metadata?: Record<string, any>
+}
+
+export interface RawChunk {
+  /**
+   * The type of the chunk
+   */
+  type: ChunkType.RAW
+
+  content: unknown
+
+  metadata?: Record<string, any>
+}
+
 export type Chunk =
   | BlockCreatedChunk // 消息块创建，无意义
   | BlockInProgressChunk // 消息块进行中，无意义
@@ -426,6 +528,7 @@ export type Chunk =
   | MCPToolPendingChunk // MCP工具调用等待中
   | MCPToolInProgressChunk // MCP工具调用中
   | MCPToolCompleteChunk // MCP工具调用完成
+  | MCPToolStreamingChunk // MCP工具参数流式传输中
   | ExternalToolCompleteChunk // 外部工具调用完成，外部工具包含搜索互联网，知识库，MCP服务器
   | LLMResponseCreatedChunk // 大模型响应创建，返回即将创建的块类型
   | LLMResponseInProgressChunk // 大模型响应进行中
@@ -450,3 +553,10 @@ export type Chunk =
   | SearchCompleteUnionChunk // 搜索(知识库/互联网)完成
   | VideoSearchedChunk // 知识库检索视频
   | ImageSearchedChunk // 知识库检索图片
+  | Model3DCreatedChunk // 3D模型生成开始
+  | Model3DProgressChunk // 3D模型生成进度更新
+  | Model3DCompleteChunk // 3D模型生成完成
+  | VideoGenCreatedChunk // 视频生成开始
+  | VideoGenProgressChunk // 视频生成进度更新
+  | VideoGenCompleteChunk // 视频生成完成
+  | RawChunk

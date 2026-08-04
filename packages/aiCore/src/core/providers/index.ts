@@ -44,7 +44,7 @@ export {
 // ==================== 基础数据和类型 ====================
 
 // 基础Provider数据源
-export { baseProviderIds, baseProviders } from './schemas'
+export { baseProviderIds, baseProviders, isBaseProvider } from './schemas'
 
 // 类型定义和Schema
 export type {
@@ -56,6 +56,7 @@ export type {
 } from './schemas' // 从 schemas 导出的类型
 export { baseProviderIdSchema, customProviderIdSchema, providerConfigSchema, providerIdSchema } from './schemas' // Schema 导出
 export type {
+  AiSdkModel,
   DynamicProviderRegistry,
   ExtensibleProviderSettingsMap,
   ProviderError,

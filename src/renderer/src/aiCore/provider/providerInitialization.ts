@@ -1,5 +1,6 @@
 import { type ProviderConfig, registerMultipleProviderConfigs } from '@cherrystudio/ai-core/provider'
 import { loggerService } from '@logger'
+import * as z from 'zod'
 
 const logger = loggerService.withContext('ProviderConfigs')
 
@@ -33,6 +34,22 @@ export const NEW_PROVIDER_CONFIGS: ProviderConfig[] = [
     aliases: ['vertexai-anthropic']
   },
   {
+    id: 'azure-anthropic',
+    name: 'Azure AI Anthropic',
+    import: () => import('@ai-sdk/anthropic'),
+    creatorFunctionName: 'createAnthropic',
+    supportsImageGeneration: false,
+    aliases: ['azure-anthropic']
+  },
+  {
+    id: 'github-copilot-openai-compatible',
+    name: 'GitHub Copilot OpenAI Compatible',
+    import: () => import('@opeoginni/github-copilot-openai-compatible'),
+    creatorFunctionName: 'createGitHubCopilotOpenAICompatible',
+    supportsImageGeneration: false,
+    aliases: ['copilot', 'github-copilot']
+  },
+  {
     id: 'bedrock',
     name: 'Amazon Bedrock',
     import: () => import('@ai-sdk/amazon-bedrock'),
@@ -47,8 +64,49 @@ export const NEW_PROVIDER_CONFIGS: ProviderConfig[] = [
     creatorFunctionName: 'createPerplexity',
     supportsImageGeneration: false,
     aliases: ['perplexity']
+  },
+  {
+    id: 'mistral',
+    name: 'Mistral',
+    import: () => import('@ai-sdk/mistral'),
+    creatorFunctionName: 'createMistral',
+    supportsImageGeneration: false,
+    aliases: ['mistral']
+  },
+  {
+    id: 'huggingface',
+    name: 'HuggingFace',
+    import: () => import('@ai-sdk/huggingface'),
+    creatorFunctionName: 'createHuggingFace',
+    supportsImageGeneration: true,
+    aliases: ['hf', 'hugging-face']
+  },
+  {
+    id: 'gateway',
+    name: 'Vercel AI Gateway',
+    import: () => import('@ai-sdk/gateway'),
+    creatorFunctionName: 'createGateway',
+    supportsImageGeneration: true,
+    aliases: ['ai-gateway']
+  },
+  {
+    id: 'cerebras',
+    name: 'Cerebras',
+    import: () => import('@ai-sdk/cerebras'),
+    creatorFunctionName: 'createCerebras',
+    supportsImageGeneration: false
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    import: () => import('ollama-ai-provider-v2'),
+    creatorFunctionName: 'createOllama',
+    supportsImageGeneration: false
   }
 ] as const
+
+export const registeredNewProviderIds = NEW_PROVIDER_CONFIGS.map((config) => config.id)
+export const registeredNewProviderIdSchema = z.enum(registeredNewProviderIds)
 
 /**
  * 初始化新的Providers

@@ -2,11 +2,13 @@ import { InfoCircleOutlined } from '@ant-design/icons'
 import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { InfoTooltip } from '@renderer/components/TooltipIcons'
+import { isMac } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useEnableDeveloperMode, useSettings } from '@renderer/hooks/useSettings'
 import { useTimer } from '@renderer/hooks/useTimer'
 import i18n from '@renderer/i18n'
-import { RootState, useAppDispatch } from '@renderer/store'
+import type { RootState } from '@renderer/store'
+import { useAppDispatch } from '@renderer/store'
 import {
   setEnableDataCollection,
   setEnableSpellCheck,
@@ -17,17 +19,35 @@ import {
   setProxyUrl as _setProxyUrl,
   setSpellCheckLanguages
 } from '@renderer/store/settings'
-import { LanguageVarious } from '@renderer/types'
-import { NotificationSource } from '@renderer/types/notification'
+import type { LanguageVarious } from '@renderer/types'
+import type { NotificationSource } from '@renderer/types/notification'
 import { isValidProxyUrl } from '@renderer/utils'
 import { formatErrorMessage } from '@renderer/utils/error'
 import { defaultByPassRules, defaultLanguage } from '@shared/config/constant'
-import { Flex, Input, Switch, Tooltip } from 'antd'
-import { FC, useState } from 'react'
+import { Flex, Input, message, Modal, Switch, Tooltip } from 'antd'
+import type { FC } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 
 import { SettingContainer, SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '.'
+
+type SpellCheckOption = { readonly value: string; readonly label: string; readonly flag: string }
+
+// Define available spell check languages with display names (only commonly supported languages)
+const spellCheckLanguageOptions: readonly SpellCheckOption[] = [
+  { value: 'en-US', label: 'English (US)', flag: '🇺🇸' },
+  { value: 'es', label: 'Español', flag: '🇪🇸' },
+  { value: 'fr', label: 'Français', flag: '🇫🇷' },
+  { value: 'de', label: 'Deutsch', flag: '🇩🇪' },
+  { value: 'it', label: 'Italiano', flag: '🇮🇹' },
+  { value: 'pt', label: 'Português', flag: '🇵🇹' },
+  { value: 'ru', label: 'Русский', flag: '🇷🇺' },
+  { value: 'nl', label: 'Nederlands', flag: '🇳🇱' },
+  { value: 'pl', label: 'Polski', flag: '🇵🇱' },
+  { value: 'sk', label: 'Slovenčina', flag: '🇸🇰' },
+  { value: 'el', label: 'Ελληνικά', flag: '🇬🇷' }
+]
 
 const GeneralSettings: FC = () => {
   const {
@@ -51,6 +71,45 @@ const GeneralSettings: FC = () => {
   const { theme } = useTheme()
   const { enableDeveloperMode, setEnableDeveloperMode } = useEnableDeveloperMode()
   const { setTimeoutTimer } = useTimer()
+  const dispatch = useAppDispatch()
+  const { t } = useTranslation()
+  const [devPasswordModalOpen, setDevPasswordModalOpen] = useState(false)
+  const [devPassword, setDevPassword] = useState('')
+
+  const handleDeveloperModeToggle = useCallback(
+    async (checked: boolean) => {
+      if (!checked) {
+        setEnableDeveloperMode(false)
+        return
+      }
+      setDevPassword('')
+      setDevPasswordModalOpen(true)
+    },
+    [setEnableDeveloperMode]
+  )
+
+  const handleDevPasswordConfirm = useCallback(async () => {
+    const backendUrl = (window as any).__CHERRY_BACKEND_URL || ''
+    try {
+      const resp = await fetch(backendUrl + '/api/v1/config/verify-developer-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: devPassword })
+      })
+      const data = await resp.json()
+      if (data.valid) {
+        setEnableDeveloperMode(true)
+        setDevPasswordModalOpen(false)
+        setDevPassword('')
+      } else if (data.message === 'user_not_allowed') {
+        message.error(t('settings.developer.user_not_allowed'))
+      } else {
+        message.error(t('settings.developer.password_incorrect'))
+      }
+    } catch {
+      message.error(t('settings.developer.password_incorrect'))
+    }
+  }, [devPassword, setEnableDeveloperMode, t])
 
   const updateTray = (isShowTray: boolean) => {
     setTray(isShowTray)
@@ -79,9 +138,6 @@ const GeneralSettings: FC = () => {
       updateTray(true)
     }
   }
-
-  const dispatch = useAppDispatch()
-  const { t } = useTranslation()
 
   const onSelectLanguage = (value: LanguageVarious) => {
     dispatch(setLanguage(value))
@@ -122,12 +178,14 @@ const GeneralSettings: FC = () => {
     { value: 'zh-CN', label: '中文', flag: '🇨🇳' },
     { value: 'zh-TW', label: '中文（繁体）', flag: '🇭🇰' },
     { value: 'en-US', label: 'English', flag: '🇺🇸' },
+    { value: 'de-DE', label: 'Deutsch', flag: '🇩🇪' },
     { value: 'ja-JP', label: '日本語', flag: '🇯🇵' },
     { value: 'ru-RU', label: 'Русский', flag: '🇷🇺' },
     { value: 'el-GR', label: 'Ελληνικά', flag: '🇬🇷' },
     { value: 'es-ES', label: 'Español', flag: '🇪🇸' },
     { value: 'fr-FR', label: 'Français', flag: '🇫🇷' },
-    { value: 'pt-PT', label: 'Português', flag: '🇵🇹' }
+    { value: 'pt-PT', label: 'Português', flag: '🇵🇹' },
+    { value: 'ro-RO', label: 'Română', flag: '🇷🇴' }
   ]
 
   const notificationSettings = useSelector((state: RootState) => state.settings.notification)
@@ -136,19 +194,6 @@ const GeneralSettings: FC = () => {
   const handleNotificationChange = (type: NotificationSource, value: boolean) => {
     dispatch(setNotificationSettings({ ...notificationSettings, [type]: value }))
   }
-
-  // Define available spell check languages with display names (only commonly supported languages)
-  const spellCheckLanguageOptions = [
-    { value: 'en-US', label: 'English (US)', flag: '🇺🇸' },
-    { value: 'es', label: 'Español', flag: '🇪🇸' },
-    { value: 'fr', label: 'Français', flag: '🇫🇷' },
-    { value: 'de', label: 'Deutsch', flag: '🇩🇪' },
-    { value: 'it', label: 'Italiano', flag: '🇮🇹' },
-    { value: 'pt', label: 'Português', flag: '🇵🇹' },
-    { value: 'ru', label: 'Русский', flag: '🇷🇺' },
-    { value: 'nl', label: 'Nederlands', flag: '🇳🇱' },
-    { value: 'pl', label: 'Polski', flag: '🇵🇱' }
-  ]
 
   const handleSpellCheckLanguagesChange = (selectedLanguages: string[]) => {
     dispatch(setSpellCheckLanguages(selectedLanguages))
@@ -232,7 +277,12 @@ const GeneralSettings: FC = () => {
           <>
             <SettingDivider />
             <SettingRow>
-              <SettingRowTitle>{t('settings.proxy.bypass')}</SettingRowTitle>
+              <SettingRowTitle style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>{t('settings.proxy.bypass')}</span>
+                <Tooltip title={t('settings.proxy.tip')} placement="right">
+                  <InfoCircleOutlined style={{ cursor: 'pointer' }} />
+                </Tooltip>
+              </SettingRowTitle>
               <Input
                 spellCheck={false}
                 placeholder={defaultByPassRules}
@@ -248,7 +298,7 @@ const GeneralSettings: FC = () => {
         <SettingRow>
           <HStack justifyContent="space-between" alignItems="center" style={{ flex: 1, marginRight: 16 }}>
             <SettingRowTitle>{t('settings.general.spell_check.label')}</SettingRowTitle>
-            {enableSpellCheck && (
+            {enableSpellCheck && !isMac && (
               <Selector<string>
                 size={14}
                 multiple
@@ -348,9 +398,28 @@ const GeneralSettings: FC = () => {
             <SettingRowTitle>{t('settings.developer.enable_developer_mode')}</SettingRowTitle>
             <InfoTooltip title={t('settings.developer.help')} />
           </Flex>
-          <Switch checked={enableDeveloperMode} onChange={setEnableDeveloperMode} />
+          <Switch checked={enableDeveloperMode} onChange={handleDeveloperModeToggle} />
         </SettingRow>
       </SettingGroup>
+      <Modal
+        title={t('settings.developer.password_required')}
+        open={devPasswordModalOpen}
+        onOk={handleDevPasswordConfirm}
+        onCancel={() => {
+          setDevPasswordModalOpen(false)
+          setDevPassword('')
+        }}
+        okButtonProps={{ disabled: !devPassword }}
+        destroyOnClose>
+        <Input.Password
+          placeholder={t('settings.developer.password_placeholder')}
+          value={devPassword}
+          onChange={(e) => setDevPassword(e.target.value)}
+          onPressEnter={handleDevPasswordConfirm}
+          autoFocus
+          style={{ marginTop: 12, marginBottom: 8 }}
+        />
+      </Modal>
     </SettingContainer>
   )
 }

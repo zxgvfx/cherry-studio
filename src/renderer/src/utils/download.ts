@@ -4,6 +4,13 @@ import i18n from '@renderer/i18n'
 const logger = loggerService.withContext('Utils:download')
 
 export const download = (url: string, filename?: string) => {
+  if (canSaveImageByDialog() && isImageUrl(url, filename)) {
+    saveImageByDialog(url, filename).catch((error) => {
+      handleDownloadError(error)
+    })
+    return
+  }
+
   // 处理可直接通过 <a> 标签下载的 URL:
   // - 本地文件 ( file:// )
   // - 对象 URL ( blob: )
@@ -81,15 +88,7 @@ export const download = (url: string, filename?: string) => {
       URL.revokeObjectURL(blobUrl)
       link.remove()
     })
-    .catch((error) => {
-      logger.error('Download failed:', error)
-      // 显示用户友好的错误提示
-      if (error.message) {
-        window.toast?.error(`${i18n.t('message.download.failed')}：${error.message}`)
-      } else {
-        window.toast?.error(i18n.t('message.download.failed'))
-      }
-    })
+    .catch(handleDownloadError)
 }
 
 // 辅助函数：根据MIME类型获取文件扩展名
@@ -108,4 +107,67 @@ function getExtensionFromMimeType(mimeType: string | null): string {
   }
 
   return mimeToExtension[mimeType] || '.bin'
+}
+
+function canSaveImageByDialog(): boolean {
+  return typeof window !== 'undefined' && typeof window.api?.file?.saveImage === 'function'
+}
+
+function isImageUrl(url: string, filename?: string): boolean {
+  if (url.startsWith('data:image/')) return true
+
+  const candidate = (filename || url.split('?')[0]).toLowerCase()
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(candidate)
+}
+
+async function saveImageByDialog(url: string, filename?: string): Promise<void> {
+  const { dataUrl, mimeType } = await resolveImageData(url)
+  const resolvedFilename = resolveImageFilename(url, filename, mimeType)
+  const baseName = removeExtension(resolvedFilename)
+  await window.api.file.saveImage(baseName, dataUrl)
+}
+
+async function resolveImageData(url: string): Promise<{ dataUrl: string; mimeType: string | null }> {
+  if (url.startsWith('data:image/')) {
+    const mimeMatch = url.match(/^data:([^;,]+)[;,]/)
+    return { dataUrl: url, mimeType: mimeMatch?.[1] ?? null }
+  }
+
+  const response = await fetch(url)
+  const blob = await response.blob()
+  const dataUrl = await blobToDataUrl(blob)
+  return { dataUrl, mimeType: blob.type || response.headers.get('Content-Type') }
+}
+
+function resolveImageFilename(url: string, filename?: string, mimeType?: string | null): string {
+  if (filename) return filename
+
+  const fromUrl = url.split('/').pop()?.split('?')[0]
+  if (fromUrl && fromUrl.includes('.')) return fromUrl
+
+  const ext = getExtensionFromMimeType(mimeType || 'image/png')
+  return `${Date.now()}_download${ext}`
+}
+
+function removeExtension(name: string): string {
+  const index = name.lastIndexOf('.')
+  return index > 0 ? name.slice(0, index) : name
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error || new Error('Failed to read blob'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+function handleDownloadError(error: any) {
+  logger.error('Download failed:', error)
+  if (error?.message) {
+    window.toast?.error(`${i18n.t('message.download.failed')}：${error.message}`)
+  } else {
+    window.toast?.error(i18n.t('message.download.failed'))
+  }
 }

@@ -1,33 +1,36 @@
-import { ToolUseBlock } from '@anthropic-ai/sdk/resources'
-import {
+import type { ToolUseBlock } from '@anthropic-ai/sdk/resources'
+import type {
   TextBlock,
   TextDelta,
   Usage,
   WebSearchResultBlock,
   WebSearchToolResultError
 } from '@anthropic-ai/sdk/resources/messages'
+import type OpenAI from '@cherrystudio/openai'
+import type { ChatCompletionChunk } from '@cherrystudio/openai/resources'
+import type { FunctionCall } from '@google/genai'
 import { FinishReason, MediaModality } from '@google/genai'
-import { FunctionCall } from '@google/genai'
 import AiProvider from '@renderer/aiCore'
-import { BaseApiClient, OpenAIAPIClient, ResponseChunkTransformerContext } from '@renderer/aiCore/legacy/clients'
-import { AnthropicAPIClient } from '@renderer/aiCore/legacy/clients/anthropic/AnthropicAPIClient'
+import type { BaseApiClient, OpenAIAPIClient, ResponseChunkTransformerContext } from '@renderer/aiCore/legacy/clients'
+import type { AnthropicAPIClient } from '@renderer/aiCore/legacy/clients/anthropic/AnthropicAPIClient'
 import { ApiClientFactory } from '@renderer/aiCore/legacy/clients/ApiClientFactory'
-import { GeminiAPIClient } from '@renderer/aiCore/legacy/clients/gemini/GeminiAPIClient'
-import { OpenAIResponseAPIClient } from '@renderer/aiCore/legacy/clients/openai/OpenAIResponseAPIClient'
-import { GenericChunk } from '@renderer/aiCore/legacy/middleware/schemas'
+import type { GeminiAPIClient } from '@renderer/aiCore/legacy/clients/gemini/GeminiAPIClient'
+import type { OpenAIResponseAPIClient } from '@renderer/aiCore/legacy/clients/openai/OpenAIResponseAPIClient'
+import type { GenericChunk } from '@renderer/aiCore/legacy/middleware/schemas'
 import { isVisionModel } from '@renderer/config/models'
-import { LlmState } from '@renderer/store/llm'
-import { Assistant, MCPCallToolResponse, MCPToolResponse, Model, Provider, WebSearchSource } from '@renderer/types'
-import {
+import type { LlmState } from '@renderer/store/llm'
+import type { Assistant, MCPCallToolResponse, MCPToolResponse, Model, Provider } from '@renderer/types'
+import { WEB_SEARCH_SOURCE } from '@renderer/types'
+import type {
   Chunk,
-  ChunkType,
   LLMResponseCompleteChunk,
   LLMWebSearchCompleteChunk,
   TextDeltaChunk,
   TextStartChunk,
   ThinkingStartChunk
 } from '@renderer/types/chunk'
-import {
+import { ChunkType } from '@renderer/types/chunk'
+import type {
   AnthropicSdkRawChunk,
   GeminiSdkMessageParam,
   GeminiSdkRawChunk,
@@ -38,8 +41,6 @@ import {
 import { mcpToolCallResponseToGeminiMessage } from '@renderer/utils/mcp-tools'
 import * as McpToolsModule from '@renderer/utils/mcp-tools'
 import { cloneDeep } from 'lodash'
-import OpenAI from 'openai'
-import { ChatCompletionChunk } from 'openai/resources'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 // Mock the ApiClientFactory
 vi.mock('@renderer/aiCore/legacy/clients/ApiClientFactory', () => ({
@@ -94,9 +95,20 @@ vi.mock('@renderer/services/AssistantService', () => ({
   }))
 }))
 
-vi.mock('@renderer/utils', () => ({
-  getLowerBaseModelName: vi.fn((name) => name.toLowerCase())
-}))
+vi.mock(import('@renderer/utils'), async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    getLowerBaseModelName: vi.fn((name) => name.toLowerCase())
+  }
+})
+
+vi.mock(import('@renderer/config/providers'), async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual
+  }
+})
 
 vi.mock('@renderer/config/prompts', () => ({
   WEB_SEARCH_PROMPT_FOR_OPENROUTER: 'mock-prompt'
@@ -105,10 +117,6 @@ vi.mock('@renderer/config/prompts', () => ({
 vi.mock('@renderer/config/systemModels', () => ({
   OPENAI_IMAGE_GENERATION_MODELS: [],
   GENERATE_IMAGE_MODELS: []
-}))
-
-vi.mock('@renderer/config/tools', () => ({
-  getWebSearchTools: vi.fn(() => [])
 }))
 
 // Mock store modules
@@ -229,9 +237,15 @@ vi.mock('@renderer/store/llm.ts', () => {
         location: ''
       },
       awsBedrock: {
+        authType: 'iam',
         accessKeyId: '',
         secretAccessKey: '',
+        apiKey: '',
         region: ''
+      },
+      cherryIn: {
+        accessToken: '',
+        refreshToken: ''
       }
     }
   } satisfies LlmState
@@ -1033,7 +1047,7 @@ const mockOpenaiApiClient = {
         hasBeenCollectedWebSearch = true
         return {
           results: annotations,
-          source: WebSearchSource.OPENAI
+          source: WEB_SEARCH_SOURCE.OPENAI
         }
       }
 
@@ -1044,7 +1058,7 @@ const mockOpenaiApiClient = {
         return {
           // @ts-ignore - citations may not be in standard type definitions
           results: chunk.citations,
-          source: WebSearchSource.GROK
+          source: WEB_SEARCH_SOURCE.GROK
         }
       }
 
@@ -1055,7 +1069,7 @@ const mockOpenaiApiClient = {
         return {
           // @ts-ignore - citations may not be in standard type definitions
           results: chunk.search_results,
-          source: WebSearchSource.PERPLEXITY
+          source: WEB_SEARCH_SOURCE.PERPLEXITY
         }
       }
 
@@ -1066,7 +1080,7 @@ const mockOpenaiApiClient = {
         return {
           // @ts-ignore - citations may not be in standard type definitions
           results: chunk.citations,
-          source: WebSearchSource.OPENROUTER
+          source: WEB_SEARCH_SOURCE.OPENROUTER
         }
       }
 
@@ -1077,7 +1091,7 @@ const mockOpenaiApiClient = {
         return {
           // @ts-ignore - web_search may not be in standard type definitions
           results: chunk.web_search,
-          source: WebSearchSource.ZHIPU
+          source: WEB_SEARCH_SOURCE.ZHIPU
         }
       }
 
@@ -1088,7 +1102,7 @@ const mockOpenaiApiClient = {
         return {
           // @ts-ignore - search_info may not be in standard type definitions
           results: chunk.search_info.search_results,
-          source: WebSearchSource.HUNYUAN
+          source: WEB_SEARCH_SOURCE.HUNYUAN
         }
       }
       return null
@@ -1401,7 +1415,7 @@ const mockGeminiApiClient = {
                   type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                   llm_web_search: {
                     results: candidate.groundingMetadata,
-                    source: WebSearchSource.GEMINI
+                    source: WEB_SEARCH_SOURCE.GEMINI
                   }
                 } as LLMWebSearchCompleteChunk)
               }
@@ -1515,7 +1529,7 @@ const mockAnthropicApiClient = {
                       type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                       llm_web_search: {
                         results: content.content,
-                        source: WebSearchSource.ANTHROPIC
+                        source: WEB_SEARCH_SOURCE.ANTHROPIC
                       }
                     } as LLMWebSearchCompleteChunk)
                     break
@@ -1568,7 +1582,7 @@ const mockAnthropicApiClient = {
                       type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                       llm_web_search: {
                         results: contentBlock.content as Array<WebSearchResultBlock>,
-                        source: WebSearchSource.ANTHROPIC
+                        source: WEB_SEARCH_SOURCE.ANTHROPIC
                       }
                     })
                   }

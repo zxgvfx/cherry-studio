@@ -3,48 +3,55 @@ import { loggerService } from '@logger'
 import { Sortable, useDndReorder } from '@renderer/components/dnd'
 import HorizontalScrollContainer from '@renderer/components/HorizontalScrollContainer'
 import { isMac } from '@renderer/config/constant'
-import { DEFAULT_MIN_APPS } from '@renderer/config/minapps'
-import { useTheme } from '@renderer/context/ThemeProvider'
+import { allMinApps } from '@renderer/config/minapps'
+// import { useTheme } from '@renderer/context/ThemeProvider' // 已移除主题切换功能
 import { useFullscreen } from '@renderer/hooks/useFullscreen'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
-import { getThemeModeLabel, getTitleLabel } from '@renderer/i18n/label'
+// import { useSettings } from '@renderer/hooks/useSettings'
+import { getTitleLabel } from '@renderer/i18n/label'
 import tabsService from '@renderer/services/TabsService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import type { Tab } from '@renderer/store/tabs'
-import { addTab, removeTab, setActiveTab, setTabs } from '@renderer/store/tabs'
-import { MinAppType, ThemeMode } from '@renderer/types'
+import { addTab, removeTab, setActiveTab, setTabs, updateTab } from '@renderer/store/tabs'
+import type { MinAppType } from '@renderer/types'
 import { classNames } from '@renderer/utils'
-import { Tooltip } from 'antd'
-import { LRUCache } from 'lru-cache'
+import type { LRUCache } from 'lru-cache'
 import {
+  Box,
   FileSearch,
   Folder,
-  Hammer,
   Home,
   Languages,
   LayoutGrid,
-  Monitor,
-  Moon,
+  MousePointerClick,
   NotepadText,
   Palette,
   Settings,
   Sparkle,
-  Sun,
   Terminal,
   X
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
 import MinAppIcon from '../Icons/MinAppIcon'
+import { OpenClawIcon } from '../Icons/SVGIcon'
 import MinAppTabsPool from '../MinApp/MinAppTabsPool'
-import WindowControls from '../WindowControls'
+import NewApiAccountBadge from '../NewApiAccountBadge'
+import PluginTabsPool from '../plugins/PluginTabsPool'
 
 interface TabsContainerProps {
   children: React.ReactNode
+}
+
+type GuiPluginManifest = {
+  id: string
+  name?: string
+  launcher?: {
+    label?: string
+  }
 }
 
 const logger = loggerService.withContext('TabContainer')
@@ -57,7 +64,7 @@ const getTabIcon = (
   // Check if it's a minapp tab (format: apps:appId)
   if (tabId.startsWith('apps:')) {
     const appId = tabId.replace('apps:', '')
-    let app = [...DEFAULT_MIN_APPS, ...minapps].find((app) => app.id === appId)
+    let app = [...allMinApps, ...minapps].find((app) => app.id === appId)
 
     // If not found in permanent apps, search in temporary apps cache
     // The cache stores apps opened via openSmartMinapp() for top navbar mode
@@ -83,10 +90,17 @@ const getTabIcon = (
     return <LayoutGrid size={14} />
   }
 
+  if (tabId.startsWith('plugins:')) {
+    return <Box size={14} />
+  }
+
+  // TODO: Add TabId as type instead of string
   switch (tabId) {
     case 'home':
       return <Home size={14} />
     case 'agents':
+      return <MousePointerClick size={14} />
+    case 'store':
       return <Sparkle size={14} />
     case 'translate':
       return <Languages size={14} />
@@ -98,14 +112,14 @@ const getTabIcon = (
       return <NotepadText size={14} />
     case 'knowledge':
       return <FileSearch size={14} />
-    case 'mcp':
-      return <Hammer size={14} />
     case 'files':
       return <Folder size={14} />
     case 'settings':
       return <Settings size={14} />
     case 'code':
       return <Terminal size={14} />
+    case 'openclaw':
+      return <OpenClawIcon style={{ width: 14, height: 14 }} />
     default:
       return null
   }
@@ -121,17 +135,22 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   const tabs = useAppSelector((state) => state.tabs.tabs)
   const activeTabId = useAppSelector((state) => state.tabs.activeTabId)
   const isFullscreen = useFullscreen()
-  const { settedTheme, toggleTheme } = useTheme()
+  // const { settedTheme, toggleTheme } = useTheme() // 已移除主题切换功能
   const { hideMinappPopup, minAppsCache } = useMinappPopup()
   const { minapps } = useMinapps()
-  const { t } = useTranslation()
+  const [guiPlugins, setGuiPlugins] = useState<GuiPluginManifest[]>([])
+  // const { t } = useTranslation() // 已移除主题切换相关翻译
 
   const getTabId = (path: string): string => {
-    if (path === '/') return 'home'
-    const segments = path.split('/')
+    const pathname = path.split('?')[0]
+    if (pathname === '/') return 'home'
+    const segments = pathname.split('/')
     // Handle minapp paths: /apps/appId -> apps:appId
     if (segments[1] === 'apps' && segments[2]) {
       return `apps:${segments[2]}`
+    }
+    if (segments[1] === 'plugins' && segments[2]) {
+      return `plugins:${decodeURIComponent(segments[2])}`
     }
     return segments[1] // 获取第一个路径段作为 id
   }
@@ -140,7 +159,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
     // Check if it's a minapp tab
     if (tabId.startsWith('apps:')) {
       const appId = tabId.replace('apps:', '')
-      let app = [...DEFAULT_MIN_APPS, ...minapps].find((app) => app.id === appId)
+      let app = [...allMinApps, ...minapps].find((app) => app.id === appId)
 
       // If not found in permanent apps, search in temporary apps cache
       // This ensures temporary MinApps display proper titles while being used
@@ -158,6 +177,11 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
       // Return app name if found, otherwise use fallback with appId
       return app ? app.name : `MinApp-${appId}`
     }
+    if (tabId.startsWith('plugins:')) {
+      const pluginId = tabId.replace('plugins:', '')
+      const plugin = guiPlugins.find((plugin) => plugin.id === pluginId)
+      return plugin?.launcher?.label || plugin?.name || pluginId
+    }
     return getTitleLabel(tabId)
   }
 
@@ -166,6 +190,38 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
     if (path === '/settings') return false
     return !tabs.some((tab) => tab.id === getTabId(path))
   }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadGuiPlugins = async () => {
+      try {
+        const response = await fetch('/api/v1/plugins/list')
+        const result = await response.json()
+        if (!response.ok) {
+          throw new Error(result?.error || 'Failed to load plugins')
+        }
+
+        const plugins = Array.isArray(result?.plugins) ? result.plugins : []
+        if (!cancelled) {
+          setGuiPlugins(plugins)
+        }
+      } catch (error) {
+        logger.warn(
+          `Failed to load plugin manifests for tabs: ${error instanceof Error ? error.message : String(error)}`
+        )
+        if (!cancelled) {
+          setGuiPlugins([])
+        }
+      }
+    }
+
+    loadGuiPlugins()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const removeSpecialTabs = useCallback(() => {
     specialTabs.forEach((tabId) => {
@@ -176,12 +232,16 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   }, [activeTabId, dispatch])
 
   useEffect(() => {
-    const tabId = getTabId(location.pathname)
+    const currentPath = `${location.pathname}${location.search}`
+    const tabId = getTabId(currentPath)
     const currentTab = tabs.find((tab) => tab.id === tabId)
 
-    if (!currentTab && shouldCreateTab(location.pathname)) {
-      dispatch(addTab({ id: tabId, path: location.pathname }))
+    if (!currentTab && shouldCreateTab(currentPath)) {
+      dispatch(addTab({ id: tabId, path: currentPath }))
     } else if (currentTab) {
+      if (currentTab.path !== currentPath) {
+        dispatch(updateTab({ id: currentTab.id, updates: { path: currentPath } }))
+      }
       dispatch(setActiveTab(currentTab.id))
     }
 
@@ -190,7 +250,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
       lastSettingsPath = location.pathname
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, location.pathname])
+  }, [dispatch, location.pathname, location.search])
 
   useEffect(() => {
     removeSpecialTabs()
@@ -236,54 +296,59 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
             gap={'6px'}
             onSortEnd={onSortEnd}
             className="tabs-sortable"
-            renderItem={(tab) => (
-              <Tab key={tab.id} active={tab.id === activeTabId} onClick={() => handleTabClick(tab)}>
-                <TabHeader>
-                  {tab.id && <TabIcon>{getTabIcon(tab.id, minapps, minAppsCache)}</TabIcon>}
-                  <TabTitle>{getTabTitle(tab.id)}</TabTitle>
-                </TabHeader>
-                {tab.id !== 'home' && (
-                  <CloseButton
-                    className="close-button"
-                    data-no-dnd
-                    onClick={(e) => {
+            renderItem={(tab) => {
+              const isClosable = tab.id !== 'home' && tab.id !== 'agents'
+              return (
+                <Tab
+                  key={tab.id}
+                  active={tab.id === activeTabId}
+                  $closable={isClosable}
+                  onClick={() => handleTabClick(tab)}
+                  onAuxClick={(e) => {
+                    if (e.button === 1 && isClosable) {
+                      e.preventDefault()
                       e.stopPropagation()
                       closeTab(tab.id)
-                    }}>
-                    <X size={12} />
-                  </CloseButton>
-                )}
-              </Tab>
-            )}
+                    }
+                  }}>
+                  <TabHeader>
+                    {tab.id && <TabIcon>{getTabIcon(tab.id, minapps, minAppsCache)}</TabIcon>}
+                    <TabTitle>{getTabTitle(tab.id)}</TabTitle>
+                  </TabHeader>
+                  {isClosable && (
+                    <CloseButton
+                      className="close-button"
+                      data-no-dnd
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        closeTab(tab.id)
+                      }}>
+                      <X size={12} />
+                    </CloseButton>
+                  )}
+                </Tab>
+              )
+            }}
           />
           <AddTabButton onClick={handleAddTab} className={classNames({ active: activeTabId === 'launchpad' })}>
             <PlusOutlined />
           </AddTabButton>
         </HorizontalScrollContainer>
         <RightButtonsContainer>
-          <Tooltip
-            title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
-            mouseEnterDelay={0.8}
-            placement="bottom">
-            <ThemeButton onClick={toggleTheme}>
-              {settedTheme === ThemeMode.dark ? (
-                <Moon size={16} />
-              ) : settedTheme === ThemeMode.light ? (
-                <Sun size={16} />
-              ) : (
-                <Monitor size={16} />
-              )}
-            </ThemeButton>
-          </Tooltip>
+          <NewApiAccountBadge />
+          {/* 主题切换按钮已移除 - 页面嵌入到 Qt 窗口中 */}
           <SettingsButton onClick={handleSettingsClick} $active={activeTabId === 'settings'}>
             <Settings size={16} />
           </SettingsButton>
         </RightButtonsContainer>
-        <WindowControls />
+        {/* 窗口控制按钮已移除 - 页面嵌入到 Qt 窗口中 */}
+        {/* <WindowControls /> */}
       </TabsBar>
       <TabContent>
         {/* MiniApp WebView 池（Tab 模式保活） */}
         <MinAppTabsPool />
+        {/* 插件 iframe 池（Tab 模式保活，避免 AI Pipeline 等嵌套页状态丢失） */}
+        <PluginTabsPool />
         {children}
       </TabContent>
     </Container>
@@ -325,7 +390,7 @@ const TabsBar = styled.div<{ $isFullscreen: boolean }>`
   }
 `
 
-const Tab = styled.div<{ active?: boolean }>`
+const Tab = styled.div<{ active?: boolean; $closable?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -339,7 +404,7 @@ const Tab = styled.div<{ active?: boolean }>`
   min-width: 90px;
 
   .close-button {
-    opacity: 0;
+    opacity: ${(props) => (props.active && props.$closable ? 1 : 0)};
     transition: opacity 0.2s;
   }
 
@@ -411,20 +476,21 @@ const RightButtonsContainer = styled.div`
   flex-shrink: 0;
 `
 
-const ThemeButton = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-  color: var(--color-text);
-
-  &:hover {
-    background: var(--color-list-item);
-    border-radius: 8px;
-  }
-`
+// 主题按钮样式已移除 - 页面嵌入到 Qt 窗口中
+// const ThemeButton = styled.div`
+//   display: flex;
+//   align-items: center;
+//   justify-content: center;
+//   width: 30px;
+//   height: 30px;
+//   cursor: pointer;
+//   color: var(--color-text);
+//
+//   &:hover {
+//     background: var(--color-list-item);
+//     border-radius: 8px;
+//   }
+// `
 
 const SettingsButton = styled.div<{ $active: boolean }>`
   display: flex;

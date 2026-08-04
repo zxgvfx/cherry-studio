@@ -5,8 +5,8 @@ import WebSearchEngineProvider from '@renderer/providers/WebSearchProvider'
 import { addSpan, endSpan } from '@renderer/services/SpanManagerService'
 import store from '@renderer/store'
 import { setWebSearchStatus } from '@renderer/store/runtime'
-import { CompressionConfig, WebSearchState } from '@renderer/store/websearch'
-import {
+import type { CompressionConfig, WebSearchState } from '@renderer/store/websearch'
+import type {
   KnowledgeBase,
   KnowledgeItem,
   KnowledgeReference,
@@ -15,14 +15,13 @@ import {
   WebSearchProviderResult,
   WebSearchStatus
 } from '@renderer/types'
-import { hasObjectKey, uuid } from '@renderer/utils'
+import { hasObjectKey, removeSpecialCharactersForFileName, uuid } from '@renderer/utils'
 import { addAbortController } from '@renderer/utils/abortController'
 import { formatErrorMessage } from '@renderer/utils/error'
-import { ExtractResults } from '@renderer/utils/extract'
+import type { ExtractResults } from '@renderer/utils/extract'
 import { fetchWebContents } from '@renderer/utils/fetch'
 import { consolidateReferencesByUrl, selectReferences } from '@renderer/utils/websearch'
 import dayjs from 'dayjs'
-import { LRUCache } from 'lru-cache'
 import { sliceByTokens } from 'tokenx'
 
 import { getKnowledgeBaseParams } from './KnowledgeService'
@@ -32,7 +31,6 @@ const logger = loggerService.withContext('WebSearchService')
 
 interface RequestState {
   signal: AbortSignal | null
-  searchBase?: KnowledgeBase
   isPaused: boolean
   createdAt: number
 }
@@ -49,16 +47,7 @@ class WebSearchService {
   isPaused = false
 
   // 管理不同请求的状态
-  private requestStates = new LRUCache<string, RequestState>({
-    max: 5, // 最多5个并发请求
-    ttl: 1000 * 60 * 2, // 2分钟过期
-    dispose: (requestState: RequestState, requestId: string) => {
-      if (!requestState.searchBase) return
-      window.api.knowledgeBase
-        .delete(getKnowledgeBaseParams(requestState.searchBase), requestState.searchBase.id)
-        .catch((error) => logger.warn(`Failed to cleanup search base for ${requestId}:`, error))
-    }
-  })
+  private requestStates = new Map<string, RequestState>()
 
   /**
    * 获取或创建单个请求的状态
@@ -192,7 +181,10 @@ class WebSearchService {
       const response = await this.search(provider, 'test query')
       logger.debug('Search response:', response)
       // 优化的判断条件：检查结果是否有效且没有错误
-      return { valid: response.results !== undefined, error: undefined }
+      // 允许空结果，因为空结果也表示搜索功能正常运行，只是没有找到匹配项
+      // return { valid: response.results !== undefined, error: undefined }
+      // 现在放宽条件，只要没有抛出错误，都视为有效
+      return { valid: true, error: undefined }
     } catch (error) {
       return { valid: false, error }
     }
@@ -209,32 +201,22 @@ class WebSearchService {
   }
 
   /**
-   * 确保搜索压缩知识库存在并配置正确
+   * 创建临时搜索知识库
    */
   private async ensureSearchBase(
     config: CompressionConfig,
     documentCount: number,
     requestId: string
   ): Promise<KnowledgeBase> {
+    // requestId: eg: openai-responses-openai/gpt-5-timestamp-uuid
     const baseId = `websearch-compression-${requestId}`
-    const state = this.getRequestState(requestId)
-
-    // 如果已存在且配置未变，直接复用
-    if (state.searchBase && this.isConfigMatched(state.searchBase, config)) {
-      return state.searchBase
-    }
-
-    // 清理旧的知识库
-    if (state.searchBase) {
-      await window.api.knowledgeBase.delete(getKnowledgeBaseParams(state.searchBase), state.searchBase.id)
-    }
 
     if (!config.embeddingModel) {
       throw new Error('Embedding model is required for RAG compression')
     }
 
     // 创建新的知识库
-    state.searchBase = {
+    const searchBase: KnowledgeBase = {
       id: baseId,
       name: `WebSearch-RAG-${requestId}`,
       model: config.embeddingModel,
@@ -247,25 +229,23 @@ class WebSearchService {
       version: 1
     }
 
-    // 更新LRU cache
-    this.requestStates.set(requestId, state)
-
     // 创建知识库
-    const baseParams = getKnowledgeBaseParams(state.searchBase)
+    const baseParams = getKnowledgeBaseParams(searchBase)
     await window.api.knowledgeBase.create(baseParams)
 
-    return state.searchBase
+    return searchBase
   }
 
   /**
-   * 检查配置是否匹配
+   * 清理临时搜索知识库
    */
-  private isConfigMatched(base: KnowledgeBase, config: CompressionConfig): boolean {
-    return (
-      base.model.id === config.embeddingModel?.id &&
-      base.rerankModel?.id === config.rerankModel?.id &&
-      base.dimensions === config.embeddingDimensions
-    )
+  private async cleanupSearchBase(searchBase: KnowledgeBase): Promise<void> {
+    try {
+      await window.api.knowledgeBase.delete(removeSpecialCharactersForFileName(searchBase.id))
+      logger.debug(`Cleaned up search base: ${searchBase.id}`)
+    } catch (error) {
+      logger.warn(`Failed to cleanup search base ${searchBase.id}:`, error as Error)
+    }
   }
 
   /**
@@ -332,45 +312,50 @@ class WebSearchService {
     const searchBase = await this.ensureSearchBase(config, totalDocumentCount, requestId)
     logger.debug('Search base for RAG compression: ', searchBase)
 
-    // 1. 清空知识库
-    const baseParams = getKnowledgeBaseParams(searchBase)
-    await window.api.knowledgeBase.reset(baseParams)
+    try {
+      // 1. 清空知识库
+      const baseParams = getKnowledgeBaseParams(searchBase)
+      await window.api.knowledgeBase.reset(baseParams)
 
-    logger.debug('Search base parameters for RAG compression: ', baseParams)
+      logger.debug('Search base parameters for RAG compression: ', baseParams)
 
-    // 2. 顺序添加所有搜索结果到知识库
-    // FIXME: 目前的知识库 add 不支持并发
-    for (const result of rawResults) {
-      const item: KnowledgeItem & { sourceUrl?: string } = {
-        id: uuid(),
-        type: 'note',
-        content: result.content,
-        sourceUrl: result.url, // 设置 sourceUrl 用于映射
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        processingStatus: 'pending'
+      // 2. 顺序添加所有搜索结果到知识库
+      // FIXME: 目前的知识库 add 不支持并发
+      for (const result of rawResults) {
+        const item: KnowledgeItem & { sourceUrl?: string } = {
+          id: uuid(),
+          type: 'note',
+          content: result.content,
+          sourceUrl: result.url, // 设置 sourceUrl 用于映射
+          created_at: Date.now(),
+          updated_at: Date.now(),
+          processingStatus: 'pending'
+        }
+
+        await window.api.knowledgeBase.add({
+          base: getKnowledgeBaseParams(searchBase),
+          item
+        })
       }
 
-      await window.api.knowledgeBase.add({
-        base: getKnowledgeBaseParams(searchBase),
-        item
+      // 3. 对知识库执行多问题搜索获取压缩结果
+      const references = await this.querySearchBase(questions, searchBase)
+
+      // 4. 使用 Round Robin 策略选择引用
+      const selectedReferences = selectReferences(rawResults, references, totalDocumentCount)
+
+      logger.verbose('With RAG, the number of search results:', {
+        raw: rawResults.length,
+        retrieved: references.length,
+        selected: selectedReferences.length
       })
+
+      // 5. 按 sourceUrl 分组并合并同源片段
+      return consolidateReferencesByUrl(rawResults, selectedReferences)
+    } finally {
+      // 无论成功或失败都立即清理知识库
+      await this.cleanupSearchBase(searchBase)
     }
-
-    // 3. 对知识库执行多问题搜索获取压缩结果
-    const references = await this.querySearchBase(questions, searchBase)
-
-    // 4. 使用 Round Robin 策略选择引用
-    const selectedReferences = selectReferences(rawResults, references, totalDocumentCount)
-
-    logger.verbose('With RAG, the number of search results:', {
-      raw: rawResults.length,
-      retrieved: references.length,
-      selected: selectedReferences.length
-    })
-
-    // 5. 按 sourceUrl 分组并合并同源片段
-    return consolidateReferencesByUrl(rawResults, selectedReferences)
   }
 
   /**
@@ -406,6 +391,79 @@ class WebSearchService {
           content:
             result.content.length > perResultLimit ? result.content.slice(0, perResultLimit) + '...' : result.content
         }
+      }
+    })
+  }
+
+  /**
+   * 从内容中分离 "## Extracted Images" 等资源段落，
+   * 返回 [正文, 资源段落]。截断时只截正文，资源段落原样保留。
+   */
+  private splitAssetsSections(content: string): [string, string] {
+    const assetHeaders = ['## Extracted Images', '## Extracted Page Links']
+    let splitIdx = content.length
+    for (const header of assetHeaders) {
+      const idx = content.indexOf(header)
+      if (idx !== -1 && idx < splitIdx) {
+        splitIdx = idx
+      }
+    }
+    if (splitIdx === content.length) return [content, '']
+    return [content.slice(0, splitIdx).trimEnd(), content.slice(splitIdx)]
+  }
+
+  /**
+   * 限制资源段落中的图片数量，避免过多图片占用 token。
+   */
+  private limitImagesInAssets(assets: string, maxImages: number): string {
+    if (!assets) return assets
+    const lines = assets.split('\n')
+    let imageCount = 0
+    const kept: string[] = []
+    for (const line of lines) {
+      if (/^!\[.*\]\(.*\)$/.test(line.trim())) {
+        imageCount++
+        if (imageCount > maxImages) continue
+      }
+      kept.push(line)
+    }
+    return kept.join('\n')
+  }
+
+  /**
+   * Qt 环境下的搜索结果截断。
+   * 将所有结果的总字符数控制在预算内（约 8000 token ≈ 24000 字符），
+   * 每条结果平均分配配额。截断时保留图片资源段落，确保模型能引用图片。
+   */
+  private truncateForQt(results: WebSearchProviderResult[]): WebSearchProviderResult[] {
+    if (results.length === 0) return results
+
+    const totalCharBudget = 24000
+    const maxImagesPerResult = 5
+    const totalChars = results.reduce((sum, r) => sum + (r.content?.length || 0), 0)
+    if (totalChars <= totalCharBudget) return results
+
+    const parsed = results.map((r) => {
+      const [text, assets] = this.splitAssetsSections(r.content || '')
+      const limitedAssets = this.limitImagesInAssets(assets, maxImagesPerResult)
+      return { result: r, text, assets: limitedAssets }
+    })
+
+    const totalAssetsChars = parsed.reduce((sum, p) => sum + p.assets.length, 0)
+    const textBudget = Math.max(2000, totalCharBudget - totalAssetsChars)
+    const perResultTextLimit = Math.max(300, Math.floor(textBudget / results.length))
+
+    logger.info(
+      `[WebSearchService] Qt truncation: ${totalChars} chars → ~${totalCharBudget} chars ` +
+        `(text ${perResultTextLimit}/result, assets preserved)`
+    )
+
+    return parsed.map(({ result, text, assets }) => {
+      const truncatedText =
+        text.length > perResultTextLimit ? text.slice(0, perResultTextLimit) + '...' : text
+      return {
+        ...result,
+        content: assets ? `${truncatedText}\n\n${assets}` : truncatedText
       }
     })
   }
@@ -462,7 +520,9 @@ class WebSearchService {
 
     // 处理 summarize
     if (questions[0] === 'summarize' && links && links.length > 0) {
-      const contents = await fetchWebContents(links, undefined, undefined, { signal })
+      const contents = await fetchWebContents(links, undefined, undefined, {
+        signal
+      })
       webSearchProvider.topicId &&
         endSpan({
           topicId: webSearchProvider.topicId,
@@ -529,8 +589,13 @@ class WebSearchService {
 
     const { compressionConfig } = this.getWebSearchState()
 
-    // RAG压缩处理
-    if (compressionConfig?.method === 'rag' && requestId) {
+    // 检测 Qt 环境 - 在 Qt 环境中跳过 RAG 压缩以避免卡顿
+    const isQtEnvironment =
+      typeof window !== 'undefined' &&
+      (!!(window as any).qt?.api || !!(window as any).qt?.network || !(window as any).electron)
+
+    // RAG压缩处理 - 在 Qt 环境中跳过，因为嵌入服务可能不可用
+    if (compressionConfig?.method === 'rag' && requestId && !isQtEnvironment) {
       await this.setWebSearchStatus(requestId, { phase: 'rag' }, 500)
 
       const originalCount = finalResults.length
@@ -557,10 +622,20 @@ class WebSearchService {
         await this.setWebSearchStatus(requestId, { phase: 'rag_failed' }, 1000)
       }
     }
+    // 在 Qt 环境中使用简单截断替代 RAG
+    else if (isQtEnvironment && compressionConfig?.method === 'rag') {
+      logger.info('[WebSearchService] Qt environment detected, skipping RAG compression, using simple truncation instead')
+      finalResults = this.truncateForQt(finalResults)
+    }
     // 截断压缩处理
     else if (compressionConfig?.method === 'cutoff' && compressionConfig.cutoffLimit) {
       await this.setWebSearchStatus(requestId, { phase: 'cutoff' }, 500)
       finalResults = await this.compressWithCutoff(finalResults, compressionConfig)
+    }
+
+    // Qt 环境兜底：无论压缩配置如何，确保总内容不会过大
+    if (isQtEnvironment) {
+      finalResults = this.truncateForQt(finalResults)
     }
 
     // 重置状态

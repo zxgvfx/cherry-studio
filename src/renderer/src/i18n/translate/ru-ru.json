@@ -1,80 +1,421 @@
 {
-  "agents": {
+  "agent": {
     "add": {
-      "button": "Добавить в ассистента",
-      "knowledge_base": {
-        "label": "База знаний",
-        "placeholder": "Выберите базу знаний"
+      "description": "Справляйтесь со сложными задачами с помощью различных инструментов",
+      "error": {
+        "failed": "Не удалось добавить агента",
+        "invalid_agent": "Недействительный агент"
       },
-      "name": {
-        "label": "Имя",
-        "placeholder": "Введите имя"
+      "model": {
+        "supported_providers": "Поддерживаемые поставщики",
+        "tooltip": "В настоящее время для функции агента доступны только модели, поддерживающие конечные точки Anthropic.",
+        "view_providers": "Просмотреть поддерживаемых поставщиков"
       },
-      "prompt": {
-        "label": "Промпт",
-        "placeholder": "Введите промпт",
-        "variables": {
-          "tip": {
-            "content": "{{date}}:\tДата\n{{time}}:\tВремя\n{{datetime}}:\tДата и время\n{{system}}:\tОперационная система\n{{arch}}:\tАрхитектура процессора\n{{language}}:\tЯзык\n{{model_name}}:\tНазвание модели\n{{username}}:\tИмя пользователя",
-            "title": "Доступные переменные"
-          }
-        }
-      },
-      "title": "Создать агента",
-      "unsaved_changes_warning": "У вас есть несохраненные изменения. Вы уверены, что хотите закрыть?"
-    },
-    "delete": {
-      "popup": {
-        "content": "Вы уверены, что хотите удалить этого агента?"
+      "title": "Добавить агента",
+      "type": {
+        "placeholder": "Выбор типа агента"
       }
     },
+    "askUserQuestion": {
+      "answered": "ответил",
+      "customPlaceholder": "Введите ваш ответ...",
+      "loading": "Загрузка вопросов...",
+      "multiSelect": "Множественный выбор",
+      "next": "Далее",
+      "noQuestions": "Нет доступных вопросов",
+      "other": "Другое",
+      "previous": "Предыдущий",
+      "submit": "Отправить",
+      "title": "Вопросы от агента"
+    },
+    "delete": {
+      "content": "Удаление этого агента приведёт к принудительному завершению и удалению всех сессий, связанных с ним. Вы уверены?",
+      "error": {
+        "failed": "Не удалось удалить агента"
+      },
+      "title": "Удалить агента"
+    },
     "edit": {
-      "model": {
-        "select": {
-          "title": "Выбрать модель"
+      "title": "Редактировать агент"
+    },
+    "empty": {
+      "description": "Создайте агента для решения сложных задач с помощью инструментов на базе ИИ",
+      "title": "Агентов пока нет"
+    },
+    "get": {
+      "error": {
+        "failed": "Не удалось получить агента.",
+        "null_id": "ID агента равен null."
+      }
+    },
+    "gitBash": {
+      "autoDetected": "Используется автоматически обнаруженный Git Bash",
+      "autoDiscoveredHint": "Автоматически обнаруженный",
+      "clear": {
+        "button": "Очистить пользовательский путь"
+      },
+      "customPath": "Используется пользовательский путь: {{path}}",
+      "error": {
+        "description": "Для запуска агентов в Windows требуется Git Bash. Без него агент не может работать. Пожалуйста, установите Git для Windows с",
+        "recheck": "Повторная проверка установки Git Bash",
+        "required": "Требуется путь к Git Bash в Windows",
+        "title": "Требуется Git Bash"
+      },
+      "found": {
+        "title": "Git Bash настроен"
+      },
+      "notFound": "Git Bash не найден. Пожалуйста, сначала установите его.",
+      "pick": {
+        "button": "Выбрать путь Git Bash",
+        "failed": "Не удалось настроить путь Git Bash",
+        "invalidPath": "Выбранный файл не является допустимым исполняемым файлом Git Bash (bash.exe).",
+        "title": "Выберите исполняемый файл Git Bash"
+      },
+      "placeholder": "Выберите путь к bash.exe",
+      "success": "Git Bash успешно обнаружен!",
+      "tooltip": "Для запуска агентов в Windows требуется Git Bash. Установите его с сайта git-scm.com, если он отсутствует."
+    },
+    "input": {
+      "placeholder": "Введите ваше сообщение здесь, отправьте с помощью {{key}} — @ выбрать путь, / выбрать команду"
+    },
+    "list": {
+      "error": {
+        "failed": "Не удалось получить список агентов."
+      }
+    },
+    "reorder": {
+      "error": {
+        "failed": "Не удалось изменить порядок агентов"
+      }
+    },
+    "server": {
+      "error": {
+        "not_running": "API-сервер включен, но работает неправильно."
+      }
+    },
+    "session": {
+      "accessible_paths": {
+        "add": "Добавить каталог",
+        "default_hint": "По умолчанию: {{path}}",
+        "duplicate": "Этот каталог уже включён.",
+        "empty": "Выберите хотя бы один каталог, к которому агент имеет доступ.",
+        "error": {
+          "at_least_one": "Пожалуйста, выберите хотя бы один доступный каталог."
+        },
+        "label": "Доступные директории",
+        "select_failed": "Не удалось выбрать каталог."
+      },
+      "add": {
+        "title": "Добавить сеанс"
+      },
+      "allowed_tools": {
+        "empty": "Для этого агента нет доступных инструментов.",
+        "helper": "Выберите инструменты с предварительным допуском. Неотмеченные инструменты потребуют подтверждения перед использованием.",
+        "label": "Предварительно одобренные инструменты",
+        "placeholder": "Выберите предварительно одобренные инструменты"
+      },
+      "create": {
+        "error": {
+          "failed": "Не удалось добавить сеанс"
         }
       },
-      "title": "Редактировать агента"
-    },
-    "export": {
-      "agent": "Экспорт агента"
-    },
-    "import": {
-      "button": "Импорт",
-      "error": {
-        "fetch_failed": "Не удалось получить данные по URL",
-        "invalid_format": "Неверный формат агента: отсутствуют обязательные поля",
-        "url_required": "Пожалуйста, введите URL"
+      "delete": {
+        "content": "Вы уверены, что хотите удалить этот сеанс?",
+        "error": {
+          "failed": "Не удалось удалить сеанс",
+          "last": "Должен быть сохранён хотя бы один сеанс"
+        },
+        "title": "Удалить сеанс"
       },
-      "file_filter": "JSON файлы",
-      "select_file": "Выбрать файл",
-      "title": "Импорт из внешнего источника",
-      "type": {
-        "file": "Файл",
-        "url": "URL"
+      "edit": {
+        "title": "Сессия редактирования"
       },
-      "url_placeholder": "Введите URL JSON"
-    },
-    "manage": {
-      "title": "Редактировать агентов"
-    },
-    "my_agents": "Мои агенты",
-    "search": {
-      "no_results": "Результаты не найдены"
+      "get": {
+        "error": {
+          "failed": "Не удалось получить сеанс",
+          "null_id": "ID сессии равен null"
+        }
+      },
+      "label_one": "Сессия",
+      "label_other": "Сессии",
+      "reorder": {
+        "error": {
+          "failed": "Не удалось изменить порядок сеансов"
+        }
+      },
+      "update": {
+        "error": {
+          "failed": "Не удалось обновить сеанс"
+        }
+      }
     },
     "settings": {
-      "title": "Настройки агента"
+      "advance": {
+        "envVars": {
+          "description": "Задайте пользовательские переменные окружения для среды выполнения агента.",
+          "helper": "Введите пользовательские переменные окружения (по одной в строке, формат: КЛЮЧ=значение)",
+          "label": "Переменные окружения"
+        },
+        "maxTurns": {
+          "description": "Установить количество циклов запрос/ответ, выполняемых автоматически через прокси.",
+          "helper": "Чем выше значение, тем дольше может работать автономно; чем ниже значение, тем легче контролировать.",
+          "label": "Максимальное количество раундов сеанса"
+        },
+        "permissionMode": {
+          "description": "Как агент управления обрабатывает ситуации, требующие авторизации.",
+          "label": "Режим разрешений",
+          "options": {
+            "acceptEdits": "Автоматически принимать правки",
+            "bypassPermissions": "Пропустить проверку разрешений",
+            "default": "По умолчанию (спросить перед продолжением)",
+            "plan": "Режим планирования (требуется утверждение плана)"
+          },
+          "placeholder": "Выбрать режим разрешений"
+        },
+        "title": "Расширенные настройки"
+      },
+      "essential": "Основные настройки",
+      "permissionMode": {
+        "tab": "Режим разрешений",
+        "title": "Режим разрешений"
+      },
+      "plugins": {
+        "available": {
+          "title": "Доступные плагины"
+        },
+        "confirm": {
+          "uninstall": "Вы уверены, что хотите удалить этот плагин?"
+        },
+        "empty": {
+          "available": "Совпадающие плагины не найдены. Попробуйте изменить поиск или фильтр категорий."
+        },
+        "error": {
+          "install": "Ошибка установки плагина",
+          "load": "Ошибка загрузки плагина",
+          "load_more": "Не удалось загрузить больше плагинов",
+          "uninstall": "Не удалось удалить плагин"
+        },
+        "filter": {
+          "all": "Все категории"
+        },
+        "install": {
+          "button": "Установить",
+          "title": "Установить плагины"
+        },
+        "installed": {
+          "empty": "Плагины ещё не установлены. Просмотрите доступные плагины, чтобы начать.",
+          "title": "Установленные плагины"
+        },
+        "installing": "Установка...",
+        "plugin_upload": {
+          "all_failed": "Все {{failed}} компоненты не удалось установить",
+          "error": "Установка не удалась",
+          "format_hint": "Поддерживает пакеты плагинов (.claude-plugin/plugin.json)",
+          "hint": "Перетащите ZIP-архив плагина сюда или нажмите для выбора",
+          "invalid_format": "Пожалуйста, загрузите ZIP-файл",
+          "partial_success": "Плагин \"{{name}}\" частично установлен: {{installed}} установлено, {{failed}} не удалось",
+          "select_folder": "Выбрать папку",
+          "select_folder_title": "Выбрать папку плагина",
+          "success": "Плагин \"{{name}}\" успешно установлен ({{count}} компонентов)",
+          "success_multi": "Установлено {{count}} компонентов из {{packages}} пакетов",
+          "uploading": "Загрузка и установка..."
+        },
+        "results": "Найдено {{count}} плагинов",
+        "search": {
+          "placeholder": "Поиск плагинов..."
+        },
+        "standalone_plugins": "Автономные плагины",
+        "success": {
+          "install": "Плагин успешно установлен",
+          "uninstall": "Плагин успешно удалён",
+          "uninstall_package": "Пакет \"{{name}}\" успешно удалён"
+        },
+        "tab": "плагин",
+        "type": {
+          "agent": "агент",
+          "agents": "Прокси",
+          "all": "всё",
+          "command": "команда",
+          "commands": "команда",
+          "skills": "навык"
+        },
+        "uninstall": "Удаление",
+        "uninstall_package": "Удалить пакет",
+        "uninstall_package_confirm": "Вы уверены, что хотите удалить весь пакет «{{name}}»? Это приведёт к удалению {{count}} компонента(-ов).",
+        "uninstalling": "Удаление..."
+      },
+      "prompt": "Настройки подсказки",
+      "tooling": {
+        "mcp": {
+          "description": "Подключите серверы MCP, чтобы разблокировать дополнительные инструменты, которые вы можете одобрить выше.",
+          "empty": "Серверы MCP не обнаружены. Добавьте один на странице настроек MCP.",
+          "inactiveTooltip": "Этот MCP-сервер не активен. Пожалуйста, сначала запустите его.",
+          "manageHint": "Нужна расширенная настройка? Перейдите в Настройки → Серверы MCP.",
+          "toggle": "Переключить {{name}}"
+        },
+        "permissionMode": {
+          "acceptEdits": {
+            "description": "Редактирование файлов и операции с файловой системой автоматически одобряются.",
+            "title": "Автоматически принимать изменения файлов"
+          },
+          "bypassPermissions": {
+            "description": "Все запросы разрешений пропускаются — используйте с осторожностью.",
+            "title": "Обход проверки разрешений",
+            "warning": "Использовать с осторожностью — все инструменты будут запущены без запроса подтверждения."
+          },
+          "confirmChange": {
+            "description": "Переключение режимов обновляет автоматически одобренные инструменты.",
+            "title": "Изменить режим разрешений?"
+          },
+          "default": {
+            "description": "Применяются обычные проверки разрешений.",
+            "title": "По умолчанию (спросить перед продолжением)"
+          },
+          "helper": "Определяет, как агент обрабатывает авторизацию использования инструментов",
+          "placeholder": "Выбрать режим разрешений",
+          "plan": {
+            "description": "Claude может использовать только инструменты только для чтения и представляет план перед выполнением.",
+            "title": "Режим планирования (скоро появится)"
+          },
+          "title": "Режим разрешений"
+        },
+        "preapproved": {
+          "autoBadge": "Добавлено режимом",
+          "autoDescription": "Этот инструмент автоматически одобрен текущим режимом разрешений.",
+          "autoDisabledTooltip": "Автоматически одобрено режимом \"{{mode}}\" и не может быть отключено.",
+          "empty": "Нет инструментов, соответствующих вашим фильтрам.",
+          "mcpBadge": "Инструмент MCP",
+          "requiresApproval": "Требует одобрения при отключении",
+          "search": "Инструменты поиска",
+          "toggle": "Переключить {{name}}"
+        }
+      },
+      "tools": {
+        "approved": "одобрено",
+        "caution": "Предварительно одобренные инструменты обходят проверку человеком. Включайте только доверенные инструменты.",
+        "description": "Выберите, какие инструменты могут запускаться без ручного подтверждения.",
+        "requiresPermission": "Требуется разрешение, если не предварительно одобрено.",
+        "tab": "Предварительно одобренные инструменты",
+        "title": "Инструменты",
+        "toggle": "{{defaultValue}}"
+      },
+      "toolsMcp": {
+        "mcp": {
+          "title": "Серверы MCP"
+        },
+        "tab": "Инструменты",
+        "tools": {
+          "title": "Предварительно одобренные инструменты"
+        }
+      }
     },
-    "sorting": {
-      "title": "Сортировка"
+    "sidebar_title": "Агенты",
+    "todo": {
+      "panel": {
+        "title": "{{completed}}/{{total}} задач выполнено"
+      },
+      "status": {
+        "completed": "Завершено",
+        "in_progress": "В процессе",
+        "pending": "В ожидании"
+      }
     },
-    "tag": {
-      "agent": "Агент",
-      "default": "По умолчанию",
-      "new": "Новый",
-      "system": "Система"
+    "toolPermission": {
+      "aria": {
+        "allowAllRequest": "Всегда разрешать этот инструмент",
+        "allowRequest": "Разрешить запрос инструмента",
+        "denyRequest": "Отклонить запрос на инструмент",
+        "hideDetails": "Скрыть сведения об инструменте",
+        "runWithOptions": "Запустить с дополнительными параметрами",
+        "showDetails": "Показать сведения об инструменте"
+      },
+      "button": {
+        "allowAll": "Всегда разрешать",
+        "cancel": "Отмена",
+        "run": "Беги"
+      },
+      "confirmation": "Вы уверены, что хотите запустить этот инструмент Claude?",
+      "defaultDenyMessage": "Пользователь отказал в разрешении на использование этого инструмента.",
+      "defaultDescription": "Выполняет код или системные действия в вашей среде. Убедитесь, что команда выглядит безопасно, прежде чем запускать её.",
+      "error": {
+        "sendFailed": "Не удалось отправить ваше решение. Попробуйте ещё раз."
+      },
+      "executing": "Выполнение...",
+      "expired": "Истёк",
+      "inputPreview": "Предварительный просмотр ввода инструмента",
+      "pending": "Ожидание ({{seconds}}с)",
+      "permissionExpired": "Срок действия запроса на разрешение истёк. Ожидание новых инструкций...",
+      "requiresElevatedPermissions": "Этому инструменту требуются повышенные разрешения.",
+      "suggestion": {
+        "permissionUpdateMultiple": "Одобрение может обновить разрешения для нескольких сеансов, если вы выбрали всегда разрешать использование этого инструмента.",
+        "permissionUpdateSingle": "Одобрение может обновить разрешения вашей сессии, если вы выбрали всегда разрешать использование этого инструмента."
+      },
+      "toast": {
+        "denied": "Запрос на инструмент был отклонён.",
+        "timeout": "Запрос на инструмент превысил время ожидания до получения подтверждения."
+      },
+      "toolPendingFallback": "Инструмент",
+      "waiting": "Ожидание решения о разрешении на использование инструмента..."
     },
-    "title": "Агенты"
+    "tools": {
+      "builtin": {
+        "Bash": {
+          "description": "Выполняет shell-команды в вашей среде"
+        },
+        "Edit": {
+          "description": "Вносит целенаправленные правки в конкретные файлы"
+        },
+        "Glob": {
+          "description": "Находит файлы на основе сопоставления шаблонов"
+        },
+        "Grep": {
+          "description": "Ищет шаблоны в содержимом файлов"
+        },
+        "MultiEdit": {
+          "description": "Выполняет несколько правок в одном файле атомарно"
+        },
+        "NotebookEdit": {
+          "description": "Изменяет ячейки ноутбука Jupyter"
+        },
+        "NotebookRead": {
+          "description": "Читает и отображает содержимое Jupyter-ноутбуков"
+        },
+        "Read": {
+          "description": "Читает содержимое файлов"
+        },
+        "Task": {
+          "description": "Запускает субагента для выполнения сложных многоэтапных задач"
+        },
+        "TodoWrite": {
+          "description": "Создает и управляет структурированными списками задач"
+        },
+        "WebFetch": {
+          "description": "Получает содержимое с указанного URL"
+        },
+        "WebSearch": {
+          "description": "Выполняет веб-поиск с фильтрацией по домену"
+        },
+        "Write": {
+          "description": "Создает или перезаписывает файлы"
+        }
+      }
+    },
+    "type": {
+      "label": "Тип агента",
+      "unknown": "Неизвестный тип"
+    },
+    "update": {
+      "error": {
+        "failed": "Не удалось обновить агента"
+      }
+    },
+    "warning": {
+      "enable_and_start": "Включить и запустить",
+      "enable_server": "Разрешить серверу API использовать агентов.",
+      "enable_server_description": "Для работы агентов необходимо включить API-сервер. Вы можете включить его напрямую или в настройках.",
+      "server_not_running": "Сервер API включен, но не запущен. Пожалуйста, проверьте конфигурацию сервера.",
+      "server_not_running_description": "Для работы агентов необходимо, чтобы API-сервер был запущен. Вы можете запустить его напрямую или проверить настройки."
+    }
   },
   "apiServer": {
     "actions": {
@@ -116,6 +457,7 @@
     "messages": {
       "apiKeyCopied": "API ключ скопирован в буфер обмена",
       "apiKeyRegenerated": "API ключ перегенерирован",
+      "notEnabled": "API-сервер не включен.",
       "operationFailed": "Операция API сервера не удалась: ",
       "restartError": "Не удалось перезапустить API сервер: ",
       "restartFailed": "Перезапуск API сервера не удался: ",
@@ -132,6 +474,41 @@
     },
     "title": "API Сервер"
   },
+  "appMenu": {
+    "about": "О",
+    "close": "Закрыть окно",
+    "copy": "Копировать",
+    "cut": "Резать",
+    "delete": "Удалить",
+    "documentation": "Документация",
+    "edit": "Редактировать",
+    "feedback": "Обратная связь",
+    "file": "Файл",
+    "forceReload": "Принудительная перезагрузка",
+    "front": "Показать все поверх других",
+    "help": "Помощь",
+    "hide": "Скрыть",
+    "hideOthers": "Скрыть остальные",
+    "minimize": "Минимизировать",
+    "paste": "Вставить",
+    "quit": "Выйти",
+    "redo": "Переделать",
+    "releases": "Релизы",
+    "reload": "Перезагрузка",
+    "resetZoom": "Настоящий размер",
+    "selectAll": "Выбрать все",
+    "services": "Услуги",
+    "toggleDevTools": "Переключить инструменты разработчика",
+    "toggleFullscreen": "Переключить полноэкранный режим",
+    "undo": "Отменить",
+    "unhide": "Показать все",
+    "view": "Вид",
+    "website": "Веб-сайт",
+    "window": "Окно",
+    "zoom": "Zoom",
+    "zoomIn": "Увеличить",
+    "zoomOut": "Отдалить"
+  },
   "assistants": {
     "abbr": "Ассистент",
     "clear": {
@@ -143,6 +520,9 @@
     },
     "delete": {
       "content": "Удаление ассистента удалит все топики и файлы под ассистентом. Вы уверены, что хотите удалить его?",
+      "error": {
+        "remain_one": "Нельзя удалить последнего помощника"
+      },
       "title": "Удалить ассистента"
     },
     "edit": {
@@ -154,6 +534,95 @@
     "list": {
       "showByList": "Список",
       "showByTags": "По тегам"
+    },
+    "presets": {
+      "add": {
+        "button": "Добавить в помощник",
+        "knowledge_base": {
+          "label": "База знаний",
+          "placeholder": "Выбрать базу знаний"
+        },
+        "name": {
+          "label": "Имя",
+          "placeholder": "Введите имя"
+        },
+        "prompt": {
+          "label": "Промпт",
+          "placeholder": "Введите промпт",
+          "variables": {
+            "tip": {
+              "content": "{{date}}:\tДата\n{{time}}:\tВремя\n{{datetime}}:\tДата и время\n{{system}}:\tОперационная система\n{{arch}}:\tАрхитектура CPU\n{{language}}:\tЯзык\n{{model_name}}:\tИмя модели\n{{username}}:\tИмя пользователя",
+              "title": "Доступные переменные"
+            }
+          }
+        },
+        "title": "Создать помощника",
+        "unsaved_changes_warning": "У вас есть несохранённые изменения. Вы уверены, что хотите закрыть?"
+      },
+      "delete": {
+        "popup": {
+          "content": "Вы уверены, что хотите удалить этого помощника?"
+        }
+      },
+      "edit": {
+        "model": {
+          "select": {
+            "title": "Выбрать модель"
+          }
+        },
+        "title": "Редактировать помощника"
+      },
+      "export": {
+        "agent": "Экспортировать помощника"
+      },
+      "import": {
+        "button": "Импортировать",
+        "error": {
+          "fetch_failed": "Ошибка получения данных с URL",
+          "file_required": "Сначала выберите файл",
+          "invalid_format": "Неверный формат помощника: отсутствуют обязательные поля",
+          "url_required": "Пожалуйста, введите URL"
+        },
+        "file_filter": "Файлы JSON",
+        "select_file": "Выбрать файл",
+        "title": "Импорт из внешнего источника",
+        "type": {
+          "file": "Файл",
+          "url": "URL"
+        },
+        "url_placeholder": "Введите JSON URL"
+      },
+      "manage": {
+        "batch_delete": {
+          "button": "Массовое удаление",
+          "confirm": "Вы уверены, что хотите удалить выбранных {{count}} ассистентов?"
+        },
+        "batch_export": {
+          "button": "Экспорт"
+        },
+        "mode": {
+          "manage": "Управлять",
+          "sort": "Сортировать"
+        },
+        "title": "Управление помощниками"
+      },
+      "my_agents": "Мои помощники",
+      "search": {
+        "no_results": "Не найдено соответствующих помощников"
+      },
+      "settings": {
+        "title": "Конфигурация помощников"
+      },
+      "sorting": {
+        "title": "Сортировка"
+      },
+      "tag": {
+        "agent": "Помощник",
+        "default": "По умолчанию",
+        "new": "Новый",
+        "system": "Система"
+      },
+      "title": "Библиотека помощников"
     },
     "save": {
       "success": "Успешно сохранено",
@@ -171,10 +640,28 @@
           "tip": "Ассистент будет использовать возможности большой модели для распознавания намерений, чтобы определить, нужно ли обращаться к базе знаний для ответа. Эта функция будет зависеть от возможностей модели"
         }
       },
+      "max_tool_calls": {
+        "label": "Максимальное количество вызовов инструментов",
+        "tip": "Максимальное количество вызовов инструментов, разрешённых в одном диалоге. Более высокие значения позволяют выполнять более сложные многошаговые операции, но могут увеличить использование токенов и время ответа."
+      },
       "mcp": {
         "description": "Серверы MCP, включенные по умолчанию",
         "enableFirst": "Сначала включите этот сервер в настройках MCP",
         "label": "Серверы MCP",
+        "mode": {
+          "auto": {
+            "description": "ИИ самостоятельно обнаруживает и использует инструменты",
+            "label": "Авто"
+          },
+          "disabled": {
+            "description": "Нет инструментов MCP",
+            "label": "Отключено"
+          },
+          "manual": {
+            "description": "Выберите конкретные MCP-серверы",
+            "label": "Руководство"
+          }
+        },
         "noServersAvailable": "Нет доступных серверов MCP. Добавьте серверы в настройках",
         "title": "Настройки MCP"
       },
@@ -182,13 +669,23 @@
       "more": "Настройки ассистента",
       "prompt": "Настройки промптов",
       "reasoning_effort": {
+        "auto": "Авто",
+        "auto_description": "Гибко определяйте усилие на рассуждение",
         "default": "По умолчанию",
+        "default_description": "Полагаться на поведение модели по умолчанию, без какой-либо конфигурации.",
         "high": "Стараюсь думать",
+        "high_description": "Высокоуровневое рассуждение",
         "label": "Настройки размышлений",
         "low": "Меньше думать",
+        "low_description": "Низкоуровневое рассуждение",
         "medium": "Среднее",
+        "medium_description": "Средний уровень рассуждения",
         "minimal": "минимальный",
-        "off": "Выключить"
+        "minimal_description": "Минимальное рассуждение",
+        "off": "Выключить",
+        "off_description": "Отключить рассуждение",
+        "xhigh": "Сверхвысокое",
+        "xhigh_description": "Высочайший уровень рассуждений"
       },
       "regular_phrases": {
         "add": "Добавить подсказку",
@@ -251,6 +748,7 @@
     "added": "Добавлено",
     "case_sensitive": "Чувствительность к регистру",
     "collapse": "Свернуть",
+    "download": "Скачать",
     "includes_user_questions": "Включает вопросы пользователей",
     "manage": "Редактировать",
     "select_model": "Выбрать модель",
@@ -263,11 +761,20 @@
   "chat": {
     "add": {
       "assistant": {
+        "description": "Ежедневные разговоры и быстрые вопросы и ответы",
         "title": "Добавить ассистента"
+      },
+      "option": {
+        "title": "Выберите тип"
       },
       "topic": {
         "title": "Новый топик"
       }
+    },
+    "alerts": {
+      "create_agent": "Создайте агента, чтобы начать работу",
+      "create_session": "Создать сессию",
+      "select_agent": "Выберите агента"
     },
     "artifacts": {
       "button": {
@@ -326,15 +833,98 @@
       "file_not_supported_count": "{{count}} файлов не поддерживаются",
       "generate_image": "Сгенерировать изображение",
       "generate_image_not_supported": "Модель не поддерживает генерацию изображений.",
+      "gpt_image": {
+        "aspect_ratio": {
+          "16_9_description": "[to be translated]:Widescreen landscape (wallpapers, thumbnails)",
+          "1_1_description": "[to be translated]:Square (avatars, products)",
+          "2_3_description": "[to be translated]:DSLR portrait",
+          "3_2_description": "[to be translated]:DSLR landscape",
+          "3_4_description": "[to be translated]:Classic portrait (book covers)",
+          "4_3_description": "[to be translated]:Classic landscape (slides, cameras)",
+          "9_16_description": "[to be translated]:Widescreen portrait (mobile, Reels)",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Aspect ratio"
+        },
+        "input_images": {
+          "max": "[to be translated]:Image editing supports up to {{count}} input images"
+        },
+        "label": "[to be translated]:Image gen params",
+        "output_count": {
+          "label": "[to be translated]:Output count",
+          "value": "[to be translated]:{{count}} images"
+        },
+        "preview": {
+          "auto": "[to be translated]:auto size",
+          "auto_quality": "[to be translated]:auto quality",
+          "text": "[to be translated]:Generate at {{size}} · {{quality}}",
+          "text_with_count": "[to be translated]:Generate at {{size}} · {{quality}} · {{imageCount}}"
+        },
+        "quality": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model choose (usually high)",
+          "high": "[to be translated]:High",
+          "high_description": "[to be translated]:More detail, slower and more expensive",
+          "label": "[to be translated]:Image quality",
+          "low": "[to be translated]:Low",
+          "low_description": "[to be translated]:Fastest and cheapest output",
+          "medium": "[to be translated]:Medium",
+          "medium_description": "[to be translated]:Balanced speed and quality"
+        },
+        "resolution": {
+          "1k": "[to be translated]:1K",
+          "1k_description": "[to be translated]:Long edge 1024px, fastest & cheapest",
+          "2k": "[to be translated]:2K",
+          "2k_description": "[to be translated]:Long edge 2048px, common quality",
+          "3k": "[to be translated]:3K",
+          "3k_description": "[to be translated]:Long edge 3072px, high definition",
+          "4k": "[to be translated]:4K",
+          "4k_description": "[to be translated]:Long edge 3840px (max), highest detail",
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Let the model or source image decide",
+          "label": "[to be translated]:Resolution"
+        },
+        "size": {
+          "auto": "[to be translated]:Auto",
+          "auto_description": "[to be translated]:Decided by model or source image",
+          "fixed_description": "[to be translated]:Generate at {{size}}",
+          "label": "[to be translated]:Image size"
+        }
+      },
       "knowledge_base": "База знаний",
       "new": {
         "context": "Очистить контекст {{Command}}"
       },
+      "new_session": "Новая сессия {{Команда}}",
       "new_topic": "Новый топик {{Command}}",
+      "paste_text_file_confirm": "Вставить в поле ввода?",
       "pause": "Остановить",
       "placeholder": "Введите ваше сообщение здесь, нажмите {{key}} для отправки...",
+      "placeholder_without_triggers": "Напишите сообщение здесь, нажмите {{key}} для отправки",
+      "resource_panel": {
+        "categories": {
+          "agents": "Агенты",
+          "files": "Файлы",
+          "skills": "Навыки"
+        },
+        "description": "Выберите из файлов, агентов или навыков",
+        "loading": "Загрузка...",
+        "no_file_found": {
+          "description": "Нет доступных файлов в доступных каталогах",
+          "label": "Файл не найден"
+        },
+        "no_items_found": {
+          "description": "Нет доступных файлов, агентов или навыков",
+          "label": "Элементы не найдены"
+        },
+        "title": "Ресурсы"
+      },
       "send": "Отправить",
       "settings": "Настройки",
+      "slash_commands": {
+        "description": "Слэш-команды сеанса агента",
+        "title": "Слэш-команды"
+      },
       "thinking": {
         "budget_exceeds_max": "Бюджет размышления превышает максимальное количество токенов",
         "label": "Мыслим",
@@ -356,7 +946,11 @@
         "collapse": "Свернуть",
         "collapse_in": "Свернуть",
         "collapse_out": "Развернуть",
-        "expand": "Развернуть"
+        "expand": "Развернуть",
+        "file_not_found": "[to be translated]:File not found: {{path}}",
+        "open_file": "[to be translated]:Open File",
+        "open_file_error": "[to be translated]:Failed to open file: {{path}}",
+        "reveal_in_finder": "[to be translated]:Reveal in Finder"
       },
       "topics": " Топики ",
       "translate": "Перевести на {{target_language}}",
@@ -552,7 +1146,7 @@
         "label": "Контекст",
         "tip": "Количество предыдущих сообщений, которые нужно сохранить в контексте."
       },
-      "max": "Максимум",
+      "max": "без ограничений",
       "max_tokens": {
         "confirm": "Максимальное количество токенов",
         "confirm_content": "Установить максимальное количество токенов, влияет на длину результата. Нужно учитывать контекст модели, иначе будет ошибка",
@@ -600,6 +1194,7 @@
       },
       "export": {
         "image": "Экспорт как изображение",
+        "image_saved": "Изображение успешно сохранено",
         "joplin": "Экспорт в Joplin",
         "md": {
           "label": "Экспорт как markdown",
@@ -647,6 +1242,29 @@
         "yuque": "Экспорт в Yuque"
       },
       "list": "Список топиков",
+      "manage": {
+        "clear_selection": "Очистить выбор",
+        "delete": {
+          "confirm": {
+            "content": "Вы уверены, что хотите удалить выбранные темы ({{count}})? Это действие нельзя отменить.",
+            "title": "Удалить темы"
+          },
+          "success": "Удалено {{count}} тем(ы)"
+        },
+        "deselect_all": "Снять выделение со всех",
+        "error": {
+          "at_least_one": "Должна быть сохранена хотя бы одна тема"
+        },
+        "move": {
+          "button": "Переместить",
+          "placeholder": "Выберите цель",
+          "success": "Перемещено {{count}} тем(ы)"
+        },
+        "pinned": "Закреплённые темы",
+        "selected_count": "{{count}} выбрано",
+        "title": "Управление темами",
+        "unpinned": "Откреплённые темы"
+      },
       "move_to": "Переместить в",
       "new": "Новый топик",
       "pin": "Закрепленные темы",
@@ -656,6 +1274,10 @@
         },
         "label": "Тематические подсказки",
         "tips": "Тематические подсказки: Дополнительные подсказки, предоставленные для текущей темы"
+      },
+      "search": {
+        "placeholder": "Искать темы...",
+        "title": "Поиск"
       },
       "title": "Топики",
       "unpin": "Открепленные темы"
@@ -743,26 +1365,38 @@
     }
   },
   "common": {
+    "about": "о",
     "add": "Добавить",
+    "add_success": "Успешно добавлено",
     "advanced_settings": "Дополнительные настройки",
+    "agent_one": "Агент",
+    "agent_other": "Агенты",
     "and": "и",
     "assistant": "Ассистент",
+    "assistant_one": "Помощник",
+    "assistant_other": "ассистент",
     "avatar": "Аватар",
     "back": "Назад",
     "browse": "Обзор",
     "cancel": "Отмена",
     "chat": "Чат",
     "clear": "Очистить",
+    "clear_all": "Очистить всё",
+    "click_to_replace": "Щёлкните для замены",
     "close": "Закрыть",
     "collapse": "Свернуть",
+    "completed": "Завершено",
     "confirm": "Подтверждение",
     "copied": "Скопировано",
     "copy": "Копировать",
     "copy_failed": "Не удалось скопировать",
+    "current": "Текущий",
     "cut": "Вырезать",
     "default": "По умолчанию",
     "delete": "Удалить",
     "delete_confirm": "Вы уверены, что хотите удалить?",
+    "delete_failed": "Не удалось удалить",
+    "delete_success": "Удаление выполнено успешно",
     "description": "Описание",
     "detail": "Подробности",
     "disabled": "Отключено",
@@ -772,16 +1406,31 @@
     "edit": "Редактировать",
     "enabled": "Включено",
     "error": "ошибка",
+    "errors": {
+      "create_message": "Не удалось создать сообщение",
+      "validation": "Ошибка проверки"
+    },
     "expand": "Развернуть",
+    "export": {
+      "excel": "Экспорт в Excel"
+    },
     "file": {
       "not_supported": "Неподдерживаемый тип файла {{type}}"
     },
     "footnote": "Цитируемый контент",
     "footnotes": "Сноски",
     "fullscreen": "Вы вошли в полноэкранный режим. Нажмите F11 для выхода",
+    "generate_random_seed": "Сгенерировать случайное зерно",
+    "get_embedding_dimension": "Получить размерность вложения",
     "go_to_settings": "Перейти в настройки",
+    "html_preview": "Предпросмотр HTML",
     "i_know": "Я понял",
+    "ignore": "Игнорировать",
+    "image_preview": "Предпросмотр изображения",
+    "image_url": "URL изображения",
+    "image_url_or_upload": "Введите URL изображения или загрузите файл",
     "inspect": "Осмотреть",
+    "invalid_value": "недопустимое значение",
     "knowledge_base": "База знаний",
     "language": "Язык",
     "loading": "Загрузка...",
@@ -789,24 +1438,41 @@
     "models": "Модели",
     "more": "Ещё",
     "name": "Имя",
+    "next_match": "Следующий матч",
     "no_results": "Результатов не найдено",
     "none": "без",
+    "off": "Выкл",
+    "on": "Вкл",
     "open": "Открыть",
+    "open_in": "[to be translated]:Open in {{name}}",
     "paste": "Вставить",
+    "placeholders": {
+      "select": {
+        "model": "Выбор модели"
+      }
+    },
+    "powered_by": "С поддержкой",
     "preview": "Предварительный просмотр",
+    "previous_match": "Предыдущий матч",
     "prompt": "Промпт",
     "provider": "Провайдер",
     "reasoning_content": "Глубокий анализ",
     "refresh": "Обновить",
     "regenerate": "Пересоздать",
+    "remove_image": "Удалить изображение",
     "rename": "Переименовать",
+    "required_field": "Обязательное поле",
     "reset": "Сбросить",
+    "retry": "Повторить",
     "save": "Сохранить",
     "saved": "Сохранено",
     "search": "Поиск",
     "select": "Выбрать",
+    "select_all": "Выбрать все",
+    "selected": "Выбрано",
     "selectedItems": "Выбрано {{count}} элементов",
     "selectedMessages": "Выбрано {{count}} сообщений",
+    "sessions": "Сессии",
     "settings": "Настройки",
     "sort": {
       "pinyin": {
@@ -816,12 +1482,32 @@
       }
     },
     "stop": "остановить",
+    "subscribe": "Подписаться",
     "success": "Успешно",
     "swap": "Поменять местами",
     "topics": "Топики",
+    "translate_text": "Перевести текст",
+    "unknown": "Неизвестно",
+    "unnamed": "Без имени",
+    "unsubscribe": "Отписаться",
+    "update_success": "Обновление выполнено успешно",
     "upload_files": "Загрузить файл",
+    "upload_image": "Загрузить файл изображения",
+    "uploaded_image": "Загруженное изображение",
     "warning": "Предупреждение",
     "you": "Вы"
+  },
+  "dialog": {
+    "all_files": "Все файлы",
+    "html_files": "Файлы HTML",
+    "open_file": "Открыть файл",
+    "pdf_files": "Файлы PDF",
+    "png_image": "PNG-изображение",
+    "save_as_html": "Сохранить как HTML",
+    "save_as_pdf": "Сохранить как PDF",
+    "save_file": "Сохранить файл",
+    "select_folder": "Выбрать папку",
+    "word_document": "Документ Word"
   },
   "docs": {
     "title": "Документация"
@@ -829,7 +1515,7 @@
   "endpoint_type": {
     "anthropic": "Anthropic",
     "gemini": "Gemini",
-    "image-generation": "Изображение",
+    "image-generation": "Генерация изображений (OpenAI)",
     "jina-rerank": "Jina Rerank",
     "openai": "OpenAI",
     "openai-response": "OpenAI-Response"
@@ -840,6 +1526,7 @@
     "backup": {
       "file_format": "Ошибка формата файла резервной копии"
     },
+    "base64DataTruncated": "Данные изображения в формате Base64 усечены, размер",
     "boundary": {
       "default": {
         "devtools": "Открыть панель отладки",
@@ -891,22 +1578,24 @@
     "modelType": "Тип модели",
     "name": "Название ошибки",
     "no_api_key": "Ключ API не настроен",
+    "no_response": "Нет ответа",
     "originalError": "Исходная ошибка",
     "originalMessage": "исходное сообщение",
     "parameter": "параметр",
-    "pause_placeholder": "Получение ответа приостановлено",
     "prompt": "подсказка",
     "provider": "поставщик",
     "providerId": "ID поставщика",
     "provider_disabled": "Провайдер моделей не включен",
     "reason": "причина",
     "render": {
+      "block": "Не удалось отобразить этот блок контента",
       "description": "Не удалось рендерить содержимое сообщения. Пожалуйста, проверьте, правильно ли формат содержимого сообщения",
       "title": "Ошибка рендеринга"
     },
     "requestBody": "Запрашиваемый контент",
     "requestBodyValues": "Тело запроса",
     "requestUrl": "Путь запроса",
+    "request_timeout": "Время ожидания запроса истекло",
     "response": "ответ",
     "responseBody": "Содержание ответа",
     "responseHeaders": "Заголовки ответа",
@@ -916,9 +1605,12 @@
     "status": "Код статуса",
     "statusCode": "Код состояния",
     "statusText": "Текст состояния",
+    "stream_paused": "Получение ответа приостановлено",
     "text": "текст",
     "toolInput": "ввод инструмента",
     "toolName": "имя инструмента",
+    "truncated": "Данные усечены, исходный размер",
+    "truncatedBadge": "Усечённый",
     "unknown": "Неизвестная ошибка",
     "usage": "Дозировка",
     "user_message_not_found": "Не удалось найти исходное сообщение пользователя",
@@ -956,12 +1648,18 @@
     },
     "document": "Документ",
     "edit": "Редактировать",
+    "error": {
+      "open_path": "Не удалось открыть путь: {{path}}"
+    },
     "file": "Файл",
     "image": "Изображение",
     "name": "Имя",
     "open": "Открыть",
     "preview": {
-      "error": "Не удалось открыть файл"
+      "coming_soon": "[to be translated]:{{type}} preview is coming soon",
+      "error": "Не удалось открыть файл",
+      "model_3d": "[to be translated]:3D Model",
+      "point_cloud": "[to be translated]:Point Cloud"
     },
     "size": "Размер",
     "text": "Текст",
@@ -985,8 +1683,16 @@
       "message": "Найти сообщение"
     },
     "search": {
+      "match": {
+        "substring": "Содержит",
+        "whole_word": "Целое слово"
+      },
       "messages": "Поиск всех сообщений",
       "placeholder": "Поиск топиков или сообщений...",
+      "sort": {
+        "newest": "Сначала новые",
+        "oldest": "Сначала старые"
+      },
       "topics": {
         "empty": "Топики не найдены, нажмите Enter для поиска всех сообщений"
       }
@@ -1004,6 +1710,36 @@
     "generating": "Генерация",
     "preview": "Предпросмотр",
     "split": "Разделить"
+  },
+  "import": {
+    "chatgpt": {
+      "assistant_name": "Импорт ChatGPT",
+      "button": "Выбрать файл",
+      "description": "Импортирует только текст переписки, не включает изображения и вложения",
+      "error": {
+        "invalid_json": "Неверный формат файла JSON",
+        "no_conversations": "В файле не найдено ни одной беседы",
+        "no_valid_conversations": "Нет допустимых бесед для импорта",
+        "unknown": "Импорт не удался, проверьте формат файла"
+      },
+      "help": {
+        "step1": "1. Войдите в ChatGPT, перейдите в Настройки > Управление данными > Экспортировать данные",
+        "step2": "2. Дождитесь письма с файлом экспорта",
+        "step3": "3. Распакуйте загруженный файл и найдите conversations.json",
+        "title": "Как экспортировать диалоги с ChatGPT?"
+      },
+      "importing": "Импортирование разговоров...",
+      "selecting": "Выбор файла...",
+      "success": "Успешно импортировано {{topics}} бесед с {{messages}} сообщениями",
+      "title": "Импортировать диалоги ChatGPT",
+      "untitled_conversation": "Безымянный разговор"
+    },
+    "confirm": {
+      "button": "Выберите файл для импорта",
+      "label": "Вы уверены, что хотите импортировать внешние данные?"
+    },
+    "content": "Выберите внешний файл с перепиской для импорта; в настоящее время поддерживаются только файлы в формате JSON ChatGPT",
+    "title": "Импорт внешних бесед"
   },
   "knowledge": {
     "add": {
@@ -1091,8 +1827,6 @@
     "notes": "Заметки",
     "notes_placeholder": "Введите дополнительную информацию или контекст для этой базы знаний...",
     "provider_not_found": "Поставщик не найден",
-    "quota": "{{name}} Остаток квоты: {{quota}}",
-    "quota_infinity": "{{name}} Квота: Не ограничена",
     "rename": "Переименовать",
     "search": "Поиск в базе знаний",
     "search_placeholder": "Введите текст для поиска",
@@ -1101,7 +1835,7 @@
       "preprocessing_tooltip": "Предварительная обработка документов",
       "title": "Настройки базы знаний"
     },
-    "sitemap_added": "添加成功",
+    "sitemap_added": "Карта сайта добавлена",
     "sitemap_placeholder": "Введите URL карты сайта",
     "sitemaps": "Сайты",
     "source": "Источник",
@@ -1349,6 +2083,9 @@
         "model": "Пожалуйста, выберите модель",
         "name": "Пожалуйста, введите название базы знаний"
       },
+      "excel": {
+        "export": "Не удалось экспортировать Excel"
+      },
       "fetchTopicName": "Не удалось назвать топик",
       "get_embedding_dimensions": "Не удалось получить размерность встраивания",
       "invalid": {
@@ -1388,6 +2125,9 @@
         "export": "Ошибка экспорта в Siyuan, пожалуйста, проверьте состояние подключения и настройки в документации",
         "no_config": "Не настроен API адрес или токен Siyuan"
       },
+      "table": {
+        "invalid": "Не удалось получить корректные данные таблицы"
+      },
       "unknown": "Неизвестная ошибка",
       "yuque": {
         "export": "Ошибка экспорта в Yuque, пожалуйста, проверьте состояние подключения и настройки в документации",
@@ -1417,6 +2157,9 @@
     },
     "message": {
       "code_style": "Стиль кода",
+      "compact": {
+        "title": "Сжатый разговор"
+      },
       "delete": {
         "content": "Вы уверены, что хотите удалить это сообщение?",
         "title": "Удалить сообщение"
@@ -1440,6 +2183,7 @@
       "video": {
         "error": {
           "local_file_missing": "Путь к локальному видеофайлу не найден",
+          "playback_failed": "[to be translated]:Unable to play video: the local file may have been removed, or the remote link has expired",
           "unsupported_type": "Неподдерживаемый тип видео",
           "youtube_url_missing": "URL видео YouTube не найден"
         }
@@ -1458,7 +2202,8 @@
           "content": "Все данные будут утеряны, хотите продолжить?",
           "title": "ДАННЫЕ БУДУТ УТЕРЯНЫ !!!"
         }
-      }
+      },
+      "success": "Данные успешно сброшены"
     },
     "restore": {
       "failed": "Восстановление не удалось",
@@ -1471,6 +2216,9 @@
     },
     "searching": "Идет поиск...",
     "success": {
+      "excel": {
+        "export": "Excel успешно экспортирован"
+      },
       "joplin": {
         "export": "Успешный экспорт в Joplin"
       },
@@ -1499,14 +2247,73 @@
     "tools": {
       "abort_failed": "Вызов инструмента прерван",
       "aborted": "Вызов инструмента прерван",
+      "approvalRequired": "Инструмент \"{{tool}}\" требует одобрения",
       "autoApproveEnabled": "Для этого инструмента включен автоматический одобрен",
       "cancelled": "Отменено",
       "completed": "Завершено",
       "error": "Произошла ошибка",
+      "groupHeader": "{{count}} вызовов инструментов",
       "invoking": "Вызов",
+      "labels": {
+        "bash": "Баш",
+        "edit": "Редактировать",
+        "exitPlanMode": "РежимВыходаПлана",
+        "glob": "Глоб",
+        "grep": "Grep",
+        "mcpServerTool": "Инструмент сервера MCP",
+        "multiEdit": "МультиРедакт",
+        "notebookEdit": "РедакторБлокнота",
+        "readFile": "Прочитать файл",
+        "search": "Поиск",
+        "skill": "Навык",
+        "task": "Задача",
+        "todoWrite": "Написать",
+        "tool": "Инструмент",
+        "webFetch": "Веб-запрос",
+        "webSearch": "Поиск в интернете",
+        "write": "Написать"
+      },
+      "noData": "Нет доступных данных для этого инструмента",
       "pending": "Ожидание",
       "preview": "Предпросмотр",
-      "raw": "Исходный"
+      "raw": "Исходный",
+      "runningCount": "{{count}} инструментов запущено",
+      "sections": {
+        "args": "Аргументы",
+        "command": "Команда",
+        "content": "Контент",
+        "exitCode": "Код выхода",
+        "input": "Ввод",
+        "output": "Вывод",
+        "prompt": "Запрос",
+        "searchQuery": "поисковый запрос",
+        "searchResults": "Результаты поиска",
+        "stderr": "stderr",
+        "stdout": "stdout"
+      },
+      "status": {
+        "done": "Готово",
+        "error": "Ошибка",
+        "failed": "Не удалось",
+        "running": "Бег",
+        "success": "Успех"
+      },
+      "streaming": "Стриминг",
+      "truncated": "Вывод усечён (оригинал: {{size}})",
+      "units": {
+        "done_one": "{{count}} Готово",
+        "done_other": "{{count}} Готово",
+        "file_one": "{{count}} файл",
+        "file_other": "{{count}} файлов",
+        "item_one": "{{count}} элемент",
+        "item_other": "{{count}} предметов",
+        "line_one": "{{count}} строка",
+        "line_other": "{{count}} строк",
+        "plan_one": "{{count}} план",
+        "plan_other": "{{count}} планов",
+        "result_one": "{{count}} результат",
+        "result_other": "{{count}} результатов"
+      }
     },
     "topic": {
       "added": "Новый топик добавлен"
@@ -1570,24 +2377,28 @@
     "title": "Встроенные приложения"
   },
   "minapps": {
+    "ant-ling": "Ant Ling",
     "baichuan": "Байчжан",
     "baidu-ai-search": "Baidu AI Search",
     "chatglm": "ChatGLM",
     "dangbei": "Dangbei",
     "doubao": "Doubao",
-    "hailuo": "MINIMAX",
+    "hailuo": "Hailuo",
+    "ima": "ima",
     "metaso": "Metaso",
+    "minimax-agent": "MiniMax Agent CN",
+    "minimax-global": "MiniMax Agent",
     "nami-ai": "Nami AI",
     "nami-ai-search": "Nami AI Search",
     "qwen": "Qwen",
     "sensechat": "SenseChat",
+    "stepfun": "Stepfun",
     "tencent-yuanbao": "Tencent Yuanbao",
     "tiangong-ai": "Skywork",
     "wanzhi": "Wanzhi",
     "wenxin": "ERNIE",
     "wps-copilot": "WPS Copilot",
     "xiaoyi": "Xiaoyi",
-    "yuewen": "Yuewen",
     "zhihu": "Zhihu"
   },
   "miniwindow": {
@@ -1621,6 +2432,30 @@
       "pin": "Верхнее окно"
     }
   },
+  "model3d": {
+    "download": "[to be translated]:Download model",
+    "exit_fullscreen": "[to be translated]:Exit fullscreen",
+    "fullscreen": "[to be translated]:Fullscreen",
+    "generating": "[to be translated]:Generating 3D model (image-to-3D, may take a few seconds)...",
+    "hint": "[to be translated]:Drag to rotate · Scroll to zoom · Right-click to pan",
+    "import_failed": "[to be translated]:Import to DCC failed",
+    "import_success": "[to be translated]:Imported to DCC",
+    "import_to_dcc": "[to be translated]:Import to DCC",
+    "importing": "[to be translated]:Importing...",
+    "load_error": "[to be translated]:Failed to load 3D model",
+    "no_file": "[to be translated]:No 3D model file available",
+    "no_image": "[to be translated]:Please upload an image (PNG with transparent background recommended) to generate a 3D model",
+    "progress_downloading": "[to be translated]:Downloading model file...",
+    "progress_failed": "[to be translated]:Generation failed",
+    "progress_processing": "[to be translated]:Generating 3D model...",
+    "progress_retry": "[to be translated]:retrying...",
+    "progress_saving": "[to be translated]:Saving model...",
+    "progress_submitted": "[to be translated]:Task submitted, waiting...",
+    "progress_waiting": "[to be translated]:Queued, waiting...",
+    "reset_camera": "[to be translated]:Reset camera",
+    "toggle_material": "[to be translated]:Toggle material",
+    "wireframe": "[to be translated]:Wireframe"
+  },
   "models": {
     "add_parameter": "Добавить параметр",
     "all": "Все",
@@ -1638,6 +2473,7 @@
     },
     "function_calling": "Вызов функции",
     "invalid_model": "Недействительная модель",
+    "json_parse_error": "Неверный формат JSON",
     "no_matches": "Нет доступных моделей",
     "parameter_name": "Имя параметра",
     "parameter_type": {
@@ -1680,6 +2516,24 @@
       "websearch": "Веб-поисковые"
     }
   },
+  "motion": {
+    "downloading": "[to be translated]:Downloading animation files...",
+    "focus": "[to be translated]:Focus all",
+    "load_error": "[to be translated]:Failed to load FBX animation",
+    "loading": "[to be translated]:Loading animation...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate motion animation",
+    "pause": "[to be translated]:Pause",
+    "play": "[to be translated]:Play",
+    "processing": "[to be translated]:Generating motion animation...",
+    "retrying": "[to be translated]:retrying...",
+    "settings": {
+      "duration": "[to be translated]:Duration (s)",
+      "title": "[to be translated]:Motion Settings",
+      "variant_count": "[to be translated]:Variants"
+    },
+    "speed": "[to be translated]:Playback speed",
+    "submitted": "[to be translated]:Motion task submitted, waiting..."
+  },
   "navbar": {
     "expand": "Развернуть диалоговое окно",
     "hide_sidebar": "Скрыть боковую панель",
@@ -1695,10 +2549,17 @@
     "provider_settings": "Перейти к настройкам поставщика"
   },
   "notes": {
+    "auto_rename": {
+      "empty_note": "Заметки пусты, имя невозможно сгенерировать",
+      "failed": "Создание названия заметки не удалось",
+      "label": "Создать название заметки",
+      "success": "Имя заметки успешно создано"
+    },
     "characters": "Символы",
     "collapse": "Свернуть",
     "content_placeholder": "Введите содержимое заметки...",
     "copyContent": "Копировать контент",
+    "crossPlatformRestoreWarning": "Кроссплатформенная конфигурация восстановлена, но каталог заметок пуст. Пожалуйста, скопируйте файлы заметок в: {{path}}",
     "delete": "удалить",
     "delete_confirm": "Вы уверены, что хотите удалить этот объект {{type}}?",
     "delete_folder_confirm": "Вы уверены, что хотите удалить папку \"{{name}}\" со всем ее содержимым?",
@@ -1706,20 +2567,32 @@
     "drop_markdown_hint": "Перетащите сюда файлы или папки .md для импорта",
     "empty": "заметок пока нет",
     "expand": "развернуть",
+    "exportToWord": "Экспорт в Word",
     "export_failed": "Экспорт в базу знаний не выполнен",
     "export_knowledge": "Экспортировать заметки в базу знаний",
     "export_success": "Успешно экспортировано в базу знаний",
+    "export_to_word_failed": "Не удалось экспортировать в Word",
     "folder": "папка",
     "new_folder": "Новая папка",
     "new_note": "Создать заметку",
     "no_content_to_copy": "Нет контента для копирования",
+    "no_content_to_export": "Нет содержимого для экспорта",
     "no_file_selected": "Пожалуйста, выберите файл для загрузки",
+    "no_note_selected": "Пожалуйста, сначала выберите заметку",
     "no_valid_files": "Не загружен действительный файл",
     "open_folder": "Откройте внешнюю папку",
     "open_outside": "открыть снаружи",
     "rename": "переименовать",
     "rename_changed": "В связи с политикой безопасности имя файла было изменено с {{Original}} на {{final}}",
     "save": "Сохранить в заметки",
+    "search": {
+      "both": "Название+содержание",
+      "content": "содержание",
+      "found_results": "Найдено {{count}} результатов (название: {{nameCount}}, содержание: {{contentCount}})",
+      "more_matches": "совпадение",
+      "searching": "Идет поиск...",
+      "show_less": "Свернуть"
+    },
     "settings": {
       "data": {
         "apply": "приложение",
@@ -1743,12 +2616,12 @@
         "font_size": "Размер шрифта",
         "font_size_description": "Отрегулируйте размер шрифта для лучшего чтения (10–30 пикселей)",
         "font_size_large": "Большой",
-        "font_size_medium": "中",
-        "font_size_small": "<translate_input>\nмаленький\n</translate_input>",
+        "font_size_medium": "Средний",
+        "font_size_small": "маленький",
         "font_title": "Настройки шрифта",
         "serif_font": "Serif Font",
         "show_table_of_contents": "Показать оглавление",
-        "show_table_of_contents_description": "显示目录大纲侧边栏，方便文档内导航",
+        "show_table_of_contents_description": "Показать боковую панель оглавления для удобной навигации по документу",
         "title": "показывать"
       },
       "editor": {
@@ -1776,6 +2649,8 @@
     "sort_updated_asc": "Время обновления (от старого к новому)",
     "sort_updated_desc": "Время обновления (от нового к старому)",
     "sort_z2a": "Имя файла (Я-А)",
+    "spell_check": "Проверка орфографии",
+    "spell_check_tooltip": "Включить/отключить проверку орфографии",
     "star": "Избранные заметки",
     "starred_notes": "Сохраненные заметки",
     "title": "заметки",
@@ -1784,11 +2659,17 @@
     "untitled_folder": "Новая папка",
     "untitled_note": "Незаглавленная заметка",
     "upload_failed": "Не удалось загрузить заметку",
-    "upload_success": "Заметка успешно загружена"
+    "upload_files": "Загрузить файлы",
+    "upload_folder": "Загрузить папку",
+    "upload_success": "Заметка успешно загружена",
+    "uploading_files": "Загрузка {{count}} файлов..."
   },
   "notification": {
     "assistant": "Ответ ассистента",
     "knowledge": {
+      "batch_error": "{{failed}} элементов не удалось обработать",
+      "batch_mixed": "{{succeeded}} элементов выполнено успешно, {{failed}} элементов завершилось с ошибкой",
+      "batch_success": "{{succeeded}} элементов обработано успешно",
       "error": "{{error}}",
       "success": "Успешно добавлено {{type}} в базу знаний"
     },
@@ -1802,6 +2683,7 @@
       "provider": {
         "cannot_remove_builtin": "Не удается удалить встроенного поставщика",
         "existing": "Поставщик уже существует",
+        "get_providers": "Не удалось получить доступных поставщиков",
         "not_found": "Поставщик OCR отсутствует",
         "update_failed": "Обновление конфигурации не удалось"
       },
@@ -1824,6 +2706,160 @@
       "title": "Время жизни модели"
     },
     "title": "Ollama"
+  },
+  "openclaw": {
+    "checking_installation": "Проверка установки OpenClaw...",
+    "description": "Интегрируйте провайдеров Cherry Studio с шлюзом OpenClaw, чтобы включить агентов кодирования ИИ, таких как Claude Code, Qwen-Coder и другие.",
+    "error": {
+      "select_provider_model": "Пожалуйста, сначала выберите поставщика и модель"
+    },
+    "gateway": {
+      "port": "Порт",
+      "restart": "Перезапуск",
+      "start": "Запустить шлюз",
+      "status": "Статус",
+      "stop": "Остановиться",
+      "version": "Версия"
+    },
+    "git_missing": {
+      "description": "OpenClaw требует Git для установки некоторых зависимостей. Пожалуйста, сначала установите Git, затем нажмите «Установить» снова.",
+      "download_button": "Скачать Git",
+      "hint": "macOS: brew install git | Windows: Скачать с git-scm.com (убедитесь, что добавили Git в PATH при установке)",
+      "title": "Требуется Git"
+    },
+    "install_progress": "Прогресс установки",
+    "installed_at": "OpenClaw установлен в",
+    "migration": {
+      "description": "Обнаружена устаревшая версия OpenClaw, установленная через npm. Пожалуйста, переустановите её, чтобы получить последнюю официальную версию.",
+      "install_button": "Переустановите OpenClaw",
+      "title": "OpenClaw требует обновления"
+    },
+    "model_config": {
+      "auth_token": "Токен аутентификации",
+      "auth_token_hint": "Токен для аутентификации шлюза. Оставьте пустым, чтобы отключить аутентификацию.",
+      "auth_token_placeholder": "Введите или сгенерируйте токен",
+      "generate_token": "Сгенерировать",
+      "model": "Модель",
+      "provider": "Поставщик",
+      "select_model": "Выберите модель",
+      "select_provider": "Выберите поставщика",
+      "sync_hint": "Выбранный поставщик и модель будут синхронизированы с конфигурационным файлом OpenClaw",
+      "title": "Конфигурация модели"
+    },
+    "node_missing": {
+      "description": "OpenClaw требует Node.js/npm. Пожалуйста, сначала установите Node.js, затем перезапустите Cherry Studio.",
+      "download_button": "Скачать Node.js",
+      "hint": "macOS: brew install node | Windows: Скачайте LTS-версию с nodejs.org",
+      "title": "Требуется Node.js"
+    },
+    "node_version_low": {
+      "description": "OpenClaw требует Node.js версии 22.0 или выше. Ваша текущая версия — v{{version}}. Пожалуйста, сначала обновите Node.js.",
+      "hint": "nvm: nvm install 22 && nvm use 22 | mise: mise use node@22",
+      "title": "Слишком низкая версия Node.js"
+    },
+    "not_installed": {
+      "description": "OpenClaw не установлен в вашей системе. Пожалуйста, установите его сначала, чтобы использовать эту функцию.",
+      "install_button": "Установить OpenClaw",
+      "install_guide_title": "Руководство по установке",
+      "macos_linux_title": "macOS / Linux",
+      "refresh": "Обновить",
+      "step2_hint": "После установки нажмите кнопку «Обновить» выше, чтобы обнаружить OpenClaw",
+      "step2_title": "Шаг 2: Проверка установки",
+      "title": "OpenClaw не установлен",
+      "windows_title": "Windows"
+    },
+    "quick_actions": {
+      "check_update": "Проверить обновления",
+      "open_dashboard": "Открыть панель управления",
+      "title": "Быстрые действия",
+      "uninstall": "Удалить",
+      "view_docs": "Просмотреть документацию"
+    },
+    "status": {
+      "error": "Ошибка",
+      "running": "Бег",
+      "starting": "Начало",
+      "stopped": "Остановлено"
+    },
+    "tips": {
+      "permissions": "OpenClaw имеет повышенные системные разрешения. Используйте только в доверенных средах",
+      "title": "Советы",
+      "token_usage": "Режим ИИ-агента может потреблять больше токенов. Пожалуйста, следите за использованием"
+    },
+    "title": "OpenClaw",
+    "uninstall_confirm": "Вы уверены, что хотите удалить OpenClaw? Нажмите OK для подтверждения.",
+    "uninstall_progress": "Прогресс удаления",
+    "uninstalled": {
+      "description": "OpenClaw был успешно удалён.",
+      "title": "Удаление завершено"
+    },
+    "uninstalling": {
+      "description": "Пожалуйста, подождите, пока OpenClaw удаляется...",
+      "title": "Удаление OpenClaw"
+    },
+    "update": {
+      "available": "Новая версия доступна: v{{latest}} (текущая: v{{current}})",
+      "checking": "Проверка обновлений...",
+      "confirm_button": "Обновить сейчас",
+      "failed": "Не удалось проверить наличие обновлений",
+      "modal_title": "Обновление OpenClaw",
+      "success": "Обновление завершено успешно!",
+      "up_to_date": "Уже актуально (v{{current}})",
+      "updating": "Обновление..."
+    }
+  },
+  "ovms": {
+    "action": {
+      "install": "Установить",
+      "installing": "Установка",
+      "reinstall": "Переустановить",
+      "run": "Запустить OVMS",
+      "starting": "Запуск",
+      "stop": "Остановить OVMS",
+      "stopping": "Остановка"
+    },
+    "description": "<div><p>1. Загрузите модели OV.</p><p>2. Добавьте модели в 'Менеджер'.</p><p>Поддерживается только Windows!</p><p>Путь установки OVMS: '%USERPROFILE%\\.cherrystudio\\ovms'.</p><p>Пожалуйста, ознакомьтесь с <a href=https://github.com/openvinotoolkit/model_server/blob/c55551763d02825829337b62c2dcef9339706f79/docs/deploying_server_baremetal.md>руководством Intel OVMS</a></p></dev>",
+    "download": {
+      "button": "Скачать",
+      "error": "Ошибка загрузки",
+      "model_id": {
+        "label": "ID модели",
+        "model_id_pattern": "ID модели должен начинаться с OpenVINO/",
+        "placeholder": "Обязательно, например: OpenVINO/Qwen3-8B-int4-ov",
+        "required": "Пожалуйста, введите ID модели"
+      },
+      "model_name": {
+        "label": "Название модели:",
+        "placeholder": "Обязательно, например: Qwen3-8B-int4-ov",
+        "required": "Пожалуйста, введите название модели"
+      },
+      "model_source": "Источник модели:",
+      "model_task": "Задача модели:",
+      "success": "Скачивание успешно",
+      "success_desc": "Модель \"{{modelName}}\"-\"{{modelId}}\" успешно скачана, пожалуйста, перейдите в интерфейс управления OVMS, чтобы добавить модель",
+      "tip": "Модель загружается, иногда это занимает часы. Пожалуйста, будьте терпеливы...",
+      "title": "Скачать модель Intel OpenVINO"
+    },
+    "failed": {
+      "install": "Ошибка установки OVMS:",
+      "install_code_100": "Неизвестная ошибка",
+      "install_code_101": "Поддерживаются только процессоры Intel(R) Core(TM) Ultra CPU",
+      "install_code_102": "Поддерживается только Windows",
+      "install_code_103": "Ошибка загрузки среды выполнения OVMS",
+      "install_code_104": "Ошибка распаковки среды выполнения OVMS",
+      "install_code_105": "Ошибка очистки среды выполнения OVMS",
+      "install_code_106": "Не удалось создать run.bat",
+      "install_code_110": "Ошибка очистки старой среды выполнения OVMS",
+      "run": "Ошибка запуска OVMS:",
+      "stop": "Ошибка остановки OVMS:"
+    },
+    "status": {
+      "not_installed": "OVMS не установлен",
+      "not_running": "OVMS не запущен",
+      "running": "OVMS запущен",
+      "unknown": "Статус OVMS неизвестен"
+    },
+    "title": "Intel OVMS"
   },
   "paintings": {
     "aspect_ratio": "Пропорции изображения",
@@ -1852,14 +2888,42 @@
       }
     },
     "custom_size": "Пользовательский размер",
+    "dmxapi": {
+      "generating_tip": "Генерация с использованием официальной модели, ожидаемое время ожидания — 2–5 минут для достижения наилучших результатов. Пожалуйста, проверьте логи бэкенда DMXAPI для получения информации о стоимости этой операции.",
+      "style": ", Стиль:",
+      "style_types": {
+        "25d_animation": "2.5D анимация",
+        "3d_cartoon": "3D мультфильм",
+        "american_retro": "Американский ретро",
+        "baroque": "Барокко",
+        "cartoon_illustration": "Мультяшная иллюстрация",
+        "chinese_gongbi": "Китайский гунби",
+        "clay": "Глина",
+        "cyberpunk": "Киберпанк",
+        "felt": "Фетр",
+        "flat": "Плоский",
+        "fresh_anime": "Свежее аниме",
+        "ghibli": "Гибли",
+        "japanese_anime": "Японское аниме",
+        "little_people_book": "Книжка о маленьких людях",
+        "monet_garden": "Сад Моне",
+        "oil_painting": "Живопись маслом",
+        "pixar": "Пиксар",
+        "pixel_art": "Пиксель-арт",
+        "poetic_ancient": "Поэтическое древнее",
+        "psychedelic": "Психоделический",
+        "sketch": "Эскиз",
+        "street_art": "Уличное искусство",
+        "texture": "Текстура",
+        "ukiyo_e": "Укиё-э",
+        "watercolor": "Акварель",
+        "wood_carving": "Резьба по дереву",
+        "yarn_doll": "Кукла из пряжи"
+      }
+    },
     "edit": {
       "image_file": "Изображение для редактирования",
-      "magic_prompt_option_tip": "Интеллектуально оптимизирует подсказки для улучшения эффекта редактирования",
-      "model_tip": "Частичное редактирование поддерживается только версиями V_2 и V_2_TURBO",
-      "number_images_tip": "Количество результатов редактирования для генерации",
-      "rendering_speed_tip": "Управляет балансом между скоростью рендеринга и качеством, доступно только для V_3",
-      "seed_tip": "Контролирует случайность результатов редактирования",
-      "style_type_tip": "Стиль изображения после редактирования, доступен только для версий V_2 и выше"
+      "image_required": "Пожалуйста, сначала загрузите изображение для редактирования"
     },
     "generate": {
       "height": "Высота",
@@ -1876,6 +2940,7 @@
       "style_type_tip": "Стиль генерации изображений, доступен только для версий V_2 и выше",
       "width": "Ширина"
     },
+    "generate_failed": "Не удалось сгенерировать изображение",
     "generated_image": "Сгенерированное изображение",
     "go_to_settings": "Перейти в настройки",
     "guidance_scale": "Масштаб руководства",
@@ -1886,6 +2951,7 @@
     "image_file_required": "Пожалуйста, сначала загрузите изображение",
     "image_file_retry": "Пожалуйста, сначала загрузите изображение",
     "image_handle_required": "Пожалуйста, сначала загрузите изображение.",
+    "image_mix_failed": "Не удалось объединить изображения",
     "image_placeholder": "Изображение недоступно",
     "image_retry": "Повторить",
     "image_size_options": {
@@ -1895,6 +2961,7 @@
     "inference_steps_tip": "Количество шагов вывода для выполнения. Больше шагов производят более высокое качество, но занимают больше времени",
     "input_image": "Входное изображение",
     "input_parameters": "Ввести параметры",
+    "invalid_image_url": "Неверный формат URL изображения",
     "learn_more": "Узнать больше",
     "magic_prompt_option": "Улучшение промпта",
     "mode": {
@@ -1916,6 +2983,7 @@
     "no_image_generation_model": "Нет доступных моделей изображения, пожалуйста, добавьте модель и установите тип конечной точки на {{endpoint_type}}",
     "number_images": "Количество изображений",
     "number_images_tip": "Количество изображений для генерации (1-4)",
+    "operation_failed": "Операция не удалась, повторите попытку позже",
     "paint_course": "Руководство / Учебник",
     "per_image": "за изображение",
     "per_images": "за изображения",
@@ -1923,6 +2991,16 @@
       "allow_adult": "Разрешено взрослые",
       "allow_all": "Разрешено все",
       "allow_none": "Не разрешено"
+    },
+    "ppio": {
+      "edit_prompt_tip": "Указывает объект или область для удаления из изображения, например: 'собака' или 'шляпа'",
+      "mask_image": "Изображение маски",
+      "mask_image_tip": "Указывает область для стирания. Области для стирания должны быть белыми, области для сохранения — чёрными",
+      "output_format": "Формат вывода",
+      "resolution": "Целевое разрешение",
+      "seed_tip": "Случайное зерно, одинаковое зерно и параметры создают похожие изображения, -1 означает случайное",
+      "use_pre_llm_tip": "Включает расширение текста для оптимизации промпта. Рекомендуется для коротких промптов, отключите для длинных",
+      "watermark_tip": "Добавлять ли водяной знак на сгенерированные изображения, по умолчанию отключено"
     },
     "pricing": "Цены",
     "prompt_enhancement": "Улучшение промпта",
@@ -1966,6 +3044,7 @@
     "required_field": "Обязательное поле",
     "seed": "Ключ генерации",
     "seed_desc_tip": "Одинаковые сиды и промпты могут генерировать похожие изображения, установка -1 будет создавать разные результаты каждый раз",
+    "seed_random": "Случайно",
     "seed_tip": "Одинаковый ключ генерации и промпт могут производить похожие изображения",
     "select_model": "Выбрать модель",
     "style_type": "Стиль",
@@ -1991,11 +3070,89 @@
       "resemblance": "Сходство",
       "resemblance_tip": "Насколько близко результат увеличения к исходному изображению",
       "seed_tip": "Контролирует случайный характер увеличения изображений для воспроизводимых результатов"
+    },
+    "watermark": "Добавить водяной знак",
+    "zhipu": {
+      "custom_size_divisible": "Пользовательский размер должен быть кратен 16",
+      "custom_size_hint": "Ширина и высота должны быть от 512 до 2048 пикселей, кратны 16, а общее число пикселей не должно превышать 2^21 пиксель.",
+      "custom_size_pixels": "Общее количество пикселей пользовательского размера не может превышать 2 097 152",
+      "custom_size_range": "Пользовательский размер должен быть от 512 до 2048 пикселей",
+      "custom_size_required": "Пожалуйста, задайте пользовательскую ширину и высоту",
+      "image_sizes": {
+        "1024x1024_default": "1024x1024 (По умолчанию)",
+        "1152x864": "1152x864",
+        "1344x768": "1344x768",
+        "1440x720": "1440x720",
+        "720x1440": "720x1440",
+        "768x1344": "768x1344",
+        "864x1152": "864x1152"
+      },
+      "quality_options": {
+        "hd": "HD",
+        "standard_default": "Стандарт (по умолчанию)"
+      }
     }
+  },
+  "plugins": {
+    "actions": "Операция",
+    "agents": "агент",
+    "all_categories": "Все категории",
+    "all_types": "всё",
+    "category": "категория",
+    "commands": "команда",
+    "confirm_uninstall": "Вы уверены, что хотите удалить {{name}}?",
+    "confirm_uninstall_package": "Вы уверены, что хотите удалить пакет {{name}} и все его компоненты?",
+    "content_saved": "Содержимое плагина успешно сохранено",
+    "detail": {
+      "allowed_tools": "Разрешённые инструменты",
+      "author": "Автор",
+      "content": "Контент",
+      "description": "Описание",
+      "file": "Файл",
+      "installed": "Установлено",
+      "metadata": "Метаданные",
+      "size": "Размер",
+      "source": "Источник",
+      "tags": "Теги",
+      "tools": "Инструменты"
+    },
+    "install": "установка",
+    "install_plugins_from_browser": "Просмотрите доступные плагины, чтобы начать работу",
+    "installing": "Установка...",
+    "name": "название",
+    "no_description": "Без описания",
+    "no_installed_plugins": "Плагины ещё не установлены",
+    "no_results": "Плагин не найден",
+    "no_results_skills": "Навыки не найдены",
+    "search_placeholder": "Поиск плагинов...",
+    "search_placeholder_skills": "Навыки поиска...",
+    "showing_results": "Отображено {{count}} плагинов",
+    "showing_results_one": "Отображено {{count}} плагинов",
+    "showing_results_other": "Отображено {{count}} плагинов",
+    "showing_results_plural": "Отображение {{count}} плагинов",
+    "showing_results_skills": "Показано {{count}} навык",
+    "showing_results_skills_one": "Показано {{count}} навык",
+    "showing_results_skills_other": "Показано {{count}} навыков",
+    "showing_results_skills_plural": "Показано {{count}} навыков",
+    "skills": "навык",
+    "sort": {
+      "downloads": "Загрузки",
+      "label": "Сортировка",
+      "relevance": "Актуальность",
+      "stars": "Звезды"
+    },
+    "standalone_plugins": "Автономные плагины",
+    "title": "[to be translated]:Plugin Tools",
+    "try_different_search": "Пожалуйста, попробуйте изменить поиск или фильтры категорий",
+    "type": "тип",
+    "uninstall": "Удаление",
+    "uninstall_package": "Удалить пакет",
+    "uninstalling": "Удаление..."
   },
   "preview": {
     "copy": {
-      "image": "Скопировать как изображение"
+      "image": "Скопировать как изображение",
+      "src": "Копировать источник изображения"
     },
     "dialog": "Открыть диалог",
     "label": "Предварительный просмотр",
@@ -2016,6 +3173,7 @@
   },
   "provider": {
     "302ai": "302.AI",
+    "ai-gateway": "AI-шлюз",
     "aihubmix": "AiHubMix",
     "aionly": "AiOnly",
     "alayanew": "Alaya NeW",
@@ -2026,6 +3184,7 @@
     "baidu-cloud": "Baidu Cloud",
     "burncloud": "BurnCloud",
     "cephalon": "Cephalon",
+    "cerebras": "Cerebras AI",
     "cherryin": "CherryIN",
     "copilot": "GitHub Copilot",
     "dashscope": "Alibaba Cloud",
@@ -2039,13 +3198,17 @@
     "gpustack": "GPUStack",
     "grok": "Grok",
     "groq": "Groq",
+    "huggingface": "Hugging Face",
     "hunyuan": "Tencent Hunyuan",
     "hyperbolic": "Hyperbolic",
     "infini": "Infini",
     "jina": "Jina",
     "lanyun": "LANYUN",
     "lmstudio": "LM Studio",
-    "minimax": "MiniMax",
+    "longcat": "Тоторо",
+    "mimo": "Xiaomi MiMo",
+    "minimax": "MiniMax CN",
+    "minimax-global": "MiniMax",
     "mistral": "Mistral",
     "modelscope": "ModelScope",
     "moonshot": "Moonshot",
@@ -2056,6 +3219,7 @@
     "ollama": "Ollama",
     "openai": "OpenAI",
     "openrouter": "OpenRouter",
+    "ovms": "Intel OVMS",
     "perplexity": "Perplexity",
     "ph8": "PH8",
     "poe": "Poe",
@@ -2063,6 +3227,7 @@
     "qiniu": "Qiniu AI",
     "qwenlm": "QwenLM",
     "silicon": "SiliconFlow",
+    "sophnet": "SophNet",
     "stepfun": "StepFun",
     "tencent-cloud-ti": "Tencent Cloud TI",
     "together": "Together",
@@ -2071,6 +3236,7 @@
     "voyageai": "Voyage AI",
     "xirang": "State Cloud Xirang",
     "yi": "Yi",
+    "zai": "Z.ai",
     "zhinao": "360AI",
     "zhipu": "BigModel"
   },
@@ -2306,6 +3472,19 @@
       "undo": "Отменить"
     }
   },
+  "sam3": {
+    "complete": "[to be translated]:3D model generation complete",
+    "confirm_generate": "[to be translated]:Generate 3D Model",
+    "generating": "[to be translated]:Generating 3D model...",
+    "launch_error": "[to be translated]:Failed to launch SAM3 annotation window",
+    "manual_mode": "[to be translated]:SAM3 Manual Annotation",
+    "need_image": "[to be translated]:Please attach an image first for SAM3 annotation",
+    "need_image_auto": "[to be translated]:Auto mode requires an attached image",
+    "need_mcp": "[to be translated]:Auto mode requires MCP tools. Please enable MCP (auto or manual mode) in assistant settings.",
+    "retry": "[to be translated]:Retry",
+    "server_unavailable": "[to be translated]:SAM3 server is unavailable",
+    "waiting_annotation": "[to be translated]:Waiting for annotation in SAM3 window..."
+  },
   "selection": {
     "action": {
       "builtin": {
@@ -2316,6 +3495,11 @@
         "search": "Поиск",
         "summary": "Суммаризировать",
         "translate": "Перевести"
+      },
+      "prompt": {
+        "explain": "Пожалуйста, объясните следующее содержание. Требования: ответ на {{language}}; не включайте никаких пояснений к этому запросу, просто дайте ответ напрямую:",
+        "refine": "Пожалуйста, оптимизируйте или отполируйте содержимое пользовательского ввода, заключённое в XML-тег <INPUT>, сохраняя смысл и целостность исходного текста. Требования: ваш ответ должен быть на том же языке, что и пользовательский ввод; не включайте никаких объяснений этого запроса, просто выдайте результат напрямую; не выводите XML-теги, выводите оптимизированное содержимое напрямую:",
+        "summary": "Пожалуйста, кратко изложите следующий контент. Требования: ответить на {{language}}; не включать никаких пояснений к этому запросу, просто дать ответ напрямую."
       },
       "translate": {
         "smart_translate_tips": "Смарт-перевод: содержимое будет переведено на целевой язык; содержимое уже на целевом языке будет переведено на альтернативный язык"
@@ -2494,6 +3678,10 @@
   },
   "settings": {
     "about": {
+      "careers": {
+        "button": "Вид",
+        "title": "Карьера"
+      },
       "checkUpdate": {
         "available": "Обновить",
         "label": "Проверить обновления"
@@ -2509,15 +3697,14 @@
       },
       "description": "Мощный AI-ассистент для созидания",
       "downloading": "Загрузка...",
+      "enterprise": {
+        "title": "Предприятие"
+      },
       "feedback": {
         "button": "Обратная связь",
         "title": "Обратная связь"
       },
       "label": "О программе и обратная связь",
-      "license": {
-        "button": "Лицензия",
-        "title": "Лицензия"
-      },
       "releases": {
         "button": "Релизы",
         "title": "Заметки о релизах"
@@ -2551,6 +3738,8 @@
       "model_params": "Параметры модели",
       "title": "Ассистент по умолчанию"
     },
+    "centralized": "[to be translated]:Managed",
+    "centralized_config_readonly": "[to be translated]:Managed by Administrator",
     "data": {
       "app_data": {
         "copy_data_option": "Копировать данные, будет автоматически перезапущено после копирования данных из исходной директории в новую директорию",
@@ -2562,6 +3751,7 @@
         "label": "Данные приложения",
         "migration_title": "Миграция данных",
         "new_path": "Новый путь",
+        "open": "Открыть каталог",
         "original_path": "Исходный путь",
         "path_change_failed": "Сбой изменения каталога данных",
         "path_changed_without_copy": "Путь изменен успешно",
@@ -2609,6 +3799,7 @@
         "basic": "Основные настройки данных",
         "cloud_storage": "Настройки облачного резервирования",
         "export_settings": "Настройки экспорта",
+        "import_settings": "Импорт настроек",
         "third_party": "Сторонние подключения"
       },
       "export_menu": {
@@ -2625,8 +3816,74 @@
         "title": "Настройки меню экспорта",
         "yuque": "Экспорт в Yuque"
       },
+      "export_to_phone": {
+        "confirm": {
+          "button": "Выберите файл резервной копии"
+        },
+        "content": "Экспорт части данных, включая историю чатов и настройки. Обратите внимание, процесс резервного копирования может занять некоторое время, благодарим за ваше терпение.",
+        "lan": {
+          "connected": "Подключено",
+          "connection_failed": "Соединение не удалось",
+          "content": "Убедитесь, что компьютер и телефон подключены к одной сети, чтобы использовать локальную передачу. Откройте приложение Cherry Studio и отсканируйте этот QR-код.",
+          "device_list_title": "Устройства локальной сети",
+          "discovered_devices": "Обнаруженные устройства",
+          "error": {
+            "file_too_large": "Файл слишком большой, поддерживается максимум 500 МБ.",
+            "init_failed": "Инициализация не удалась",
+            "invalid_file_type": "Поддерживаются только ZIP-файлы",
+            "no_file": "Файл не выбран",
+            "no_ip": "Не удалось получить IP-адрес",
+            "not_connected": "Пожалуйста, сначала завершите рукопожатие",
+            "send_failed": "Не удалось отправить файл"
+          },
+          "file_transfer": {
+            "cancelled": "Перевод отменён",
+            "failed": "Передача файла не удалась: {{message}}",
+            "progress": "Отправка... {{progress}}%",
+            "success": "Файл успешно отправлен"
+          },
+          "handshake": {
+            "button": "Рукопожатие",
+            "failed": "Сбой рукопожатия: {{message}}",
+            "in_progress": "Рукопожатие...",
+            "success": "Рукопожатие завершено с {{device}}",
+            "test_message_received": "Получен понг от {{device}}",
+            "test_message_sent": "Отправлен тестовый полезный груз \"hello world\""
+          },
+          "idle_hint": "Сканирование приостановлено. Начните сканирование, чтобы найти пиры Cherry Studio в вашей локальной сети.",
+          "ip_addresses": "IP-адреса",
+          "last_seen": "В последний раз был(а) в сети в {{time}}",
+          "metadata": "Метаданные",
+          "no_connection_warning": "Пожалуйста, откройте LAN Transfer в мобильном приложении Cherry Studio",
+          "no_devices": "Пока не найдено участников локальной сети",
+          "scan_devices": "Сканировать устройства",
+          "scanning_hint": "Сканирование локальной сети на наличие узлов Cherry Studio...",
+          "send_file": "Отправить файл",
+          "status": {
+            "completed": "Перевод завершён",
+            "connected": "Подключено",
+            "connecting": "Подключение...",
+            "disconnected": "Отключено",
+            "error": "Ошибка подключения",
+            "initializing": "Инициализация соединения...",
+            "preparing": "Подготовка передачи...",
+            "sending": "Передача {{progress}}%"
+          },
+          "status_badge_idle": "Бездействие",
+          "status_badge_scanning": "Сканирование",
+          "stop_scan": "Остановить сканирование",
+          "title": "Передача по локальной сети",
+          "transfer_progress": "Прогресс передачи"
+        },
+        "title": "Экспорт на телефон"
+      },
       "hour_interval_one": "{{count}} час",
       "hour_interval_other": "{{count}} часов",
+      "import_settings": {
+        "button": "Импортировать файл JSON",
+        "chatgpt": "Импорт из ChatGPT",
+        "title": "Импорт внешних данных приложения"
+      },
       "joplin": {
         "check": {
           "button": "Проверить",
@@ -3099,7 +4356,11 @@
     "developer": {
       "enable_developer_mode": "Включить разработчик",
       "help": "После включения режима разработчика можно использовать функцию трассировки вызовов для просмотра потока данных в процессе вызова модели.",
-      "title": "Разработчик"
+      "password_incorrect": "[to be translated]:Incorrect password, please try again",
+      "password_placeholder": "[to be translated]:Developer password",
+      "password_required": "[to be translated]:Enter Developer Password",
+      "title": "Разработчик",
+      "user_not_allowed": "[to be translated]:Current system user is not authorized for developer mode"
     },
     "display": {
       "assistant": {
@@ -3208,6 +4469,9 @@
       },
       "view_webdav_settings": "Просмотр настроек WebDAV"
     },
+    "groq": {
+      "title": "Настройки Groq"
+    },
     "hardware_acceleration": {
       "confirm": {
         "content": "Отключение аппаратного ускорения требует перезапуска приложения для вступления в силу. Перезапустить приложение?",
@@ -3283,12 +4547,15 @@
       "builtinServers": "Встроенные серверы",
       "builtinServersDescriptions": {
         "brave_search": "реализация сервера MCP с интеграцией API поиска Brave, обеспечивающая функции веб-поиска и локального поиска. Требуется настройка переменной среды BRAVE_API_KEY",
+        "browser": "Управление headless-окном Electron через Chrome DevTools Protocol. Инструменты: открытие URL, выполнение однострочного JS, сброс сессии.",
+        "didi_mcp": "Сервер DiDi MCP, предоставляющий услуги такси, включая поиск на карте, оценку стоимости, управление заказами и отслеживание водителей. Доступен только в материковом Китае. Требует настройки переменной окружения DIDI_API_KEY",
         "dify_knowledge": "Реализация сервера MCP Dify, предоставляющая простой API для взаимодействия с Dify. Требуется настройка ключа Dify",
         "fetch": "MCP-сервер для получения содержимого веб-страниц по URL",
         "filesystem": "Node.js-сервер протокола контекста модели (MCP) для реализации операций файловой системы. Требуется настройка каталогов, к которым разрешён доступ",
         "mcp_auto_install": "Автоматическая установка службы MCP (бета-версия)",
         "memory": "реализация постоянной памяти на основе локального графа знаний. Это позволяет модели запоминать информацию о пользователе между различными диалогами. Требуется настроить переменную среды MEMORY_FILE_PATH.",
         "no": "без описания",
+        "nowledge_mem": "Требуется запущенное локально приложение Nowledge Mem. Хранит чаты ИИ, инструменты, заметки, агентов и файлы в приватной памяти на вашем компьютере. Скачать можно на https://mem.nowledge.co/",
         "python": "Выполняйте код Python в безопасной песочнице. Запускайте Python с помощью Pyodide, поддерживается большинство стандартных библиотек и пакетов для научных вычислений",
         "sequentialthinking": "MCP серверная реализация, предоставляющая инструменты для динамического и рефлексивного решения проблем посредством структурированного мыслительного процесса"
       },
@@ -3306,6 +4573,7 @@
         "description": "Не включать функциональность сервера MCP",
         "label": "Отключить сервер MCP"
       },
+      "discover": "Откройте",
       "duplicateName": "Сервер с таким именем уже существует",
       "editJson": "Редактировать JSON",
       "editMcpJson": "Редактировать MCP",
@@ -3315,6 +4583,10 @@
       "errors": {
         "32000": "MCP сервер не запущен, пожалуйста, проверьте параметры",
         "toolNotFound": "Инструмент {{name}} не найден"
+      },
+      "fetch": {
+        "button": "Получить серверы",
+        "success": "Успешно получены MCP-серверы"
       },
       "findMore": "Найти больше MCP",
       "headers": "Заголовки",
@@ -3328,9 +4600,15 @@
       "jsonModeHint": "Редактируйте JSON-форматирование конфигурации сервера MCP. Перед сохранением убедитесь, что формат правильный.",
       "jsonSaveError": "Не удалось сохранить конфигурацию JSON",
       "jsonSaveSuccess": "JSON конфигурация сохранена",
+      "lanyun": {
+        "description": "Lanyun Technology Cloud Platform MCP Service",
+        "name": "Ланьюнь Технологии"
+      },
       "logoUrl": "URL логотипа",
+      "logs": "Журналы",
       "longRunning": "Длительный режим работы",
       "longRunningTooltip": "Включив эту опцию, сервер будет поддерживать длительные задачи. При получении уведомлений о ходе выполнения будет сброшен тайм-аут и максимальное время выполнения будет увеличено до 10 минут.",
+      "marketplaces": "Торговые площадки",
       "missingDependencies": "отсутствует, пожалуйста, установите для продолжения.",
       "more": {
         "awesome": "Кураторский список серверов MCP",
@@ -3347,6 +4625,7 @@
       "name": "Имя",
       "newServer": "MCP сервер",
       "noDescriptionAvailable": "Описание отсутствует",
+      "noLogs": "Логов пока нет",
       "noServers": "Серверы не настроены",
       "not_support": "Модель не поддерживается",
       "npx_list": {
@@ -3362,6 +4641,12 @@
         "usage": "Использование",
         "version": "Версия"
       },
+      "oauth": {
+        "callback": {
+          "message": "Вы можете закрыть эту страницу и вернуться в Cherry Studio",
+          "title": "Аутентификация Успешна"
+        }
+      },
       "prompts": {
         "arguments": "Аргументы",
         "availablePrompts": "Доступные подсказки",
@@ -3370,9 +4655,16 @@
         "noPromptsAvailable": "Нет доступных подсказок",
         "requiredField": "Обязательное поле"
       },
+      "protocolInstallWarning": {
+        "command": "Команда запуска",
+        "message": "Этот MCP был установлен из внешнего источника через протокол. Запуск неизвестных инструментов может повредить ваш компьютер.",
+        "run": "Беги",
+        "title": "Запускать внешний MCP?"
+      },
       "provider": "Провайдер",
       "providerPlaceholder": "Имя провайдера",
       "providerUrl": "URL провайдера",
+      "providers": "Поставщики",
       "registry": "Реестр пакетов",
       "registryDefault": "По умолчанию",
       "registryTooltip": "Выберите реестр для установки пакетов, если возникают проблемы с сетью при использовании реестра по умолчанию.",
@@ -3395,6 +4687,7 @@
       "searchNpx": "Найти MCP",
       "serverPlural": "серверы",
       "serverSingular": "сервер",
+      "servers": "Серверы MCP",
       "sse": "События, отправляемые сервером (sse)",
       "startError": "Запуск не удалось",
       "stdio": "Стандартный ввод/вывод (stdio)",
@@ -3407,6 +4700,14 @@
         "getToken": "Получить API токен",
         "getTokenDescription": "Получите персональный API токен из вашей учетной записи",
         "noServersAvailable": "Нет доступных серверов MCP",
+        "providerDescriptions": {
+          "302ai": "302.Сервис MCP Платформы AI",
+          "bailian": "Сервис MCP платформы Alibaba Cloud Bailian",
+          "lanyun": "Lanyun Technology Cloud Platform MCP Service",
+          "mcprouter": "Платформа маршрутизатора MCP Сервис MCP",
+          "modelscope": "Служба MCP платформы ModelScope",
+          "tokenflux": "Сервис MCP платформы TokenFlux"
+        },
         "selectProvider": "Выберите провайдера:",
         "setToken": "Введите ваш токен",
         "success": "Синхронизация серверов MCP успешна",
@@ -3499,9 +4800,6 @@
       "title": "Настройки сообщений",
       "use_serif_font": "Использовать serif шрифт"
     },
-    "mineru": {
-      "api_key": "Mineru теперь предлагает ежедневную бесплатную квоту в 500 страниц, и вам не нужно вводить ключ."
-    },
     "miniapps": {
       "cache_change_notice": "Изменения вступят в силу, когда количество открытых мини-приложений достигнет установленного значения",
       "cache_description": "Установить максимальное количество активных мини-приложений в памяти",
@@ -3544,6 +4842,13 @@
       "open_link_external": {
         "title": "Открывать новые окна в браузере"
       },
+      "region": {
+        "auto": "Автоматическое определение",
+        "cn": "Китай",
+        "description": "Фильтрация неподдерживаемых мини-программ в зависимости от региона",
+        "global": "Глобально",
+        "title": "Фильтрация по регионам в мини-программе"
+      },
       "reset_tooltip": "Сбросить до значения по умолчанию",
       "sidebar_description": "Настройка отображения активных мини-приложений в боковой панели",
       "sidebar_title": "Отображение активных мини-приложений в боковой панели",
@@ -3579,6 +4884,10 @@
           "placeholder": "Необязательно, например, GPT-4",
           "tooltip": "Необязательно, например, GPT-4"
         },
+        "stream_output": {
+          "label": "[to be translated]:Stream Output",
+          "tooltip": "[to be translated]:When enabled, this model streams output token-by-token; when disabled, it waits for the full result and returns it at once. Takes priority over the assistant setting."
+        },
         "supported_text_delta": {
           "label": "Поддержка инкрементного текстового вывода",
           "tooltip": "Модель возвращает текст по частям, а не одним блоком, по умолчанию включено, если модель не поддерживает, закройте эту опцию"
@@ -3609,6 +4918,13 @@
         "timeout": "Тайм-аут",
         "title": "Проверка состояния моделей",
         "use_all_keys": "Использовать все ключи"
+      },
+      "context_summary": {
+        "enable": "[to be translated]:Enable context summary compression",
+        "enable_tooltip": "[to be translated]:When enabled, earlier conversation turns are compressed into summaries using the Quick Model above, reducing token usage. The model can retrieve full details via a tool.",
+        "full_turns": "[to be translated]:Full content turns",
+        "full_turns_tooltip": "[to be translated]:Number of recent turns to keep full content. Earlier turns use summaries.",
+        "label": "[to be translated]:Context Summary"
       },
       "default_assistant_model": "Модель ассистента по умолчанию",
       "default_assistant_model_description": "Модель, используемая при создании нового ассистента, если ассистент не имеет настроенной модели, будет использоваться эта модель",
@@ -3677,10 +4993,15 @@
         "default": "По умолчанию",
         "flex": "Гибкий",
         "on_demand": "по требованию",
-        "performance": "производительность",
         "priority": "приоритет",
         "tip": "Указывает уровень задержки, который следует использовать для обработки запроса",
         "title": "Уровень сервиса"
+      },
+      "stream_options": {
+        "include_usage": {
+          "tip": "Включено ли использование токенов (применимо только к API завершения чата OpenAI)",
+          "title": "Включить использование"
+        }
       },
       "summary_text_mode": {
         "auto": "Авто",
@@ -3730,9 +5051,13 @@
         "logout_failed": "Ошибка выхода, попробуйте еще раз",
         "logout_success": "Успешно вышли из Anthropic",
         "oauth": "веб OAuth",
+        "oauth_disabled_warning": "Anthropic временно приостановила использование Claude через OAuth. Этот метод аутентификации в настоящее время недоступен. Пожалуйста, используйте ключ API на данный момент.",
         "start_auth": "Начать авторизацию",
         "submit_code": "Завершить вход"
       },
+      "anthropic_api_host": "Адрес API Anthropic",
+      "anthropic_api_host_preview": "Предпросмотр Anthropic: {{url}}",
+      "anthropic_api_host_tooltip": "Заполняйте только когда провайдер предоставляет базовый адрес, совместимый с Claude.",
       "api": {
         "key": {
           "check": {
@@ -3751,6 +5076,14 @@
           }
         },
         "options": {
+          "anthropic_cache": {
+            "cache_last_n": "Кэшировать последние N сообщений",
+            "cache_last_n_help": "Кэшировать последние N сообщений разговора (исключая системные сообщения)",
+            "cache_system": "Сообщение системы кэша",
+            "cache_system_help": "Кэшировать ли системный промпт",
+            "token_threshold": "Порог токена кэша",
+            "token_threshold_help": "Сообщения, превышающие это количество токенов, будут кэшироваться. Установите значение 0, чтобы отключить кэширование."
+          },
           "array_content": {
             "help": "Поддерживает ли данный провайдер тип массива для поля content в сообщении",
             "label": "поддержка формата массива для содержимого сообщения"
@@ -3771,15 +5104,22 @@
           "stream_options": {
             "help": "Поддерживает ли этот провайдер параметр stream_options",
             "label": "Поддержка stream_options"
+          },
+          "verbosity": {
+            "help": "Поддерживает ли провайдер параметр verbosity",
+            "label": "Поддержка многословности"
           }
         },
         "url": {
           "preview": "Предпросмотр: {{url}}",
           "reset": "Сброс",
-          "tip": "Заканчивая на / игнорирует v1, заканчивая на # принудительно использует введенный адрес"
+          "tip": "Добавьте # в конце, чтобы отключить автоматически добавляемую версию API."
         }
       },
       "api_host": "Хост API",
+      "api_host_no_valid": "Недопустимый адрес API",
+      "api_host_preview": "Предпросмотр: {{url}}",
+      "api_host_tooltip": "Переопределяйте только когда провайдер требует пользовательский адрес, совместимый с OpenAI.",
       "api_key": {
         "label": "Ключ API",
         "tip": "Несколько ключей, разделенных запятыми или пробелами"
@@ -3788,6 +5128,12 @@
       "aws-bedrock": {
         "access_key_id": "AWS Ключ доступа ID",
         "access_key_id_help": "Ваш AWS Ключ доступа ID для доступа к AWS Bedrock",
+        "api_key": "Ключ API Bedrock",
+        "api_key_help": "Ваш ключ API AWS Bedrock для аутентификации",
+        "auth_type": "Тип аутентификации",
+        "auth_type_api_key": "Ключ API Bedrock",
+        "auth_type_help": "Выберите между аутентификацией с помощью учетных данных IAM или ключа API Bedrock",
+        "auth_type_iam": "Учетные данные IAM",
         "description": "AWS Bedrock — это полное управляемое сервисное предложение для моделей, поддерживающее различные современные модели языка",
         "region": "AWS регион",
         "region_help": "Ваш регион AWS, например us-east-1",
@@ -3797,9 +5143,10 @@
       },
       "azure": {
         "apiversion": {
-          "tip": "Версия API Azure OpenAI. Если вы хотите использовать Response API, введите версию preview"
+          "tip": "Версия API Azure OpenAI. Если вы хотите использовать Response API, введите версию v1"
         }
       },
+      "balance": "Баланс",
       "basic_auth": {
         "label": "HTTP аутентификация",
         "password": {
@@ -3858,10 +5205,18 @@
         "title": "Удалить провайдер"
       },
       "dmxapi": {
+        "platform_enterprise": "ssvip.DMXAPI.com (Корпоративный)",
+        "platform_international": "www.DMXAPI.com (Международный)",
+        "platform_official": "www.DMXAPI.cn (CNY)",
         "select_platform": "Выберите платформу"
       },
       "docs_check": "Проверить",
       "docs_more_details": "для получения дополнительной информации",
+      "filter": {
+        "agent": "Поддержка агента",
+        "all": "Все поставщики"
+      },
+      "filter_agent": "Поддерживаемые поставщики агента фильтрации",
       "get_api_key": "Получить ключ API",
       "misc": "другие",
       "no_models_for_check": "Нет моделей для проверки (например, диалоговые модели)",
@@ -3872,10 +5227,29 @@
         "title": "Заметки модели"
       },
       "oauth": {
+        "balance": "Баланс",
         "button": "Войти с {{provider}}",
+        "cherryIn": {
+          "description": "Войдите на ваш собственный сервер New-API с помощью OAuth 2.0 (PKCE)",
+          "logged_in": "Вошёл через OAuth",
+          "login_button": "Войти через OAuth",
+          "logout_button": "Выход",
+          "title": "Вход через OAuth"
+        },
+        "connect": "Подключить {{provider}}",
         "description": "Сервис предоставляется <website>{{provider}}</website>",
         "error": "Ошибка аутентификации",
-        "official_website": "Официальный сайт"
+        "logged_in": "Вошёл в систему",
+        "logout": "Выход",
+        "logout_confirm": "Вы уверены, что хотите выйти?",
+        "logout_success": "Выход из системы выполнен успешно",
+        "logout_warning": "Вышел из системы локально, но отзыв токена на сервере, возможно, не удался",
+        "official_website": "Официальный сайт",
+        "provided_by": "Предоставлено",
+        "provided_by_suffix": "I’m ready—please provide the text you’d like translated into Russian.",
+        "requests": "Запросы",
+        "topup": "Пополнить",
+        "usage_title": "Использование"
       },
       "openai": {
         "alert": "Поставщик OpenAI больше не поддерживает старые методы вызова. Если вы используете сторонний API, создайте нового поставщика услуг."
@@ -3916,7 +5290,8 @@
         "none": "Не использовать прокси",
         "system": "Системный прокси",
         "title": "Режим прокси"
-      }
+      },
+      "tip": "Поддержка нечёткого соответствия (*.test.com, 192.168.0.0/16)"
     },
     "quickAssistant": {
       "click_tray_to_show": "Нажмите на иконку трея для запуска",
@@ -3931,6 +5306,7 @@
       "confirm": "Подтвердить",
       "forward": "Вперед",
       "multiple": "Множественный выбор",
+      "noResult": "Результаты не найдены",
       "page": "Страница",
       "select": "Выбрать",
       "title": "Быстрое меню"
@@ -3968,6 +5344,7 @@
       "reset_to_default": "Сбросить настройки по умолчанию",
       "search_message": "Поиск сообщения",
       "search_message_in_chat": "Поиск сообщения в текущем диалоге",
+      "select_model": "Select Model",
       "selection_assistant_select_text": "Помощник выделения: выделить текст",
       "selection_assistant_toggle": "Переключить помощник выделения",
       "show_app": "Показать/скрыть приложение",
@@ -3979,6 +5356,26 @@
       "zoom_in": "Увеличить",
       "zoom_out": "Уменьшить",
       "zoom_reset": "Сбросить масштаб"
+    },
+    "skills": {
+      "add": "[to be translated]:Add Skill",
+      "contentLabel": "[to be translated]:Content",
+      "contentPlaceholder": "[to be translated]:Enter skill instructions in Markdown",
+      "delete": "[to be translated]:Delete Skill",
+      "deleteConfirm": "[to be translated]:This skill will be permanently deleted. Continue?",
+      "descriptionLabel": "[to be translated]:Description",
+      "descriptionPlaceholder": "[to be translated]:Describe what this skill does",
+      "edit": "[to be translated]:Edit Skill",
+      "empty": "[to be translated]:No skills configured yet",
+      "filePathLabel": "[to be translated]:File Path",
+      "filePathPlaceholder": "[to be translated]:Path to a local .md file",
+      "nameLabel": "[to be translated]:Name",
+      "namePlaceholder": "[to be translated]:Enter skill name",
+      "selectFile": "[to be translated]:Browse",
+      "sourceFile": "[to be translated]:File Reference",
+      "sourceInline": "[to be translated]:Inline Content",
+      "sourceLabel": "[to be translated]:Content Source",
+      "title": "[to be translated]:Skills"
     },
     "theme": {
       "color_primary": "Цвет темы",
@@ -4015,10 +5412,8 @@
         "image_provider": "Поставщик услуг OCR",
         "paddleocr": {
           "aistudio_access_token": "Токен доступа сообщества AI Studio",
-          "aistudio_url_label": "Сообщество AI Studio",
           "api_url": "URL API",
-          "serving_doc_url_label": "Документация по PaddleOCR Serving",
-          "tip": "Вы можете обратиться к официальной документации PaddleOCR, чтобы развернуть локальный сервис, либо развернуть облачный сервис в сообществе PaddlePaddle AI Studio. В последнем случае, пожалуйста, предоставьте токен доступа сообщества AI Studio."
+          "api_url_label": "Получение токена доступа и URL API"
         },
         "system": {
           "win": {
@@ -4031,6 +5426,12 @@
         "title": "OCR-сервис"
       },
       "preprocess": {
+        "paddleocr": {
+          "aistudio_access_token": "Токен доступа к сообществу AI Studio",
+          "api_url": "URL API",
+          "api_url_label": "Получение токена доступа и URL API",
+          "paddleocr_url_label": "Официальный сайт PaddleOCR"
+        },
         "provider": "Поставщик обработки документов",
         "provider_placeholder": "Выберите поставщика услуг обработки документов",
         "title": "Обработка документов",
@@ -4038,6 +5439,12 @@
       },
       "title": "Другие настройки",
       "websearch": {
+        "api_key_required": {
+          "content": "{{provider}} требует API-ключ для работы. Хотите настроить его сейчас?",
+          "ok": "Настроить",
+          "title": "Требуется ключ API"
+        },
+        "api_providers": "Поставщики API",
         "apikey": "API ключ",
         "blacklist": "Черный список",
         "blacklist_description": "Результаты из следующих веб-сайтов не будут отображаться в результатах поиска",
@@ -4077,9 +5484,24 @@
           },
           "title": "Сжатие результатов поиска"
         },
+        "content_fetch_mode": {
+          "full": "[to be translated]:Fetch Full Content",
+          "help": "[to be translated]:Use 'Snippet Only' mode for internal networks that cannot access external websites to avoid freezing",
+          "label": "[to be translated]:Content Fetch Mode",
+          "snippet": "[to be translated]:Snippet Only (Recommended for Intranet)",
+          "tip": "[to be translated]:Choose how to fetch search result content. 'Snippet Only' uses short summaries returned by the search engine without accessing target websites; 'Fetch Full Content' visits each search result page to get complete content"
+        },
         "content_limit": "Ограничение длины контента",
         "content_limit_tooltip": "Ограничить длину контента в результатах поиска; контент, превышающий лимит, будет усечен.",
+        "default_provider": "Поставщик по умолчанию",
         "free": "Бесплатно",
+        "is_default": "По умолчанию",
+        "local_provider": {
+          "hint": "Войдите на сайт, чтобы получать более точные результаты поиска и настроить параметры поиска под себя.",
+          "open_settings": "Открыть настройки {{provider}}",
+          "settings": "Настройки локального поиска"
+        },
+        "local_providers": "Местные поставщики",
         "no_provider_selected": "Пожалуйста, выберите поставщика поисковых услуг, затем проверьте.",
         "overwrite": "Переопределить поисковый сервис",
         "overwrite_tooltip": "Принудительно использовать поисковый сервис вместо LLM",
@@ -4090,6 +5512,7 @@
         "search_provider": "поиск сервисного провайдера",
         "search_provider_placeholder": "Выберите поставщика поисковых услуг",
         "search_with_time": "Поиск, содержащий дату",
+        "set_as_default": "Установить по умолчанию",
         "subscribe": "Подписка на черный список",
         "subscribe_add": "Добавить подписку",
         "subscribe_add_failed": "Не удалось добавить источник подписки",
@@ -4170,12 +5593,19 @@
         }
       },
       "prompt": "Следуйте системному запросу",
-      "title": "翻译设置"
+      "title": "Настройки перевода"
     },
     "tray": {
       "onclose": "Свернуть в трей при закрытии",
       "show": "Показать значок в трее",
       "title": "Трей"
+    },
+    "use_system_title_bar": {
+      "confirm": {
+        "content": "Изменение стиля заголовка требует перезапуска приложения. Перезапустить сейчас?",
+        "title": "Требуется перезагрузка"
+      },
+      "title": "Использовать системную строку заголовка (Linux)"
     },
     "zoom": {
       "reset": "Сбросить",
@@ -4183,7 +5613,6 @@
     }
   },
   "title": {
-    "agents": "Агенты",
     "apps": "Приложения",
     "code": "Code",
     "files": "Файлы",
@@ -4193,8 +5622,10 @@
     "mcp-servers": "MCP серверы",
     "memories": "Память",
     "notes": "заметки",
+    "openclaw": "OpenClaw",
     "paintings": "Рисунки",
     "settings": "Настройки",
+    "store": "Библиотека помощников",
     "translate": "Перевод"
   },
   "trace": {
@@ -4254,6 +5685,8 @@
     "detected": {
       "language": "Автоматическое обнаружение"
     },
+    "detected_source": "Обнаружено",
+    "detecting": "Обнаружение...",
     "empty": "Содержимое перевода пусто",
     "error": {
       "chat_qwen_mt": "Модель Qwen MT недоступна для использования в диалоге, перейдите на страницу перевода",
@@ -4306,6 +5739,7 @@
       "not_pair": "Исходный язык отличается от настроенного",
       "same": "Исходный и целевой языки совпадают"
     },
+    "language_settings": "Языковые настройки",
     "menu": {
       "description": "Перевести содержимое текущего ввода"
     },
@@ -4315,6 +5749,7 @@
     "output": {
       "placeholder": "Перевод"
     },
+    "preferred_target": "Предпочтительная цель",
     "processing": "Перевод в процессе...",
     "settings": {
       "autoCopy": "Автоматически копировать после завершения перевода",
@@ -4328,6 +5763,7 @@
       "scroll_sync": "Настройки синхронизации прокрутки",
       "title": "Настройки перевода"
     },
+    "stop": "Остановить перевод",
     "success": {
       "custom": {
         "delete": "Удаление выполнено успешно",
@@ -4350,7 +5786,17 @@
     "later": "Позже",
     "message": "Новая версия {{version}} готова, установить сейчас?",
     "noReleaseNotes": "Нет заметок об обновлении",
+    "saveDataError": "Ошибка сохранения данных, повторите попытку",
     "title": "Обновление"
+  },
+  "video": {
+    "download": "[to be translated]:Download video",
+    "downloading": "[to be translated]:Downloading video...",
+    "generating": "[to be translated]:Generating video...",
+    "no_prompt": "[to be translated]:Please enter a text description to generate a video",
+    "processing": "[to be translated]:Generating video...",
+    "retrying": "[to be translated]:retrying...",
+    "submitted": "[to be translated]:Video task submitted, waiting..."
   },
   "warning": {
     "missing_provider": "Поставщик не существует, возвращение к поставщику по умолчанию {{provider}}. Это может привести к проблемам."

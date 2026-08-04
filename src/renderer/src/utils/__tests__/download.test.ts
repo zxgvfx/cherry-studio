@@ -34,6 +34,8 @@ const mockedToast = {
   info: vi.fn()
 }
 
+const mockSaveImage = vi.fn()
+
 // 辅助函数
 const waitForAsync = () => new Promise((resolve) => setTimeout(resolve, 10))
 const createMockResponse = (options = {}) => ({
@@ -50,6 +52,15 @@ describe('download', () => {
 
       // 设置 window.toast mock
       Object.defineProperty(window, 'toast', { value: mockedToast, writable: true })
+      Object.defineProperty(window, 'api', {
+        value: {
+          file: {
+            saveImage: mockSaveImage
+          }
+        },
+        writable: true,
+        configurable: true
+      })
 
       // 设置 DOM mock
       const mockElement = {
@@ -97,30 +108,29 @@ describe('download', () => {
 
         download(dataUrl)
 
-        const element = mockCreateElement.mock.results[0].value
-        expect(element.href).toBe(dataUrl)
-        expect(mockClick).toHaveBeenCalled()
+        expect(mockSaveImage).toHaveBeenCalledTimes(1)
       })
 
       it('should handle different MIME types in data URLs', async () => {
         const now = Date.now()
         vi.spyOn(Date, 'now').mockReturnValue(now)
 
-        // 只有 image/png 和 image/jpeg 会直接下载
+        // data:image 会优先走 Electron 的保存对话框
         const directDownloadTests = [
           { url: 'data:image/jpeg;base64,xxx', expectedExt: '.jpg' },
           { url: 'data:image/png;base64,xxx', expectedExt: '.png' }
         ]
 
-        directDownloadTests.forEach(({ url, expectedExt }) => {
+        directDownloadTests.forEach(({ url }) => {
           mockCreateElement.mockClear()
+          mockSaveImage.mockClear()
           download(url)
-          const element = mockCreateElement.mock.results[0].value
-          expect(element.download).toBe(`${now}_download${expectedExt}`)
+          expect(mockSaveImage).toHaveBeenCalledWith(`${now}_download`, url)
         })
 
         // 其他类型会通过 fetch 处理
         mockCreateElement.mockClear()
+        mockSaveImage.mockClear()
         mockFetch.mockResolvedValueOnce(
           createMockResponse({
             headers: new Headers({ 'Content-Type': 'application/pdf' })
@@ -162,6 +172,8 @@ describe('download', () => {
 
     describe('Network download', () => {
       it('should handle successful network request', async () => {
+        mockSaveImage.mockReset()
+        Object.defineProperty(window, 'api', { value: undefined, writable: true })
         mockFetch.mockResolvedValue(createMockResponse())
 
         download('https://example.com/file.pdf', 'custom.pdf')
@@ -173,6 +185,8 @@ describe('download', () => {
       })
 
       it('should extract filename from URL and headers', async () => {
+        mockSaveImage.mockReset()
+        Object.defineProperty(window, 'api', { value: undefined, writable: true })
         const headers = new Headers()
         headers.set('Content-Disposition', 'attachment; filename="server-file.pdf"')
         mockFetch.mockResolvedValue(createMockResponse({ headers }))
@@ -185,6 +199,8 @@ describe('download', () => {
       })
 
       it('should add timestamp to network downloaded files', async () => {
+        mockSaveImage.mockReset()
+        Object.defineProperty(window, 'api', { value: undefined, writable: true })
         const now = Date.now()
         vi.spyOn(Date, 'now').mockReturnValue(now)
 
@@ -198,6 +214,8 @@ describe('download', () => {
       })
 
       it('should handle Content-Type when filename has no extension', async () => {
+        mockSaveImage.mockReset()
+        Object.defineProperty(window, 'api', { value: undefined, writable: true })
         const headers = new Headers()
         headers.set('Content-Type', 'application/pdf')
         mockFetch.mockResolvedValue(createMockResponse({ headers }))
@@ -212,6 +230,8 @@ describe('download', () => {
 
     describe('Error handling', () => {
       it('should handle network errors gracefully', async () => {
+        mockSaveImage.mockReset()
+        Object.defineProperty(window, 'api', { value: undefined, writable: true })
         const networkError = new Error('Network error')
         mockFetch.mockRejectedValue(networkError)
 
@@ -222,6 +242,8 @@ describe('download', () => {
       })
 
       it('should handle fetch errors without message', async () => {
+        mockSaveImage.mockReset()
+        Object.defineProperty(window, 'api', { value: undefined, writable: true })
         mockFetch.mockRejectedValue(new Error())
 
         expect(() => download('https://example.com/file.pdf')).not.toThrow()
@@ -231,9 +253,26 @@ describe('download', () => {
       })
 
       it('should handle HTTP errors gracefully', async () => {
+        mockSaveImage.mockReset()
+        Object.defineProperty(window, 'api', { value: undefined, writable: true })
         mockFetch.mockResolvedValue({ ok: false, status: 404 })
 
         expect(() => download('https://example.com/file.pdf')).not.toThrow()
+      })
+
+      it('should use save dialog for image url in Electron', async () => {
+        const blob = new Blob(['test'], { type: 'image/png' })
+        mockFetch.mockResolvedValue(
+          createMockResponse({
+            headers: new Headers({ 'Content-Type': 'image/png' }),
+            blob: () => Promise.resolve(blob)
+          })
+        )
+
+        download('https://example.com/image')
+        await waitForAsync()
+
+        expect(mockSaveImage).toHaveBeenCalledTimes(1)
       })
     })
   })

@@ -1,4 +1,5 @@
-import { FileMetadata, FileTypes } from '@renderer/types'
+import type { FileMetadata, FileType } from '@renderer/types'
+import { FILE_TYPE } from '@renderer/types'
 import { audioExts, documentExts, imageExts, KB, MB, textExts, videoExts } from '@shared/config/constant'
 import mime from 'mime-types'
 
@@ -44,16 +45,30 @@ export function removeFileExtension(filePath: string): string {
  * @param {number} size 文件大小（字节）
  * @returns {string} 格式化后的文件大小字符串
  */
-export function formatFileSize(size: number): string {
-  if (size >= MB) {
-    return (size / MB).toFixed(1) + ' MB'
+export function formatFileSize(size: number | any): string {
+  // 防御性处理：确保 size 是数字
+  let normalizedSize: number
+  
+  if (typeof size === 'object' && size !== null) {
+    // 如果是对象，尝试提取 size 属性
+    normalizedSize = typeof size.size === 'number' ? size.size : 0
+    console.warn('[formatFileSize] Received object instead of number:', size)
+  } else if (typeof size === 'number') {
+    normalizedSize = size
+  } else {
+    normalizedSize = 0
+    console.warn('[formatFileSize] Received invalid type:', typeof size, size)
   }
 
-  if (size >= KB) {
-    return (size / KB).toFixed(0) + ' KB'
+  if (normalizedSize >= MB) {
+    return (normalizedSize / MB).toFixed(1) + ' MB'
   }
 
-  return (size / KB).toFixed(2) + ' KB'
+  if (normalizedSize >= KB) {
+    return (normalizedSize / KB).toFixed(0) + ' KB'
+  }
+
+  return (normalizedSize / KB).toFixed(2) + ' KB'
 }
 
 /**
@@ -111,28 +126,28 @@ export async function filterSupportedFiles(files: FileMetadata[], supportExts: s
   return validationResults.filter((result) => result.isValid).map((result) => result.file)
 }
 
-export const mime2type = (mimeStr: string): FileTypes => {
+export const mime2type = (mimeStr: string): FileType => {
   const mimeType = mimeStr.toLowerCase()
   const ext = mime.extension(mimeType)
   if (ext) {
     if (textExts.includes(ext)) {
-      return FileTypes.TEXT
+      return FILE_TYPE.TEXT
     } else if (imageExts.includes(ext)) {
-      return FileTypes.IMAGE
+      return FILE_TYPE.IMAGE
     } else if (documentExts.includes(ext)) {
-      return FileTypes.DOCUMENT
+      return FILE_TYPE.DOCUMENT
     } else if (audioExts.includes(ext)) {
-      return FileTypes.AUDIO
+      return FILE_TYPE.AUDIO
     } else if (videoExts.includes(ext)) {
-      return FileTypes.VIDEO
+      return FILE_TYPE.VIDEO
     }
   }
-  return FileTypes.OTHER
+  return FILE_TYPE.OTHER
 }
 
-export function parseFileTypes(str: string): FileTypes | null {
-  if (Object.values(FileTypes).includes(str as FileTypes)) {
-    return str as FileTypes
+export function parseFileTypes(str: string): FileType | null {
+  if (Object.values(FILE_TYPE).some((type) => type === str)) {
+    return str as FileType
   }
   return null
 }

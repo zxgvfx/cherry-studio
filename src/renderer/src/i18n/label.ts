@@ -5,7 +5,8 @@
  */
 
 import { loggerService } from '@logger'
-import { BuiltinMCPServerName, BuiltinMCPServerNames, BuiltinOcrProviderId, ThinkingOption } from '@renderer/types'
+import type { AgentType, BuiltinMCPServerName, BuiltinOcrProviderId } from '@renderer/types'
+import { BuiltinMCPServerNames } from '@renderer/types'
 
 import i18n from './index'
 
@@ -61,6 +62,7 @@ const providerKeyMap = {
   nvidia: 'provider.nvidia',
   o3: 'provider.o3',
   ocoolai: 'provider.ocoolai',
+  ovms: 'provider.ovms',
   ollama: 'provider.ollama',
   openai: 'provider.openai',
   openrouter: 'provider.openrouter',
@@ -81,7 +83,15 @@ const providerKeyMap = {
   zhinao: 'provider.zhinao',
   zhipu: 'provider.zhipu',
   poe: 'provider.poe',
-  aionly: 'provider.aionly'
+  aionly: 'provider.aionly',
+  longcat: 'provider.longcat',
+  huggingface: 'provider.huggingface',
+  sophnet: 'provider.sophnet',
+  gateway: 'provider.ai-gateway',
+  cerebras: 'provider.cerebras',
+  mimo: 'provider.mimo',
+  'minimax-global': 'provider.minimax-global',
+  zai: 'provider.zai'
 } as const
 
 /**
@@ -126,8 +136,10 @@ export const getRestoreProgressLabel = (key: string): string => {
 }
 
 const titleKeyMap = {
-  agents: 'title.agents',
+  // TODO: update i18n key
+  store: 'title.store',
   apps: 'title.apps',
+  plugins: 'plugins.title',
   code: 'title.code',
   files: 'title.files',
   home: 'title.home',
@@ -138,7 +150,9 @@ const titleKeyMap = {
   notes: 'title.notes',
   paintings: 'title.paintings',
   settings: 'title.settings',
-  translate: 'title.translate'
+  translate: 'title.translate',
+  openclaw: 'openclaw.title',
+  agents: 'agent.sidebar_title'
 } as const
 
 export const getTitleLabel = (key: string): string => {
@@ -155,16 +169,31 @@ export const getThemeModeLabel = (key: string): string => {
   return getLabel(themeModeKeyMap, key)
 }
 
+// const sidebarIconKeyMap = {
+//   assistants: t('assistants.title'),
+//   store: t('assistants.presets.title'),
+//   paintings: t('paintings.title'),
+//   translate: t('translate.title'),
+//   minapp: t('minapp.title'),
+//   knowledge: t('knowledge.title'),
+//   files: t('files.title'),
+//   code_tools: t('code.title'),
+//   notes: t('notes.title')
+// } as const
+
 const sidebarIconKeyMap = {
   assistants: 'assistants.title',
-  agents: 'agents.title',
+  agents: 'agent.sidebar_title',
+  plugins: 'plugins.title',
+  store: 'assistants.presets.title',
   paintings: 'paintings.title',
   translate: 'translate.title',
   minapp: 'minapp.title',
   knowledge: 'knowledge.title',
   files: 'files.title',
   code_tools: 'code.title',
-  notes: 'notes.title'
+  notes: 'notes.title',
+  openclaw: 'openclaw.title'
 } as const
 
 export const getSidebarIconLabel = (key: string): string => {
@@ -190,6 +219,7 @@ const shortcutKeyMap = {
   reset_to_default: 'settings.shortcuts.reset_to_default',
   search_message: 'settings.shortcuts.search_message',
   search_message_in_chat: 'settings.shortcuts.search_message_in_chat',
+  select_model: 'settings.shortcuts.select_model',
   selection_assistant_select_text: 'settings.shortcuts.selection_assistant_select_text',
   selection_assistant_toggle: 'settings.shortcuts.selection_assistant_toggle',
   show_app: 'settings.shortcuts.show_app',
@@ -221,7 +251,7 @@ const paintingsImageSizeOptionsKeyMap = {
 } as const
 
 export const getPaintingsImageSizeOptionsLabel = (key: string): string => {
-  return getLabel(paintingsImageSizeOptionsKeyMap, key)
+  return paintingsImageSizeOptionsKeyMap[key] ? getLabel(paintingsImageSizeOptionsKeyMap, key) : key
 }
 
 const paintingsQualityOptionsKeyMap = {
@@ -265,6 +295,19 @@ export const getMcpTypeLabel = (key: string): string => {
   return getLabel(mcpTypeKeyMap, key)
 }
 
+const mcpProviderDescriptionKeyMap = {
+  '302ai': 'settings.mcp.sync.providerDescriptions.302ai',
+  bailian: 'settings.mcp.sync.providerDescriptions.bailian',
+  lanyun: 'settings.mcp.sync.providerDescriptions.lanyun',
+  mcprouter: 'settings.mcp.sync.providerDescriptions.mcprouter',
+  modelscope: 'settings.mcp.sync.providerDescriptions.modelscope',
+  tokenflux: 'settings.mcp.sync.providerDescriptions.tokenflux'
+} as const
+
+export const getMcpProviderDescriptionLabel = (key: string): string => {
+  return getLabel(mcpProviderDescriptionKeyMap, key)
+}
+
 const miniappsStatusKeyMap = {
   visible: 'settings.miniapps.visible',
   disabled: 'settings.miniapps.disabled'
@@ -290,19 +333,6 @@ export const getHttpMessageLabel = (key: string): string => {
   return getLabel(httpMessageKeyMap, key)
 }
 
-const reasoningEffortOptionsKeyMap: Record<ThinkingOption, string> = {
-  off: 'assistants.settings.reasoning_effort.off',
-  minimal: 'assistants.settings.reasoning_effort.minimal',
-  high: 'assistants.settings.reasoning_effort.high',
-  low: 'assistants.settings.reasoning_effort.low',
-  medium: 'assistants.settings.reasoning_effort.medium',
-  auto: 'assistants.settings.reasoning_effort.default'
-} as const
-
-export const getReasoningEffortOptionsLabel = (key: string): string => {
-  return getLabel(reasoningEffortOptionsKeyMap, key)
-}
-
 const fileFieldKeyMap = {
   created_at: 'files.created_at',
   size: 'files.size',
@@ -321,7 +351,11 @@ const builtInMcpDescriptionKeyMap: Record<BuiltinMCPServerName, string> = {
   [BuiltinMCPServerNames.fetch]: 'settings.mcp.builtinServersDescriptions.fetch',
   [BuiltinMCPServerNames.filesystem]: 'settings.mcp.builtinServersDescriptions.filesystem',
   [BuiltinMCPServerNames.difyKnowledge]: 'settings.mcp.builtinServersDescriptions.dify_knowledge',
-  [BuiltinMCPServerNames.python]: 'settings.mcp.builtinServersDescriptions.python'
+  [BuiltinMCPServerNames.python]: 'settings.mcp.builtinServersDescriptions.python',
+  [BuiltinMCPServerNames.didiMCP]: 'settings.mcp.builtinServersDescriptions.didi_mcp',
+  [BuiltinMCPServerNames.browser]: 'settings.mcp.builtinServersDescriptions.browser',
+  [BuiltinMCPServerNames.nowledgeMem]: 'settings.mcp.builtinServersDescriptions.nowledge_mem',
+  [BuiltinMCPServerNames.hub]: 'settings.mcp.builtinServersDescriptions.hub'
 } as const
 
 export const getBuiltInMcpServerDescriptionLabel = (key: string): string => {
@@ -331,11 +365,22 @@ export const getBuiltInMcpServerDescriptionLabel = (key: string): string => {
 const builtinOcrProviderKeyMap = {
   system: 'ocr.builtin.system',
   tesseract: '',
-  paddleocr: ''
+  paddleocr: '',
+  ovocr: ''
 } as const satisfies Record<BuiltinOcrProviderId, string>
 
 export const getBuiltinOcrProviderLabel = (key: BuiltinOcrProviderId) => {
   if (key === 'tesseract') return 'Tesseract'
   else if (key == 'paddleocr') return 'PaddleOCR'
+  else if (key == 'ovocr') return 'Intel OV(NPU) OCR'
   else return getLabel(builtinOcrProviderKeyMap, key)
+}
+
+export const getAgentTypeLabel = (key: AgentType) => {
+  switch (key) {
+    case 'claude-code':
+      return 'Claude Code'
+    default:
+      return 'Unknown Type'
+  }
 }

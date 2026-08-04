@@ -8,31 +8,30 @@ import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import useNavBackgroundColor from '@renderer/hooks/useNavBackgroundColor'
 import { modelGenerating, useRuntime } from '@renderer/hooks/useRuntime'
-import { useSettings } from '@renderer/hooks/useSettings'
-import { getSidebarIconLabel, getThemeModeLabel } from '@renderer/i18n/label'
-import { ThemeMode } from '@renderer/types'
+import { useEnableDeveloperMode, useSettings } from '@renderer/hooks/useSettings'
+import { getSidebarIconLabel } from '@renderer/i18n/label'
 import { isEmoji } from '@renderer/utils'
 import { Avatar, Tooltip } from 'antd'
 import {
+  Box,
   Code,
   FileSearch,
   Folder,
   Languages,
   LayoutGrid,
   MessageSquare,
-  Monitor,
-  Moon,
+  MousePointerClick,
   NotepadText,
   Palette,
   Settings,
-  Sparkle,
-  Sun
+  Sparkle
 } from 'lucide-react'
-import { FC } from 'react'
+import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
+import { OpenClawSidebarIcon } from '../Icons/SVGIcon'
 import UserPopup from '../Popups/UserPopup'
 import { SidebarOpenedMinappTabs, SidebarPinnedApps } from './PinnedMinapps'
 
@@ -45,7 +44,8 @@ const Sidebar: FC = () => {
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
-  const { theme, settedTheme, toggleTheme } = useTheme()
+  const { theme } = useTheme()
+  // const { settedTheme, toggleTheme } = useTheme() // 已移除主题切换功能
   const avatar = useAvatar()
   const { t } = useTranslation()
 
@@ -89,10 +89,8 @@ const Sidebar: FC = () => {
         )}
       </MainMenusContainer>
       <Menus>
-        <Tooltip
-          title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
-          mouseEnterDelay={0.8}
-          placement="right">
+        {/* 主题切换按钮已移除 - 页面嵌入到 Qt 窗口中 */}
+        {/* <Tooltip title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)} placement="right">
           <Icon theme={theme} onClick={toggleTheme}>
             {settedTheme === ThemeMode.dark ? (
               <Moon size={20} className="icon" />
@@ -102,7 +100,7 @@ const Sidebar: FC = () => {
               <Monitor size={20} className="icon" />
             )}
           </Icon>
-        </Tooltip>
+        </Tooltip> */}
         <Tooltip title={t('settings.title')} mouseEnterDelay={0.8} placement="right">
           <StyledLink
             onClick={async () => {
@@ -123,56 +121,65 @@ const MainMenus: FC = () => {
   const { hideMinappPopup } = useMinappPopup()
   const { pathname } = useLocation()
   const { sidebarIcons, defaultPaintingProvider } = useSettings()
+  const { enableDeveloperMode } = useEnableDeveloperMode()
   const { minappShow } = useRuntime()
   const navigate = useNavigate()
   const { theme } = useTheme()
 
   const isRoute = (path: string): string => (pathname === path && !minappShow ? 'active' : '')
-  const isRoutes = (path: string): string => (pathname.startsWith(path) && !minappShow ? 'active' : '')
+  const isRoutes = (path: string): string => (pathname.startsWith(path) && path !== '/' && !minappShow ? 'active' : '')
 
   const iconMap = {
     assistants: <MessageSquare size={18} className="icon" />,
-    agents: <Sparkle size={18} className="icon" />,
+    agents: <MousePointerClick size={18} className="icon" />,
+    plugins: <Box size={18} className="icon" />,
+    store: <Sparkle size={18} className="icon" />,
     paintings: <Palette size={18} className="icon" />,
     translate: <Languages size={18} className="icon" />,
     minapp: <LayoutGrid size={18} className="icon" />,
     knowledge: <FileSearch size={18} className="icon" />,
     files: <Folder size={18} className="icon" />,
     notes: <NotepadText size={18} className="icon" />,
-    code_tools: <Code size={18} className="icon" />
+    code_tools: <Code size={18} className="icon" />,
+    openclaw: <OpenClawSidebarIcon style={{ width: 18, height: 18 }} className="icon" />
   }
 
   const pathMap = {
     assistants: '/',
     agents: '/agents',
+    plugins: '/plugins',
+    store: '/store',
     paintings: `/paintings/${defaultPaintingProvider}`,
     translate: '/translate',
     minapp: '/apps',
     knowledge: '/knowledge',
     files: '/files',
     code_tools: '/code',
-    notes: '/notes'
+    notes: '/notes',
+    openclaw: '/openclaw'
   }
 
-  return sidebarIcons.visible.map((icon) => {
-    const path = pathMap[icon]
-    const isActive = path === '/' ? isRoute(path) : isRoutes(path)
+  return sidebarIcons.visible
+    .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
+    .map((icon) => {
+      const path = pathMap[icon]
+      const isActive = path === '/' ? isRoute(path) : isRoutes(path)
 
-    return (
-      <Tooltip key={icon} title={getSidebarIconLabel(icon)} mouseEnterDelay={0.8} placement="right">
-        <StyledLink
-          onClick={async () => {
-            hideMinappPopup()
-            await modelGenerating()
-            navigate(path)
-          }}>
-          <Icon theme={theme} className={isActive}>
-            {iconMap[icon]}
-          </Icon>
-        </StyledLink>
-      </Tooltip>
-    )
-  })
+      return (
+        <Tooltip key={icon} title={getSidebarIconLabel(icon)} mouseEnterDelay={0.8} placement="right">
+          <StyledLink
+            onClick={async () => {
+              hideMinappPopup()
+              await modelGenerating()
+              navigate(path)
+            }}>
+            <Icon theme={theme} className={isActive}>
+              {iconMap[icon]}
+            </Icon>
+          </StyledLink>
+        </Tooltip>
+      )
+    })
 }
 
 const Container = styled.div<{ $isFullscreen: boolean }>`
@@ -228,6 +235,9 @@ const Icon = styled.div<{ theme: string }>`
   box-sizing: border-box;
   -webkit-app-region: none;
   border: 0.5px solid transparent;
+  .icon {
+    color: var(--color-icon);
+  }
   &:hover {
     background-color: ${({ theme }) => (theme === 'dark' ? 'var(--color-black)' : 'var(--color-white)')};
     opacity: 0.8;

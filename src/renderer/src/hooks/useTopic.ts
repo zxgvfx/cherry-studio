@@ -7,16 +7,17 @@ import store from '@renderer/store'
 import { updateTopic } from '@renderer/store/assistants'
 import { setNewlyRenamedTopics, setRenamingTopics } from '@renderer/store/runtime'
 import { loadTopicMessagesThunk } from '@renderer/store/thunk/messageThunk'
-import { Assistant, Topic } from '@renderer/types'
+import type { Assistant, Topic } from '@renderer/types'
 import { findMainTextBlocks } from '@renderer/utils/messageUtils/find'
+import { truncateText } from '@renderer/utils/naming'
 import { find, isEmpty } from 'lodash'
-import { useEffect, useState } from 'react'
+import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
 
 import { useAssistant } from './useAssistant'
 import { getStoreSetting } from './useSettings'
 
 let _activeTopic: Topic
-let _setActiveTopic: (topic: Topic) => void
+let _setActiveTopic: Dispatch<SetStateAction<Topic>>
 
 // const logger = loggerService.withContext('useTopic')
 
@@ -47,6 +48,17 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
       setActiveTopic(assistant.topics[0])
     }
   }, [activeTopic?.id, assistant])
+
+  useEffect(() => {
+    if (!assistant?.topics?.length || !activeTopic) {
+      return
+    }
+
+    const latestTopic = assistant.topics.find((item) => item.id === activeTopic.id)
+    if (latestTopic && latestTopic !== activeTopic) {
+      setActiveTopic(latestTopic)
+    }
+  }, [assistant?.topics, activeTopic])
 
   return { activeTopic, setActiveTopic }
 }
@@ -119,20 +131,31 @@ export const autoRenameTopic = async (assistant: Assistant, topicId: string) => 
       return
     }
 
-    if (!enableTopicNaming) {
+    const applyTopicName = (name: string) => {
+      const data = { ...topic, name } as Topic
+      if (topic.id === _activeTopic.id) {
+        _setActiveTopic(data)
+      }
+      store.dispatch(updateTopic({ assistantId: assistant.id, topic: data }))
+    }
+
+    const getFirstMessageName = () => {
       const message = topic.messages[0]
       const blocks = findMainTextBlocks(message)
-      const topicName = blocks
+      const text = blocks
         .map((block) => block.content)
         .join('\n\n')
-        .substring(0, 50)
+        .trim()
+
+      return truncateText(text)
+    }
+
+    if (!enableTopicNaming) {
+      const topicName = getFirstMessageName()
       if (topicName) {
         try {
           startTopicRenaming(topicId)
-
-          const data = { ...topic, name: topicName } as Topic
-          topic.id === _activeTopic.id && _setActiveTopic(data)
-          store.dispatch(updateTopic({ assistantId: assistant.id, topic: data }))
+          applyTopicName(topicName)
         } finally {
           finishTopicRenaming(topicId)
         }
@@ -141,13 +164,19 @@ export const autoRenameTopic = async (assistant: Assistant, topicId: string) => 
     }
 
     if (topic && topic.name === i18n.t('chat.default.topic.name') && topic.messages.length >= 2) {
+      startTopicRenaming(topicId)
       try {
-        startTopicRenaming(topicId)
-        const summaryText = await fetchMessagesSummary({ messages: topic.messages, assistant })
+        const { text: summaryText, error } = await fetchMessagesSummary({ messages: topic.messages })
         if (summaryText) {
-          const data = { ...topic, name: summaryText }
-          topic.id === _activeTopic.id && _setActiveTopic(data)
-          store.dispatch(updateTopic({ assistantId: assistant.id, topic: data }))
+          applyTopicName(summaryText)
+        } else {
+          if (error) {
+            window.toast?.error(`${i18n.t('message.error.fetchTopicName')}: ${error}`)
+          }
+          const fallbackName = getFirstMessageName()
+          if (fallbackName) {
+            applyTopicName(fallbackName)
+          }
         }
       } finally {
         finishTopicRenaming(topicId)
@@ -184,13 +213,8 @@ export const TopicManager = {
   },
 
   async removeTopic(id: string) {
-    const messages = await TopicManager.getTopicMessages(id)
-
-    for (const message of messages) {
-      await deleteMessageFiles(message)
-    }
-
-    db.topics.delete(id)
+    await TopicManager.clearTopicMessages(id)
+    await db.topics.delete(id)
   },
 
   async clearTopicMessages(id: string) {
@@ -199,6 +223,12 @@ export const TopicManager = {
     if (topic) {
       for (const message of topic?.messages ?? []) {
         await deleteMessageFiles(message)
+      }
+
+      // 删除关联的 message_blocks 记录
+      const blockIds = topic.messages.flatMap((message) => message.blocks || [])
+      if (blockIds.length > 0) {
+        await db.message_blocks.bulkDelete(blockIds)
       }
 
       topic.messages = []

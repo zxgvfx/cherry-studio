@@ -8,10 +8,12 @@ import { fetchChatCompletion } from '@renderer/services/ApiService'
 import { getDefaultAssistant, getDefaultModel, getQuickModel } from '@renderer/services/AssistantService'
 import { estimateTextTokens } from '@renderer/services/TokenService'
 import { getAllCustomLanguages } from '@renderer/services/TranslateService'
-import { Assistant, TranslateLanguage, TranslateLanguageCode } from '@renderer/types'
-import { Chunk, ChunkType } from '@renderer/types/chunk'
+import type { Assistant, TranslateLanguage, TranslateLanguageCode } from '@renderer/types'
+import type { Chunk } from '@renderer/types/chunk'
+import { ChunkType } from '@renderer/types/chunk'
 import { franc } from 'franc-min'
-import React, { RefObject } from 'react'
+import type { RefObject } from 'react'
+import React from 'react'
 import { sliceByTokens } from 'tokenx'
 
 const logger = loggerService.withContext('Utils:translate')
@@ -81,9 +83,7 @@ const detectLanguageByLLM = async (inputText: string): Promise<TranslateLanguage
   const assistant: Assistant = getDefaultAssistant()
 
   assistant.model = model
-  assistant.settings = {
-    temperature: 0.7
-  }
+  assistant.settings = {}
   assistant.prompt = LANG_DETECT_PROMPT.replace('{{list_lang}}', listLangText).replace('{{input}}', text)
 
   const onChunk: (chunk: Chunk) => void = (chunk: Chunk) => {
@@ -255,6 +255,7 @@ export const getTranslateOptions = async () => {
     }))
     return [...builtinLanguages, ...transformedCustomLangs]
   } catch (e) {
+    logger.error('[getTranslateOptions] Failed to get custom languages. Fallback to builtinLanguages', e as Error)
     return builtinLanguages
   }
 }

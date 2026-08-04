@@ -9,9 +9,10 @@ import {
   ZoomOutOutlined
 } from '@ant-design/icons'
 import { loggerService } from '@logger'
+import { useProxiedImage } from '@renderer/hooks/useProxiedImage'
 import type { ImageMessageBlock } from '@renderer/types/newMessage'
-import { Image as AntdImage, Space } from 'antd'
-import { FC } from 'react'
+import { Image as AntdImage, Skeleton, Space } from 'antd'
+import type { CSSProperties, FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -20,6 +21,17 @@ interface Props {
 }
 
 const logger = loggerService.withContext('MessageImage')
+
+const ProxiedImage: FC<{ image: string; style?: CSSProperties; preview?: any }> = ({
+  image: rawImage,
+  style,
+  preview
+}) => {
+  const { src, loading } = useProxiedImage(rawImage)
+  if (loading) return <Skeleton.Image active style={style ?? { width: 200, height: 200 }} />
+  if (!src) return <Skeleton.Image active={false} style={style ?? { width: 200, height: 200 }} />
+  return <Image src={src} style={style} preview={preview} />
+}
 
 const MessageImage: FC<Props> = ({ block }) => {
   const { t } = useTranslation()
@@ -62,7 +74,10 @@ const MessageImage: FC<Props> = ({ block }) => {
               byteArrays.push(byteArray)
             }
 
-            const blob = new Blob(byteArrays, { type: mimeType })
+            const blob = new Blob(
+              byteArrays.map((array) => array.slice()),
+              { type: mimeType }
+            )
             await navigator.clipboard.write([new ClipboardItem({ [mimeType]: blob })])
           } else {
             throw new Error('无效的 base64 图片格式')
@@ -71,8 +86,9 @@ const MessageImage: FC<Props> = ({ block }) => {
         }
         case 'url':
           {
-            // 处理 URL 格式的图片
-            const response = await fetch(image)
+            const { ensureLocalImageUrl } = await import('@renderer/utils/proxyImage')
+            const localUrl = await ensureLocalImageUrl(image)
+            const response = await fetch(localUrl)
             const blob = await response.blob()
 
             await navigator.clipboard.write([
@@ -122,8 +138,8 @@ const MessageImage: FC<Props> = ({ block }) => {
   return (
     <Container style={{ marginBottom: 8 }}>
       {images.map((image, index) => (
-        <Image
-          src={image}
+        <ProxiedImage
+          image={image}
           key={`image-${index}`}
           style={{ maxWidth: 500, maxHeight: 500 }}
           preview={{ toolbarRender: renderToolbar(image, index) }}

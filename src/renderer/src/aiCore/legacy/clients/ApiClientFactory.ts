@@ -1,17 +1,18 @@
 import { loggerService } from '@logger'
-import { isNewApiProvider } from '@renderer/config/providers'
-import { Provider } from '@renderer/types'
+import type { Provider } from '@renderer/types'
+import { isNewApiProvider } from '@renderer/utils/provider'
 
 import { AihubmixAPIClient } from './aihubmix/AihubmixAPIClient'
 import { AnthropicAPIClient } from './anthropic/AnthropicAPIClient'
 import { AwsBedrockAPIClient } from './aws/AwsBedrockAPIClient'
-import { BaseApiClient } from './BaseApiClient'
+import type { BaseApiClient } from './BaseApiClient'
 import { CherryAiAPIClient } from './cherryai/CherryAiAPIClient'
 import { GeminiAPIClient } from './gemini/GeminiAPIClient'
 import { VertexAPIClient } from './gemini/VertexAPIClient'
 import { NewAPIClient } from './newapi/NewAPIClient'
 import { OpenAIAPIClient } from './openai/OpenAIApiClient'
 import { OpenAIResponseAPIClient } from './openai/OpenAIResponseAPIClient'
+import { OVMSClient } from './ovms/OVMSClient'
 import { PPIOAPIClient } from './ppio/PPIOAPIClient'
 import { ZhipuAPIClient } from './zhipu/ZhipuAPIClient'
 
@@ -60,6 +61,12 @@ export class ApiClientFactory {
 
     if (provider.id === 'zhipu') {
       instance = new ZhipuAPIClient(provider) as BaseApiClient
+      return instance
+    }
+
+    if (provider.id === 'ovms') {
+      logger.debug(`Creating OVMSClient for provider: ${provider.id}`)
+      instance = new OVMSClient(provider) as BaseApiClient
       return instance
     }
 

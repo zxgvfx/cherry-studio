@@ -1,14 +1,17 @@
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
+import { isTextChatModel } from '@renderer/config/models'
 import { useAssistants } from '@renderer/hooks/useAssistant'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useActiveTopic } from '@renderer/hooks/useTopic'
-import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { fetchMcpTools } from '@renderer/services/ApiService'
 import NavigationService from '@renderer/services/NavigationService'
 import { newMessagesActions } from '@renderer/store/newMessage'
-import { Assistant, Topic } from '@renderer/types'
+import type { Assistant, Topic } from '@renderer/types'
+import { isPromptToolUse, isSupportedToolUse } from '@renderer/utils/mcp-tools'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { AnimatePresence, motion } from 'motion/react'
-import { FC, startTransition, useCallback, useEffect, useState } from 'react'
+import type { FC } from 'react'
+import { startTransition, useCallback, useEffect, useState } from 'react'
 import { useDispatch } from 'react-redux'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
@@ -27,8 +30,10 @@ const HomePage: FC = () => {
   const location = useLocation()
   const state = location.state
 
-  const [activeAssistant, _setActiveAssistant] = useState(state?.assistant || _activeAssistant || assistants[0])
-  const { activeTopic, setActiveTopic: _setActiveTopic } = useActiveTopic(activeAssistant?.id, state?.topic)
+  const [activeAssistant, _setActiveAssistant] = useState<Assistant>(
+    state?.assistant || _activeAssistant || assistants[0]
+  )
+  const { activeTopic, setActiveTopic: _setActiveTopic } = useActiveTopic(activeAssistant?.id ?? '', state?.topic)
   const { showAssistants, showTopics, topicPosition } = useSettings()
   const dispatch = useDispatch()
 
@@ -36,7 +41,7 @@ const HomePage: FC = () => {
 
   const setActiveAssistant = useCallback(
     (newAssistant: Assistant) => {
-      if (newAssistant.id === activeAssistant.id) return
+      if (newAssistant.id === activeAssistant?.id) return
       startTransition(() => {
         _setActiveAssistant(newAssistant)
         // 同步更新 active topic，避免不必要的重新渲染
@@ -44,7 +49,7 @@ const HomePage: FC = () => {
         _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
       })
     },
-    [_setActiveTopic, activeAssistant]
+    [_setActiveTopic, activeAssistant?.id]
   )
 
   const setActiveTopic = useCallback(
@@ -68,19 +73,6 @@ const HomePage: FC = () => {
   }, [state])
 
   useEffect(() => {
-    const unsubscribe = EventEmitter.on(EVENT_NAMES.SWITCH_ASSISTANT, (assistantId: string) => {
-      const newAssistant = assistants.find((a) => a.id === assistantId)
-      if (newAssistant) {
-        setActiveAssistant(newAssistant)
-      }
-    })
-
-    return () => {
-      unsubscribe()
-    }
-  }, [assistants, setActiveAssistant])
-
-  useEffect(() => {
     const canMinimize = topicPosition == 'left' ? !showAssistants : !showAssistants && !showTopics
     window.api.window.setMinimumSize(canMinimize ? SECOND_MIN_WINDOW_WIDTH : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
 
@@ -88,6 +80,20 @@ const HomePage: FC = () => {
       window.api.window.resetMinimumSize()
     }
   }, [showAssistants, showTopics, topicPosition])
+
+  // 预加载当前助手的 MCP 工具列表，确保工具在发送消息前已加载
+  useEffect(() => {
+    if (!activeAssistant) return
+    if (!isTextChatModel(activeAssistant.model)) return
+    if (!isPromptToolUse(activeAssistant) && !isSupportedToolUse(activeAssistant)) return
+
+    // 异步预加载工具列表，不阻塞 UI
+    fetchMcpTools(activeAssistant).catch((error) => {
+      // 静默处理错误，避免影响用户体验
+      // 工具列表会在发送消息时再次尝试加载
+      console.debug('[HomePage] Failed to preload MCP tools:', error)
+    })
+  }, [activeAssistant?.id])
 
   return (
     <Container id="home-page">
@@ -151,6 +157,10 @@ const ContentContainer = styled.div`
   flex: 1;
   flex-direction: row;
   overflow: hidden;
+
+  [navbar-position='top'] & {
+    max-width: calc(100vw - 12px);
+  }
 `
 
 export default HomePage

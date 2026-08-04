@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
-import { Model, ModelType, Provider } from '@renderer/types'
-import { ModalFuncProps } from 'antd'
+import type { Model, ModelType } from '@renderer/types'
+import type { ModalFuncProps } from 'antd'
 import { isEqual } from 'lodash'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -101,14 +101,16 @@ export function removeSpecialCharacters(str: string): string {
   return str.replace(/[\n"]/g, '').replace(/[\p{M}\p{P}]/gu, '')
 }
 
-/**
- * 检查 URL 是否是有效的代理 URL。
- * @param {string} url 代理 URL
- * @returns {boolean} 是否有效
- */
-export const isValidProxyUrl = (url: string): boolean => {
-  return url.includes('://')
-}
+  /**
+   * 检查 URL 是否是有效的代理 URL。
+   * @param {string} url 代理 URL
+   * @returns {boolean} 是否有效
+   */
+  export const isValidProxyUrl = (url: string): boolean => {
+    // 简单检查是否包含协议头（支持 http, https, socks4, socks5）
+    // 放宽限制，只检查是否包含 :// 
+    return url.includes('://')
+  }
 
 /**
  * 动态加载 JavaScript 脚本。
@@ -197,19 +199,6 @@ export function getMcpConfigSampleFromReadme(readme: string): Record<string, any
 }
 
 /**
- * 判断是否为 OpenAI 兼容的提供商
- * @param {Provider} provider 提供商对象
- * @returns {boolean} 是否为 OpenAI 兼容提供商
- */
-export function isOpenAIProvider(provider: Provider): boolean {
-  return !['anthropic', 'gemini', 'vertexai'].includes(provider.type)
-}
-
-export function isAnthropicProvider(provider: Provider): boolean {
-  return provider.type === 'anthropic'
-}
-
-/**
  * 判断模型是否为用户手动选择
  * @param {Model} model 模型对象
  * @param {ModelType} type 模型类型
@@ -227,6 +216,7 @@ export function uniqueObjectArray<T>(array: T[]): T[] {
 export * from './api'
 export * from './collection'
 export * from './dataLimit'
+export * from './dom'
 export * from './file'
 export * from './image'
 export * from './json'

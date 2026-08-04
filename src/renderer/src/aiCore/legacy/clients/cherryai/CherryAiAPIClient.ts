@@ -1,6 +1,6 @@
-import { Provider } from '@renderer/types'
-import { OpenAISdkParams, OpenAISdkRawOutput } from '@renderer/types/sdk'
-import OpenAI from 'openai'
+import type OpenAI from '@cherrystudio/openai'
+import type { Provider } from '@renderer/types'
+import type { OpenAISdkParams, OpenAISdkRawOutput } from '@renderer/types/sdk'
 
 import { OpenAIAPIClient } from '../openai/OpenAIApiClient'
 
@@ -38,7 +38,7 @@ export class CherryAiAPIClient extends OpenAIAPIClient {
   }
 
   public async listModels(): Promise<OpenAI.Models.Model[]> {
-    const models = ['glm-4.5-flash', 'Qwen/Qwen3-8B']
+    const models = ['Qwen/Qwen3-8B', 'Qwen/Qwen3-Next-80B-A3B-Instruct']
 
     const created = Date.now()
     return models.map((id) => ({

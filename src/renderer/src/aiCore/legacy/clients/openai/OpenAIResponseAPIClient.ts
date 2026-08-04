@@ -1,6 +1,8 @@
+import OpenAI, { AzureOpenAI } from '@cherrystudio/openai'
+import type { ResponseInput } from '@cherrystudio/openai/resources/responses/responses'
 import { loggerService } from '@logger'
-import { GenericChunk } from '@renderer/aiCore/legacy/middleware/schemas'
-import { CompletionsContext } from '@renderer/aiCore/legacy/middleware/types'
+import type { GenericChunk } from '@renderer/aiCore/legacy/middleware/schemas'
+import type { CompletionsContext } from '@renderer/aiCore/legacy/middleware/types'
 import {
   isGPT5SeriesModel,
   isOpenAIChatCompletionOnlyModel,
@@ -10,23 +12,21 @@ import {
   isSupportVerbosityModel,
   isVisionModel
 } from '@renderer/config/models'
-import { isSupportDeveloperRoleProvider } from '@renderer/config/providers'
 import { estimateTextTokens } from '@renderer/services/TokenService'
-import {
+import type {
   FileMetadata,
-  FileTypes,
   MCPCallToolResponse,
   MCPTool,
   MCPToolResponse,
   Model,
   OpenAIServiceTier,
   Provider,
-  ToolCallResponse,
-  WebSearchSource
+  ToolCallResponse
 } from '@renderer/types'
+import { FILE_TYPE, WEB_SEARCH_SOURCE } from '@renderer/types'
 import { ChunkType } from '@renderer/types/chunk'
-import { Message } from '@renderer/types/newMessage'
-import {
+import type { Message } from '@renderer/types/newMessage'
+import type {
   OpenAIResponseSdkMessageParam,
   OpenAIResponseSdkParams,
   OpenAIResponseSdkRawChunk,
@@ -41,18 +41,31 @@ import {
   mcpToolsToOpenAIResponseTools,
   openAIToolsToMcpTool
 } from '@renderer/utils/mcp-tools'
+import { hasMultimodalContent, mcpResultToTextSummary } from '@renderer/aiCore/utils/mcp'
 import { findFileBlocks, findImageBlocks } from '@renderer/utils/messageUtils/find'
+import { isSupportDeveloperRoleProvider } from '@renderer/utils/provider'
 import { MB } from '@shared/config/constant'
 import { t } from 'i18next'
 import { isEmpty } from 'lodash'
-import OpenAI, { AzureOpenAI } from 'openai'
-import { ResponseInput } from 'openai/resources/responses/responses'
 
-import { RequestTransformer, ResponseChunkTransformer } from '../types'
+import type { RequestTransformer, ResponseChunkTransformer } from '../types'
 import { OpenAIAPIClient } from './OpenAIApiClient'
 import { OpenAIBaseClient } from './OpenAIBaseClient'
 
 const logger = loggerService.withContext('OpenAIResponseAPIClient')
+
+function inferImageMimeFromBase64(base64: string): string {
+  const h = (base64 || '').trim().slice(0, 64)
+  if (!h) return 'image/png'
+  if (h.startsWith('/9j/')) return 'image/jpeg'
+  if (h.startsWith('iVBORw0KGgo')) return 'image/png'
+  if (h.startsWith('R0lGOD')) return 'image/gif'
+  if (h.startsWith('UklGR')) return 'image/webp'
+  if (h.startsWith('Qk')) return 'image/bmp'
+  if (h.startsWith('PD94') || h.startsWith('PHN2Zy')) return 'image/svg+xml'
+  return 'image/png'
+}
+
 export class OpenAIResponseAPIClient extends OpenAIBaseClient<
   OpenAI,
   OpenAIResponseSdkParams,
@@ -91,7 +104,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
     if (isOpenAILLMModel(model) && !isOpenAIChatCompletionOnlyModel(model)) {
       if (this.provider.id === 'azure-openai' || this.provider.type === 'azure-openai') {
         this.provider = { ...this.provider, apiHost: this.formatApiHost() }
-        if (this.provider.apiVersion === 'preview') {
+        if (this.provider.apiVersion === 'preview' || this.provider.apiVersion === 'v1') {
           return this
         } else {
           return this.client
@@ -123,6 +136,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
     if (this.sdkInstance) {
       return this.sdkInstance
     }
+    const baseUrl = this.getBaseURL()
 
     if (this.provider.id === 'azure-openai' || this.provider.type === 'azure-openai') {
       return new AzureOpenAI({
@@ -135,7 +149,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
       return new OpenAI({
         dangerouslyAllowBrowser: true,
         apiKey: this.apiKey,
-        baseURL: this.getBaseURL(),
+        baseURL: baseUrl,
         defaultHeaders: {
           ...this.defaultHeaders(),
           ...this.provider.extra_headers
@@ -209,21 +223,19 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
     }
 
     for (const imageBlock of imageBlocks) {
-      if (isVision) {
-        if (imageBlock.file) {
-          const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
-          parts.push({
-            detail: 'auto',
-            type: 'input_image',
-            image_url: image.data as string
-          })
-        } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
-          parts.push({
-            detail: 'auto',
-            type: 'input_image',
-            image_url: imageBlock.url
-          })
-        }
+      if (imageBlock.file) {
+        const image = await window.api.file.base64Image(imageBlock.file.id + imageBlock.file.ext)
+        parts.push({
+          detail: 'auto',
+          type: 'input_image',
+          image_url: image.data as string
+        })
+      } else if (imageBlock.url && imageBlock.url.startsWith('data:')) {
+        parts.push({
+          detail: 'auto',
+          type: 'input_image',
+          image_url: imageBlock.url
+        })
       }
     }
 
@@ -239,7 +251,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
         }
       }
 
-      if ([FileTypes.TEXT, FileTypes.DOCUMENT].includes(file.type)) {
+      if ([FILE_TYPE.TEXT, FILE_TYPE.DOCUMENT].some((type) => file.type === type)) {
         const fileContent = (await window.api.file.read(file.id + file.ext, true)).trim()
         parts.push({
           type: 'input_text',
@@ -290,7 +302,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
       return {
         type: 'function_call_output',
         call_id: mcpToolResponse.toolCallId,
-        output: JSON.stringify(resp.content)
+        output: hasMultimodalContent(resp) ? mcpResultToTextSummary(resp) : JSON.stringify(resp.content)
       }
     }
     return
@@ -298,7 +310,31 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
 
   private convertResponseToMessageContent(response: OpenAI.Responses.Response): ResponseInput {
     const content: OpenAI.Responses.ResponseInput = []
-    content.push(...response.output)
+    response.output.forEach((item) => {
+      if (item.type !== 'apply_patch_call' && item.type !== 'apply_patch_call_output') {
+        content.push(item)
+      } else if (item.type === 'apply_patch_call') {
+        if (item.operation !== undefined) {
+          const applyPatchToolCall: OpenAI.Responses.ResponseInputItem.ApplyPatchCall = {
+            ...item,
+            operation: item.operation
+          }
+          content.push(applyPatchToolCall)
+        } else {
+          logger.warn('Undefined tool call operation for ApplyPatchToolCall.')
+        }
+      } else if (item.type === 'apply_patch_call_output') {
+        if (item.output !== undefined) {
+          const applyPatchToolCallOutput: OpenAI.Responses.ResponseInputItem.ApplyPatchCallOutput = {
+            ...item,
+            output: item.output === null ? undefined : item.output
+          }
+          content.push(applyPatchToolCallOutput)
+        } else {
+          logger.warn('Undefined tool call operation for ApplyPatchToolCall.')
+        }
+      }
+    })
     return content
   }
 
@@ -342,9 +378,28 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
       }
     }
     switch (message.type) {
-      case 'function_call_output':
-        sum += estimateTextTokens(message.output)
+      case 'function_call_output': {
+        let str = ''
+        if (typeof message.output === 'string') {
+          str = message.output
+        } else {
+          for (const part of message.output) {
+            switch (part.type) {
+              case 'input_text':
+                str += part.text
+                break
+              case 'input_image':
+                str += part.image_url || ''
+                break
+              case 'input_file':
+                str += part.file_data || ''
+                break
+            }
+          }
+        }
+        sum += estimateTextTokens(str)
         break
+      }
       case 'function_call':
         sum += estimateTextTokens(message.arguments)
         break
@@ -478,7 +533,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
           ...(isSupportVerbosityModel(model)
             ? {
                 text: {
-                  verbosity: this.getVerbosity()
+                  verbosity: this.getVerbosity(model)
                 }
               }
             : {}),
@@ -533,7 +588,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
                     controller.enqueue({
                       type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                       llm_web_search: {
-                        source: WebSearchSource.OPENAI_RESPONSE,
+                        source: WEB_SEARCH_SOURCE.OPENAI_RESPONSE,
                         results: output.content[0].annotations
                       }
                     })
@@ -556,16 +611,22 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
                 toolCalls.push(output)
                 break
               case 'image_generation_call':
-                controller.enqueue({
-                  type: ChunkType.IMAGE_CREATED
-                })
-                controller.enqueue({
-                  type: ChunkType.IMAGE_COMPLETE,
-                  image: {
-                    type: 'base64',
-                    images: [`data:image/png;base64,${output.result}`]
-                  }
-                })
+                {
+                  const mimeType = inferImageMimeFromBase64(output.result || '')
+                  const imageUrl = output.result ? `data:${mimeType};base64,${output.result}` : ''
+                  if (!imageUrl) break
+                  controller.enqueue({
+                    type: ChunkType.IMAGE_CREATED
+                  })
+                  controller.enqueue({
+                    type: ChunkType.IMAGE_COMPLETE,
+                    image: {
+                      type: 'base64',
+                      images: [imageUrl]
+                    }
+                  })
+                }
+                break
             }
           }
           if (toolCalls.length > 0) {
@@ -623,13 +684,18 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
               })
               break
             case 'response.image_generation_call.partial_image':
-              controller.enqueue({
-                type: ChunkType.IMAGE_DELTA,
-                image: {
-                  type: 'base64',
-                  images: [`data:image/png;base64,${chunk.partial_image_b64}`]
-                }
-              })
+              {
+                const mimeType = inferImageMimeFromBase64(chunk.partial_image_b64 || '')
+                const imageUrl = chunk.partial_image_b64 ? `data:${mimeType};base64,${chunk.partial_image_b64}` : ''
+                if (!imageUrl) break
+                controller.enqueue({
+                  type: ChunkType.IMAGE_DELTA,
+                  image: {
+                    type: 'base64',
+                    images: [imageUrl]
+                  }
+                })
+              }
               break
             case 'response.image_generation_call.completed':
               controller.enqueue({
@@ -669,7 +735,7 @@ export class OpenAIResponseAPIClient extends OpenAIBaseClient<
                 controller.enqueue({
                   type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
                   llm_web_search: {
-                    source: WebSearchSource.OPENAI_RESPONSE,
+                    source: WEB_SEARCH_SOURCE.OPENAI_RESPONSE,
                     results: chunk.part.annotations
                   }
                 })

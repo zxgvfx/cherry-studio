@@ -1,4 +1,5 @@
-import type { CompletionUsage } from 'openai/resources'
+import type { CompletionUsage } from '@cherrystudio/openai/resources'
+import type { ProviderMetadata } from 'ai'
 
 import type {
   Assistant,
@@ -10,12 +11,13 @@ import type {
   MemoryItem,
   Metrics,
   Model,
+  NormalToolResponse,
   Topic,
   Usage,
   WebSearchResponse,
   WebSearchSource
 } from '.'
-import { SerializedError } from './error'
+import type { SerializedError } from './error'
 
 // MessageBlock 类型枚举 - 根据实际API返回特性优化
 export enum MessageBlockType {
@@ -29,7 +31,9 @@ export enum MessageBlockType {
   FILE = 'file', // 文件内容
   ERROR = 'error', // 错误信息
   CITATION = 'citation', // 引用类型 (Now includes web search, grounding, etc.)
-  VIDEO = 'video' // 视频内容
+  VIDEO = 'video', // 视频内容
+  COMPACT = 'compact', // Compact command response
+  MODEL_3D = 'model_3d' // 3D model content
 }
 
 // 块状态定义
@@ -102,6 +106,8 @@ export interface ImageMessageBlock extends BaseMessageBlock {
     prompt?: string
     negativePrompt?: string
     generateImageResponse?: GenerateImageResponse
+    /** Short vision caption generated at upload time for offloaded context refs. */
+    imageCaption?: string
   }
 }
 
@@ -113,7 +119,7 @@ export interface ToolMessageBlock extends BaseMessageBlock {
   arguments?: Record<string, any>
   content?: string | object
   metadata?: BaseMessageBlock['metadata'] & {
-    rawMcpToolResponse?: MCPToolResponse
+    rawMcpToolResponse?: MCPToolResponse | NormalToolResponse
   }
 }
 
@@ -143,6 +149,30 @@ export interface ErrorMessageBlock extends BaseMessageBlock {
   type: MessageBlockType.ERROR
 }
 
+// Compact块 - 用于显示 /compact 命令的响应
+export interface CompactMessageBlock extends BaseMessageBlock {
+  type: MessageBlockType.COMPACT
+  content: string // 总结消息
+  compactedContent: string // 从 <local-command-stdout> 提取的内容
+}
+
+// 3D模型块
+export interface Model3DMessageBlock extends BaseMessageBlock {
+  type: MessageBlockType.MODEL_3D
+  file: FileMetadata
+  metadata?: BaseMessageBlock['metadata'] & {
+    format: 'glb' | 'gltf' | 'usd' | 'ply' | 'obj' | 'fbx'
+    source_plugin?: string
+    source_image?: string
+    progressText?: string
+    taskId?: string
+    seed?: number
+    duration?: number
+    prompt?: string
+    extraFiles?: FileMetadata[]
+  }
+}
+
 // MessageBlock 联合类型
 export type MessageBlock =
   | PlaceholderMessageBlock
@@ -156,6 +186,8 @@ export type MessageBlock =
   | ErrorMessageBlock
   | CitationMessageBlock
   | VideoMessageBlock
+  | CompactMessageBlock
+  | Model3DMessageBlock
 
 export enum UserMessageStatus {
   SUCCESS = 'success'
@@ -203,6 +235,13 @@ export type Message = {
 
   // 跟踪Id
   traceId?: string
+
+  // Agent session identifier used to resume Claude Code runs
+  agentSessionId?: string
+
+  // raw data
+  // TODO: add this providerMetadata to MessageBlock to save raw provider data for each block
+  providerMetadata?: ProviderMetadata
 }
 
 export interface Response {
@@ -216,6 +255,7 @@ export interface Response {
   error?: ResponseError
 }
 
+// FIXME: Weak type safety. It may be a specific class instance which inherits Error in runtime.
 export type ResponseError = Record<string, any>
 
 export interface MessageInputBaseParams {

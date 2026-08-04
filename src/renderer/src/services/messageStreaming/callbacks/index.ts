@@ -1,9 +1,11 @@
 import type { Assistant } from '@renderer/types'
 
-import { BlockManager } from '../BlockManager'
+import type { BlockManager } from '../BlockManager'
 import { createBaseCallbacks } from './baseCallbacks'
 import { createCitationCallbacks } from './citationCallbacks'
+import { createCompactCallbacks } from './compactCallbacks'
 import { createImageCallbacks } from './imageCallbacks'
+import { createModel3DCallbacks } from './model3dCallbacks'
 import { createTextCallbacks } from './textCallbacks'
 import { createThinkingCallbacks } from './thinkingCallbacks'
 import { createToolCallbacks } from './toolCallbacks'
@@ -22,6 +24,12 @@ interface CallbacksDependencies {
 export const createCallbacks = (deps: CallbacksDependencies) => {
   const { blockManager, dispatch, getState, topicId, assistantMsgId, saveUpdatesToDB, assistant } = deps
 
+  // 首先创建 thinkingCallbacks ，以便传递 getCurrentThinkingInfo 给 baseCallbacks
+  const thinkingCallbacks = createThinkingCallbacks({
+    blockManager,
+    assistantMsgId
+  })
+
   // 创建基础回调
   const baseCallbacks = createBaseCallbacks({
     blockManager,
@@ -30,18 +38,14 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
     topicId,
     assistantMsgId,
     saveUpdatesToDB,
-    assistant
-  })
-
-  // 创建各类回调
-  const thinkingCallbacks = createThinkingCallbacks({
-    blockManager,
-    assistantMsgId
+    assistant,
+    getCurrentThinkingInfo: thinkingCallbacks.getCurrentThinkingInfo
   })
 
   const toolCallbacks = createToolCallbacks({
     blockManager,
-    assistantMsgId
+    assistantMsgId,
+    dispatch
   })
 
   const imageCallbacks = createImageCallbacks({
@@ -55,16 +59,28 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
     getState
   })
 
-  // 创建textCallbacks时传入citationCallbacks的getCitationBlockId方法
+  const videoCallbacks = createVideoCallbacks({ blockManager, assistantMsgId })
+
+  const model3dCallbacks = createModel3DCallbacks({ blockManager, assistantMsgId })
+
+  const compactCallbacks = createCompactCallbacks({
+    blockManager,
+    assistantMsgId,
+    dispatch,
+    getState,
+    topicId,
+    saveUpdatesToDB
+  })
+
+  // 创建textCallbacks时传入citationCallbacks的getCitationBlockId方法和compactCallbacks的handleTextComplete方法
   const textCallbacks = createTextCallbacks({
     blockManager,
     getState,
     assistantMsgId,
     getCitationBlockId: citationCallbacks.getCitationBlockId,
-    getCitationBlockIdFromTool: toolCallbacks.getCitationBlockId
+    getCitationBlockIdFromTool: toolCallbacks.getCitationBlockId,
+    handleCompactTextComplete: compactCallbacks.handleTextComplete
   })
-
-  const videoCallbacks = createVideoCallbacks({ blockManager, assistantMsgId })
 
   // 组合所有回调
   return {
@@ -75,6 +91,8 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
     ...imageCallbacks,
     ...citationCallbacks,
     ...videoCallbacks,
+    ...model3dCallbacks,
+    ...compactCallbacks,
     // 清理资源的方法
     cleanup: () => {
       // 清理由 messageThunk 中的节流函数管理，这里不需要特别处理

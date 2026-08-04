@@ -1,5 +1,22 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { Shortcut } from '@renderer/types'
+/**
+ * @deprecated Scheduled for removal in v2.0.0
+ * --------------------------------------------------------------------------
+ * ⚠️ NOTICE: V2 DATA&UI REFACTORING (by 0xfullex)
+ * --------------------------------------------------------------------------
+ * STOP: Feature PRs affecting this file are currently BLOCKED.
+ * Only critical bug fixes are accepted during this migration phase.
+ *
+ * This file is being refactored to v2 standards.
+ * Any non-critical changes will conflict with the ongoing work.
+ *
+ * 🔗 Context & Status:
+ * - Contribution Hold: https://github.com/CherryHQ/cherry-studio/issues/10954
+ * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
+ * --------------------------------------------------------------------------
+ */
+import type { PayloadAction } from '@reduxjs/toolkit'
+import { createSlice } from '@reduxjs/toolkit'
+import type { Shortcut } from '@renderer/types'
 import { ZOOM_SHORTCUTS } from '@shared/config/constant'
 
 export interface ShortcutsState {
@@ -113,6 +130,13 @@ const initialState: ShortcutsState = {
     {
       key: 'toggle_new_context',
       shortcut: ['CommandOrControl', 'K'],
+      editable: true,
+      enabled: true,
+      system: false
+    },
+    {
+      key: 'select_model',
+      shortcut: ['CommandOrControl', 'Shift', 'M'],
       editable: true,
       enabled: true,
       system: false

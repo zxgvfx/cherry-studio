@@ -1,14 +1,15 @@
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
-import SelectModelPopup from '@renderer/components/Popups/SelectModelPopup'
+import { SelectModelPopup } from '@renderer/components/Popups/SelectModelPopup'
 import { isLocalAi } from '@renderer/config/env'
 import { isEmbeddingModel, isRerankModel, isWebSearchModel } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { getProviderName } from '@renderer/services/ProviderService'
-import { Assistant, Model } from '@renderer/types'
+import type { Assistant, Model } from '@renderer/types'
 import { Button, Tag } from 'antd'
 import { ChevronsUpDown } from 'lucide-react'
-import { FC, useEffect, useRef } from 'react'
+import type { FC } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -87,6 +88,7 @@ const ButtonContent = styled.div`
 const ModelName = styled.span`
   font-weight: 500;
   margin-right: -2px;
+  font-size: 12px;
 `
 
 export default SelectModelButton

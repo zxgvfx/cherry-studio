@@ -1,4 +1,20 @@
-import {
+/**
+ * @deprecated Scheduled for removal in v2.0.0
+ * --------------------------------------------------------------------------
+ * ⚠️ NOTICE: V2 DATA&UI REFACTORING (by 0xfullex)
+ * --------------------------------------------------------------------------
+ * STOP: Feature PRs affecting this file are currently BLOCKED.
+ * Only critical bug fixes are accepted during this migration phase.
+ *
+ * This file is being refactored to v2 standards.
+ * Any non-critical changes will conflict with the ongoing work.
+ *
+ * 🔗 Context & Status:
+ * - Contribution Hold: https://github.com/CherryHQ/cherry-studio/issues/10954
+ * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
+ * --------------------------------------------------------------------------
+ */
+import type {
   CustomTranslateLanguage,
   FileMetadata,
   KnowledgeNoteItem,
@@ -7,7 +23,6 @@ import {
 } from '@renderer/types'
 // Import necessary types for blocks and new message structure
 import type { Message as NewMessage, MessageBlock } from '@renderer/types/newMessage'
-import { NotesTreeNode } from '@renderer/types/note'
 import { Dexie, type EntityTable } from 'dexie'
 
 import { upgradeToV5, upgradeToV7, upgradeToV8 } from './upgrades'
@@ -24,7 +39,6 @@ export const db = new Dexie('CherryStudio', {
   quick_phrases: EntityTable<QuickPhrase, 'id'>
   message_blocks: EntityTable<MessageBlock, 'id'> // Correct type for message_blocks
   translate_languages: EntityTable<CustomTranslateLanguage, 'id'>
-  notes_tree: EntityTable<{ id: string; tree: NotesTreeNode[] }, 'id'>
 }
 
 db.version(1).stores({
@@ -118,8 +132,41 @@ db.version(10).stores({
   translate_history: '&id, sourceText, targetText, sourceLanguage, targetLanguage, createdAt',
   translate_languages: '&id, langCode',
   quick_phrases: 'id',
-  message_blocks: 'id, messageId, file.id',
-  notes_tree: '&id'
+  message_blocks: 'id, messageId, file.id'
+})
+
+// 在数据库打开后立即修复文件数据
+db.on('ready', async () => {
+  try {
+    let fixed = 0
+    const files = await db.files.toArray()
+    
+    for (const file of files) {
+      let needsUpdate = false
+      const updates: Partial<FileMetadata> = {}
+
+      if (typeof file.size === 'object' && file.size !== null) {
+        updates.size = (file.size as any).size || 0
+        needsUpdate = true
+      }
+
+      if (typeof file.count === 'object' && file.count !== null) {
+        updates.count = (file.count as any).count || 0
+        needsUpdate = true
+      }
+
+      if (needsUpdate) {
+        await db.files.update(file.id, updates)
+        fixed++
+      }
+    }
+
+    if (fixed > 0) {
+      console.log(`[Database] Fixed ${fixed} files with object size/count`)
+    }
+  } catch (error) {
+    console.error('[Database] Error fixing file data:', error)
+  }
 })
 
 export default db

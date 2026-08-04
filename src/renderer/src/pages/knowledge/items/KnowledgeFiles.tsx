@@ -5,13 +5,14 @@ import { useKnowledge } from '@renderer/hooks/useKnowledge'
 import FileItem from '@renderer/pages/files/FileItem'
 import StatusIcon from '@renderer/pages/knowledge/components/StatusIcon'
 import FileManager from '@renderer/services/FileManager'
-import { getProviderName } from '@renderer/services/ProviderService'
-import { FileMetadata, FileTypes, isKnowledgeFileItem, KnowledgeBase, KnowledgeItem } from '@renderer/types'
-import { formatFileSize, uuid } from '@renderer/utils'
+import type { FileMetadata, KnowledgeBase, KnowledgeItem } from '@renderer/types'
+import { isKnowledgeFileItem } from '@renderer/types'
+import { formatFileSize, mime2type, uuid } from '@renderer/utils'
 import { bookExts, documentExts, textExts, thirdPartyApplicationExts } from '@shared/config/constant'
 import { Button, Tooltip, Upload } from 'antd'
 import dayjs from 'dayjs'
-import { FC, useCallback, useEffect, useState } from 'react'
+import type { FC } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -40,7 +41,9 @@ interface KnowledgeContentProps {
   preprocessMap: Map<string, boolean>
 }
 
-const fileTypes = [...bookExts, ...thirdPartyApplicationExts, ...documentExts, ...textExts]
+  const fileTypes = Array.from(
+    new Set(['.txt', '.md', ...bookExts, ...thirdPartyApplicationExts, ...documentExts, ...textExts])
+  )
 
 const getDisplayTime = (item: KnowledgeItem) => {
   const timestamp = item.updated_at && item.updated_at > item.created_at ? item.updated_at : item.created_at
@@ -65,8 +68,7 @@ const KnowledgeFiles: FC<KnowledgeContentProps> = ({ selectedBase, progressMap, 
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const providerName = getProviderName(base?.model)
-  const disabled = !base?.version || !providerName
+  const disabled = !base?.version
 
   const estimateSize = useCallback(() => 75, [])
 
@@ -109,7 +111,7 @@ const KnowledgeFiles: FC<KnowledgeContentProps> = ({ selectedBase, progressMap, 
             ext: extFromPath.toLowerCase(),
             count: 1,
             origin_name: file.name, // 保存 File 对象中原始的文件名
-            type: file.type as FileTypes,
+            type: mime2type(file.type),
             created_at: new Date().toISOString()
           }
         })
@@ -161,11 +163,11 @@ const KnowledgeFiles: FC<KnowledgeContentProps> = ({ selectedBase, progressMap, 
             showUploadList={false}
             customRequest={({ file }) => handleDrop([file as File])}
             multiple={true}
-            accept={fileTypes.join(',')}
             openFileDialogOnClick={false}>
             <p className="ant-upload-text">{t('knowledge.drag_file')}</p>
-            <p className="ant-upload-hint">
-              {t('knowledge.file_hint', { file_types: 'TXT, MD, HTML, PDF, DOCX, PPTX, XLSX, EPUB...' })}
+            <p className="ant-upload-hint">{t('knowledge.file_hint')}</p>
+            <p className="ant-upload-hint" style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>
+              TXT, MD, HTML, PDF, DOCX, PPTX, XLSX, EPUB, JSON, CSV, XML, PY, JS, TS, JAVA, C, CPP...
             </p>
           </Dragger>
         </div>

@@ -1,19 +1,21 @@
 import { loggerService } from '@logger'
-import { DEFAULT_MIN_APPS } from '@renderer/config/minapps'
+import { allMinApps } from '@renderer/config/minapps'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useNavbarPosition } from '@renderer/hooks/useSettings'
 import TabsService from '@renderer/services/TabsService'
 import { getWebviewLoaded, onWebviewStateChange, setWebviewLoaded } from '@renderer/utils/webviewStateManager'
 import { Avatar } from 'antd'
-import { WebviewTag } from 'electron'
-import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { WebviewTag } from 'electron'
+import type { FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import BeatLoader from 'react-spinners/BeatLoader'
 import styled from 'styled-components'
 
 // Tab 模式下新的页面壳，不再直接创建 WebView，而是依赖全局 MinAppTabsPool
 import MinimalToolbar from './components/MinimalToolbar'
+import WebviewSearch from './components/WebviewSearch'
 
 const logger = loggerService.withContext('MinAppPage')
 
@@ -49,7 +51,7 @@ const MinAppPage: FC = () => {
     if (!appId) return null
 
     // First try to find in default and custom mini-apps
-    let foundApp = [...DEFAULT_MIN_APPS, ...minapps].find((app) => app.id === appId)
+    let foundApp = [...allMinApps, ...minapps].find((app) => app.id === appId)
 
     // If not found and we have cache, try to find in cache (for temporary apps)
     if (!foundApp && minAppsCache) {
@@ -184,6 +186,7 @@ const MinAppPage: FC = () => {
           onOpenDevTools={handleOpenDevTools}
         />
       </ToolbarWrapper>
+      <WebviewSearch webviewRef={webviewRef} isWebviewReady={isReady} appId={app.id} />
       {!isReady && (
         <LoadingMask>
           <Avatar src={app.logo} size={60} style={{ border: '1px solid var(--color-border)' }} />

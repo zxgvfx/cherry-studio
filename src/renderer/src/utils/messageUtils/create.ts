@@ -1,16 +1,18 @@
 import { loggerService } from '@logger'
 import type { Assistant, FileMetadata, Topic } from '@renderer/types'
-import { FileTypes } from '@renderer/types'
-import { SerializedError } from '@renderer/types/error'
+import { FILE_TYPE } from '@renderer/types'
+import type { SerializedError } from '@renderer/types/error'
 import type {
   BaseMessageBlock,
   CitationMessageBlock,
   CodeMessageBlock,
+  CompactMessageBlock,
   ErrorMessageBlock,
   FileMessageBlock,
   ImageMessageBlock,
   MainTextMessageBlock,
   Message,
+  Model3DMessageBlock,
   ThinkingMessageBlock,
   ToolMessageBlock,
   TranslationMessageBlock,
@@ -104,7 +106,7 @@ export function createImageBlock(
   messageId: string,
   overrides: Partial<Omit<ImageMessageBlock, 'id' | 'messageId' | 'type'>> = {}
 ): ImageMessageBlock {
-  if (overrides.file && overrides.file.type !== FileTypes.IMAGE) {
+  if (overrides.file && overrides.file.type !== FILE_TYPE.IMAGE) {
     logger.warn(`Attempted to create ImageBlock with non-image file type: ${overrides.file.type}`)
   }
   const { file, url, metadata, ...baseOverrides } = overrides
@@ -181,7 +183,7 @@ export function createFileBlock(
   file: FileMetadata,
   overrides: Partial<Omit<FileMessageBlock, 'id' | 'messageId' | 'type' | 'file'>> = {}
 ): FileMessageBlock {
-  if (file.type === FileTypes.IMAGE) {
+  if (file.type === FILE_TYPE.IMAGE) {
     logger.warn('Use createImageBlock for image file types.')
   }
   return {
@@ -291,6 +293,41 @@ export function createVideoBlock(
   }
 }
 
+export function createModel3DBlock(
+  messageId: string,
+  overrides: Partial<Omit<Model3DMessageBlock, 'id' | 'messageId' | 'type'>> = {}
+): Model3DMessageBlock {
+  const { file, metadata, ...baseOverrides } = overrides
+  const baseBlock = createBaseMessageBlock(messageId, MessageBlockType.MODEL_3D, baseOverrides)
+  return {
+    ...baseBlock,
+    file: file!,
+    metadata
+  }
+}
+
+/**
+ * Creates a Compact Message Block for /compact command responses.
+ * @param messageId - The ID of the parent message.
+ * @param content - The summary text.
+ * @param compactedContent - The compacted content extracted from XML tags.
+ * @param overrides - Optional properties to override the defaults.
+ * @returns A CompactMessageBlock object.
+ */
+export function createCompactBlock(
+  messageId: string,
+  content: string,
+  compactedContent: string,
+  overrides: Partial<Omit<CompactMessageBlock, 'id' | 'messageId' | 'type' | 'content' | 'compactedContent'>> = {}
+): CompactMessageBlock {
+  const baseBlock = createBaseMessageBlock(messageId, MessageBlockType.COMPACT, overrides)
+  return {
+    ...baseBlock,
+    content,
+    compactedContent
+  }
+}
+
 /**
  * Creates a new Message object
  * @param role - The role of the message sender ('user' or 'assistant').
@@ -378,6 +415,7 @@ export function resetMessage(
     role: originalMessage.role,
     topicId: originalMessage.topicId,
     assistantId: originalMessage.assistantId,
+    agentSessionId: originalMessage.agentSessionId,
     type: originalMessage.type,
     createdAt: originalMessage.createdAt, // Keep original creation timestamp
 
@@ -426,6 +464,7 @@ export const resetAssistantMessage = (
     // --- Retain Identity ---
     role: 'assistant',
     assistantId: originalMessage.assistantId,
+    agentSessionId: originalMessage.agentSessionId,
     model: originalMessage.model, // Keep the model information
     modelId: originalMessage.modelId,
 

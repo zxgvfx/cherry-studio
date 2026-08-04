@@ -4,8 +4,8 @@ import ThinkingEffect from '@renderer/components/ThinkingEffect'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { MessageBlockStatus, type ThinkingMessageBlock } from '@renderer/types/newMessage'
-import { Collapse, message as antdMessage, Tooltip } from 'antd'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { Collapse, Tooltip } from 'antd'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -37,12 +37,12 @@ const ThinkingBlock: React.FC<Props> = ({ block }) => {
       navigator.clipboard
         .writeText(block.content)
         .then(() => {
-          antdMessage.success({ content: t('message.copied'), key: 'copy-message' })
+          window.toast.success({ title: t('message.copied'), key: 'copy-message' })
           setCopied(true)
         })
         .catch((error) => {
           logger.error('Failed to copy text:', error)
-          antdMessage.error({ content: t('message.copy.failed'), key: 'copy-message-error' })
+          window.toast.error({ title: t('message.copy.failed'), key: 'copy-message-error' })
         })
     }
   }, [block.content, setCopied, t])
@@ -102,33 +102,42 @@ const ThinkingBlock: React.FC<Props> = ({ block }) => {
   )
 }
 
+const normalizeThinkingTime = (value?: number) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+
 const ThinkingTimeSeconds = memo(
   ({ blockThinkingTime, isThinking }: { blockThinkingTime: number; isThinking: boolean }) => {
     const { t } = useTranslation()
-    // const [thinkingTime, setThinkingTime] = useState(blockThinkingTime || 0)
+    const [displayTime, setDisplayTime] = useState(normalizeThinkingTime(blockThinkingTime))
 
-    // FIXME: 这里统计的和请求处统计的有一定误差
-    // useEffect(() => {
-    //   let timer: NodeJS.Timeout | null = null
-    //   if (isThinking) {
-    //     timer = setInterval(() => {
-    //       setThinkingTime((prev) => prev + 100)
-    //     }, 100)
-    //   } else if (timer) {
-    //     // 立即清除计时器
-    //     clearInterval(timer)
-    //     timer = null
-    //   }
+    const timer = useRef<NodeJS.Timeout | null>(null)
 
-    //   return () => {
-    //     if (timer) {
-    //       clearInterval(timer)
-    //       timer = null
-    //     }
-    //   }
-    // }, [isThinking])
+    useEffect(() => {
+      if (isThinking) {
+        if (!timer.current) {
+          timer.current = setInterval(() => {
+            setDisplayTime((prev) => prev + 100)
+          }, 100)
+        }
+      } else {
+        if (timer.current) {
+          clearInterval(timer.current)
+          timer.current = null
+        }
+        setDisplayTime(normalizeThinkingTime(blockThinkingTime))
+      }
 
-    const thinkingTimeSeconds = useMemo(() => (blockThinkingTime / 1000).toFixed(1), [blockThinkingTime])
+      return () => {
+        if (timer.current) {
+          clearInterval(timer.current)
+          timer.current = null
+        }
+      }
+    }, [isThinking, blockThinkingTime])
+
+    const thinkingTimeSeconds = useMemo(() => {
+      const safeTime = normalizeThinkingTime(displayTime)
+      return ((safeTime < 1000 ? 100 : safeTime) / 1000).toFixed(1)
+    }, [displayTime])
 
     return isThinking
       ? t('chat.thinking', {

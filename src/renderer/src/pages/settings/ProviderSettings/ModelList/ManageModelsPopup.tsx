@@ -6,21 +6,21 @@ import {
   groupQwenModels,
   isEmbeddingModel,
   isFunctionCallingModel,
-  isNotSupportedTextDelta,
+  isNotSupportTextDeltaModel,
   isReasoningModel,
   isRerankModel,
   isVisionModel,
   isWebSearchModel,
   SYSTEM_MODELS
 } from '@renderer/config/models'
-import { isNewApiProvider } from '@renderer/config/providers'
 import { useProvider } from '@renderer/hooks/useProvider'
 import NewApiAddModelPopup from '@renderer/pages/settings/ProviderSettings/ModelList/NewApiAddModelPopup'
 import NewApiBatchAddModelPopup from '@renderer/pages/settings/ProviderSettings/ModelList/NewApiBatchAddModelPopup'
 import { fetchModels } from '@renderer/services/ApiService'
-import { Model, Provider } from '@renderer/types'
-import { filterModelsByKeywords, getDefaultGroupName, getFancyProviderName } from '@renderer/utils'
+import type { Model, Provider } from '@renderer/types'
+import { filterModelsByKeywords, getFancyProviderName } from '@renderer/utils'
 import { isFreeModel } from '@renderer/utils/model'
+import { isNewApiProvider } from '@renderer/utils/provider'
 import { Button, Empty, Flex, Modal, Spin, Tabs, Tooltip } from 'antd'
 import Input from 'antd/es/input/Input'
 import { groupBy, isEmpty, uniqBy } from 'lodash'
@@ -31,7 +31,7 @@ import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 import ManageModelsList from './ManageModelsList'
-import { isModelInProvider, isValidNewApiModel } from './utils'
+import { canAutoAddNewApiModel, isModelInProvider } from './utils'
 
 const logger = loggerService.withContext('ManageModelsPopup')
 
@@ -131,17 +131,23 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
     (model: Model) => {
       if (!isEmpty(model.name)) {
         if (isNewApiProvider(provider)) {
-          if (model.supported_endpoint_types && model.supported_endpoint_types.length > 0) {
+          const endpointTypes = model.supported_endpoint_types
+          if (endpointTypes && endpointTypes.length === 1) {
             addModel({
               ...model,
-              endpoint_type: model.supported_endpoint_types[0],
-              supported_text_delta: !isNotSupportedTextDelta(model)
+              endpoint_type: endpointTypes[0],
+              supported_text_delta: !isNotSupportTextDeltaModel(model)
             })
           } else {
-            NewApiAddModelPopup.show({ title: t('settings.models.add.add_model'), provider, model })
+            NewApiAddModelPopup.show({
+              title: t('settings.models.add.add_model'),
+              provider,
+              model,
+              endpointType: endpointTypes?.includes('openai') ? 'openai' : endpointTypes?.[0]
+            })
           }
         } else {
-          addModel({ ...model, supported_text_delta: !isNotSupportedTextDelta(model) })
+          addModel({ ...model, supported_text_delta: !isNotSupportTextDeltaModel(model) })
         }
       }
     },
@@ -162,7 +168,7 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
       centered: true,
       onOk: () => {
         if (isNewApiProvider(provider)) {
-          if (models.every(isValidNewApiModel)) {
+          if (wouldAddModel.every(canAutoAddNewApiModel)) {
             wouldAddModel.forEach(onAddModel)
           } else {
             NewApiBatchAddModelPopup.show({
@@ -217,28 +223,7 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
 
       console.log('[ManageModelsPopup] 🔄 Calling fetchModels...');
       const models = await fetchModels(provider)
-      console.log('[ManageModelsPopup] 🔄 fetchModels returned:', models.length, 'models');
-      console.log('[ManageModelsPopup] 🔄 Raw models data:', models);
-      
-      const filteredModels = models
-        .map((model) => ({
-          // @ts-ignore modelId
-          id: model?.id || model?.name,
-          // @ts-ignore name
-          name: model?.display_name || model?.displayName || model?.name || model?.id,
-          provider: provider.id,
-          // @ts-ignore group
-          group: getDefaultGroupName(model?.id || model?.name, provider.id),
-          // @ts-ignore description
-          description: model?.description || '',
-          // @ts-ignore owned_by
-          owned_by: model?.owned_by || '',
-          // @ts-ignore supported_endpoint_types
-          supported_endpoint_types: model?.supported_endpoint_types
-        }))
-        .filter((model) => !isEmpty(model.name))
-
-      console.log('[ManageModelsPopup] 🔄 Filtered models:', filteredModels.length, 'models');
+      const filteredModels = models.filter((model) => !isEmpty(model.name))
       setListModels(filteredModels)
     } catch (error) {
       console.error('[ManageModelsPopup] ❌ Error loading models:', error);

@@ -3,19 +3,68 @@
  * 处理文件内容提取、文件格式转换、文件上传等逻辑
  */
 
+import type OpenAI from '@cherrystudio/openai'
 import { loggerService } from '@logger'
 import { getProviderByModel } from '@renderer/services/AssistantService'
 import type { FileMetadata, Message, Model } from '@renderer/types'
-import { FileTypes } from '@renderer/types'
-import { FileMessageBlock } from '@renderer/types/newMessage'
+import { FILE_TYPE } from '@renderer/types'
+import type { FileMessageBlock } from '@renderer/types/newMessage'
+import { transcodeAudioBase64 } from '@renderer/utils/audioTranscode'
 import { findFileBlocks } from '@renderer/utils/messageUtils/find'
+import { audioExts as AUDIO_EXTS_CONFIG, videoExts as VIDEO_EXTS_CONFIG } from '@shared/config/constant'
 import type { FilePart, TextPart } from 'ai'
-import type OpenAI from 'openai'
 
 import { getAiSdkProviderId } from '../provider/factory'
-import { getFileSizeLimit, supportsImageInput, supportsLargeFileUpload, supportsPdfInput } from './modelCapabilities'
+
+/**
+ * 上游网关 `client_max_body_size` 一般在 1 MB 左右；
+ * base64 后体积膨胀 ~33%，加上 JSON 包装，实际 payload 比文件本身大 ~1.4×。
+ * 这里把"直发安全阈值"设为 600 KB，超过就走 ffmpeg 压缩到 mp3。
+ */
+const SAFE_AUDIO_DIRECT_SEND_BYTES = 600 * 1024
+
+import {
+  getFileSizeLimit,
+  getProviderNativeAudioExts,
+  supportsAudioInput,
+  supportsImageInput,
+  supportsLargeFileUpload,
+  supportsPdfInput,
+  supportsVideoInput
+} from './modelCapabilities'
+
+const AUDIO_EXT_SET = new Set(AUDIO_EXTS_CONFIG.map((e) => e.toLowerCase()))
+const VIDEO_EXT_SET = new Set(VIDEO_EXTS_CONFIG.map((e) => e.toLowerCase()))
 
 const logger = loggerService.withContext('fileProcessor')
+
+const AUDIO_MIME_BY_EXT: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.aac': 'audio/aac',
+  '.m4a': 'audio/mp4'
+}
+
+function getAudioMimeType(ext: string): string {
+  const normalized = ext.toLowerCase()
+  return AUDIO_MIME_BY_EXT[normalized] ?? 'application/octet-stream'
+}
+
+const VIDEO_MIME_BY_EXT: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.avi': 'video/x-msvideo',
+  '.mov': 'video/quicktime',
+  '.wmv': 'video/x-ms-wmv',
+  '.flv': 'video/x-flv',
+  '.mkv': 'video/x-matroska'
+}
+
+function getVideoMimeType(ext: string): string {
+  const normalized = ext.toLowerCase()
+  return VIDEO_MIME_BY_EXT[normalized] ?? 'application/octet-stream'
+}
 
 /**
  * 提取文件内容
@@ -24,7 +73,7 @@ export async function extractFileContent(message: Message): Promise<string> {
   const fileBlocks = findFileBlocks(message)
   if (fileBlocks.length > 0) {
     const textFileBlocks = fileBlocks.filter(
-      (fb) => fb.file && [FileTypes.TEXT, FileTypes.DOCUMENT].includes(fb.file.type)
+      (fb) => fb.file && [FILE_TYPE.TEXT, FILE_TYPE.DOCUMENT].some((type) => fb.file.type === type)
     )
 
     if (textFileBlocks.length > 0) {
@@ -52,7 +101,7 @@ export async function convertFileBlockToTextPart(fileBlock: FileMessageBlock): P
   const file = fileBlock.file
 
   // 处理文本文件
-  if (file.type === FileTypes.TEXT) {
+  if (file.type === FILE_TYPE.TEXT) {
     try {
       const fileContent = await window.api.file.read(file.id + file.ext)
       return {
@@ -65,12 +114,32 @@ export async function convertFileBlockToTextPart(fileBlock: FileMessageBlock): P
   }
 
   // 处理文档文件（PDF、Word、Excel等）- 提取为文本内容
-  if (file.type === FileTypes.DOCUMENT) {
+  if (file.type === FILE_TYPE.DOCUMENT) {
     try {
-      const fileContent = await window.api.file.read(file.id + file.ext, true) // true表示强制文本提取
-      return {
-        type: 'text',
-        text: `${file.origin_name}\n${fileContent.trim()}`
+      // PDF 走 pdfOcr 智能管线：后端按页均密度判断，不足则自动 OCR
+      if (file.ext === '.pdf') {
+        const fileApi = window.api.file as any
+        if (fileApi.pdfOcr) {
+          logger.info(`PDF ${file.origin_name}: routing through pdfOcr pipeline`)
+          const ocrResult = await fileApi.pdfOcr(file.id + file.ext)
+          if (ocrResult.content?.trim()) {
+            return {
+              type: 'text',
+              text: `${file.origin_name}\n${ocrResult.content}`
+            }
+          }
+        }
+        logger.warn(`PDF ${file.origin_name}: pdfOcr returned no content, falling back to text read`)
+      }
+
+      // 非 PDF 文档或 pdfOcr 不可用：直接读取
+      const fileContent = await window.api.file.read(file.id + file.ext, true)
+      const trimmed = fileContent.trim()
+      if (trimmed.length > 0) {
+        return {
+          type: 'text',
+          text: `${file.origin_name}\n${trimmed}`
+        }
       }
     } catch (error) {
       logger.warn(`Failed to extract text from document ${file.origin_name}:`, error as Error)
@@ -114,7 +183,7 @@ export async function handleGeminiFileUpload(file: FileMetadata, model: Model): 
 }
 
 /**
- * 处理OpenAI大文件上传
+ * 处理OpenAI兼容大文件上传
  */
 export async function handleOpenAILargeFileUpload(
   file: FileMetadata,
@@ -199,10 +268,11 @@ export async function handleLargeFileUpload(
 export async function convertFileBlockToFilePart(fileBlock: FileMessageBlock, model: Model): Promise<FilePart | null> {
   const file = fileBlock.file
   const fileSizeLimit = getFileSizeLimit(model, file.type)
+  const lowerExt = file.ext?.toLowerCase() ?? ''
 
   try {
     // 处理PDF文档
-    if (file.type === FileTypes.DOCUMENT && file.ext === '.pdf' && supportsPdfInput(model)) {
+    if (file.type === FILE_TYPE.DOCUMENT && file.ext === '.pdf' && supportsPdfInput(model)) {
       // 检查文件大小限制
       if (file.size > fileSizeLimit) {
         // 如果支持大文件上传（如Gemini File API），尝试上传
@@ -230,8 +300,91 @@ export async function convertFileBlockToFilePart(fileBlock: FileMessageBlock, mo
       }
     }
 
+    // 处理音频文件
+    // 兼容性：除了 file.type === AUDIO 之外，也按扩展名兜底识别音频
+    // （main 进程可能因未重启等原因把新支持的扩展名（如 .m4a）写成 OTHER）
+    const isAudioFile = file.type === FILE_TYPE.AUDIO || AUDIO_EXT_SET.has(lowerExt)
+
+    if (isAudioFile && supportsAudioInput(model)) {
+      logger.debug(`Audio file ${file.origin_name}: type=${file.type}, ext=${lowerExt}, entering audio branch`)
+      if (file.size > fileSizeLimit) {
+        logger.warn(`Audio file ${file.origin_name} exceeds size limit (${file.size} > ${fileSizeLimit})`)
+        return null
+      }
+
+      const ext = lowerExt
+      const nativeExts = getProviderNativeAudioExts(model)
+      const base64Data = await window.api.file.base64File(file.id + file.ext)
+
+      // 计算压缩后的目标格式偏好（mp3 优先，其次 wav）
+      const targetFormat: 'mp3' | 'wav' = nativeExts.includes('.mp3') ? 'mp3' : 'wav'
+
+      // 是否需要转码：
+      //   - 扩展名不在 provider native 列表 → 必须转
+      //   - 文件超过安全阈值（避免网关 413）→ 强制压缩
+      const isNative = nativeExts.includes(ext)
+      const needsTranscode = !isNative || file.size > SAFE_AUDIO_DIRECT_SEND_BYTES
+
+      if (!needsTranscode) {
+        return {
+          type: 'file',
+          data: base64Data.data,
+          mediaType: getAudioMimeType(ext),
+          filename: file.origin_name
+        }
+      }
+
+      // 走转码（优先 ffmpeg → mp3，失败再退回 Web Audio → wav）
+      try {
+        const transcoded = await transcodeAudioBase64(base64Data.data, file.id + file.ext, targetFormat)
+        const reason = !isNative ? `non-native ${ext}` : `size ${file.size}B > ${SAFE_AUDIO_DIRECT_SEND_BYTES}B`
+        logger.info(`Audio file ${file.origin_name} transcoded (${reason}) -> ${transcoded.ext}`)
+        return {
+          type: 'file',
+          data: transcoded.base64,
+          mediaType: transcoded.mime,
+          filename: file.origin_name.replace(/\.[^.]+$/, transcoded.ext)
+        }
+      } catch (transcodeError) {
+        const msg =
+          transcodeError instanceof Error
+            ? transcodeError.message
+            : (transcodeError as { message?: string })?.message || String(transcodeError)
+        logger.warn(`Failed to transcode audio ${file.origin_name} (${ext}): ${msg}`)
+
+        // 兜底：如果是 native 格式但因体积太大转码失败，至少试着直发
+        if (isNative) {
+          logger.warn(`Falling back to direct send for native ${ext} despite size warning`)
+          return {
+            type: 'file',
+            data: base64Data.data,
+            mediaType: getAudioMimeType(ext),
+            filename: file.origin_name
+          }
+        }
+        return null
+      }
+    }
+
+    const isVideoFile = file.type === FILE_TYPE.VIDEO || VIDEO_EXT_SET.has(lowerExt)
+
+    if (isVideoFile && supportsVideoInput(model)) {
+      if (file.size > fileSizeLimit) {
+        logger.warn(`Video file ${file.origin_name} exceeds size limit (${file.size} > ${fileSizeLimit})`)
+        return null
+      }
+
+      const base64Data = await window.api.file.base64File(file.id + file.ext)
+      return {
+        type: 'file',
+        data: base64Data.data,
+        mediaType: base64Data.mime?.startsWith('video/') ? base64Data.mime : getVideoMimeType(lowerExt),
+        filename: file.origin_name
+      }
+    }
+
     // 处理图片文件
-    if (file.type === FileTypes.IMAGE && supportsImageInput(model)) {
+    if (file.type === FILE_TYPE.IMAGE && supportsImageInput(model)) {
       // 检查文件大小
       if (file.size > fileSizeLimit) {
         logger.warn(`Image file ${file.origin_name} exceeds size limit (${file.size} > ${fileSizeLimit})`)
@@ -258,7 +411,7 @@ export async function convertFileBlockToFilePart(fileBlock: FileMessageBlock, mo
     }
 
     // 处理其他文档类型（Word、Excel等）
-    if (file.type === FileTypes.DOCUMENT && file.ext !== '.pdf') {
+    if (file.type === FILE_TYPE.DOCUMENT && file.ext !== '.pdf') {
       // 目前大多数提供商不支持Word等格式的原生处理
       // 返回null会触发上层调用convertFileBlockToTextPart进行文本提取
       // 这与Legacy架构中的处理方式一致

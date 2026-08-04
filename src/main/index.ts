@@ -8,14 +8,24 @@ import '@main/config'
 import { loggerService } from '@logger'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { replaceDevtoolsFont } from '@main/utils/windowUtil'
-import { app } from 'electron'
+import { app, crashReporter } from 'electron'
 import installExtension, { REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS } from 'electron-devtools-installer'
-
 import { isDev, isLinux, isWin } from './constant'
+
+import process from 'node:process'
+
 import { registerIpc } from './ipc'
+import { agentService } from './services/agents'
+import { analyticsService } from './services/AnalyticsService'
+import { apiServerService } from './services/ApiServerService'
+import { appMenuService } from './services/AppMenuService'
 import { configManager } from './services/ConfigManager'
+import { lanTransferClientService } from './services/lanTransfer'
 import mcpService from './services/MCPService'
+import { localTransferService } from './services/LocalTransferService'
+import { openClawService } from './services/OpenClawService'
 import { nodeTraceService } from './services/NodeTraceService'
+import powerMonitorService from './services/PowerMonitorService'
 import {
   CHERRY_STUDIO_PROTOCOL,
   handleProtocolUrl,
@@ -25,11 +35,21 @@ import {
 import selectionService, { initSelectionService } from './services/SelectionService'
 import { registerShortcuts } from './services/ShortcutService'
 import { TrayService } from './services/TrayService'
+import { versionService } from './services/VersionService'
 import { windowService } from './services/WindowService'
-import process from 'node:process'
-import { apiServerService } from './services/ApiServerService'
+import { initWebviewHotkeys } from './services/WebviewService'
+import { runAsyncFunction } from './utils'
+import { isOvmsSupported } from './services/OvmsManager'
 
 const logger = loggerService.withContext('MainEntry')
+
+// enable local crash reports
+crashReporter.start({
+  companyName: 'CherryHQ',
+  productName: 'CherryStudio',
+  submitURL: '',
+  uploadToServer: false
+})
 
 /**
  * Disable hardware acceleration if setting is enabled
@@ -55,6 +75,15 @@ if (isWin) {
  */
 if (isLinux && process.env.XDG_SESSION_TYPE === 'wayland') {
   app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal')
+}
+
+/**
+ * Set window class and name for Linux
+ * This ensures the window manager identifies the app correctly on both X11 and Wayland
+ */
+if (isLinux) {
+  app.commandLine.appendSwitch('class', 'CherryStudio')
+  app.commandLine.appendSwitch('name', 'CherryStudio')
 }
 
 // DocumentPolicyIncludeJSCallStacksInCrashReports: Enable features for unresponsive renderer js call stacks
@@ -106,6 +135,11 @@ if (!app.requestSingleInstanceLock()) {
   // Some APIs can only be used after this event occurs.
 
   app.whenReady().then(async () => {
+    // Record current version for tracking
+    // A preparation for v2 data refactoring
+    versionService.recordCurrentVersion()
+
+    initWebviewHotkeys()
     // Set app user model id for windows
     electronApp.setAppUserModelId(import.meta.env.VITE_MAIN_BUNDLE_ID || 'com.kangfenmao.CherryStudio')
 
@@ -118,7 +152,12 @@ if (!app.requestSingleInstanceLock()) {
     const mainWindow = windowService.createMainWindow()
     new TrayService()
 
+    // Setup macOS application menu
+    appMenuService?.setupApplicationMenu()
+
     nodeTraceService.init()
+    powerMonitorService.init()
+    analyticsService.init()
 
     app.on('activate', function () {
       const mainWindow = windowService.getMainWindow()
@@ -131,7 +170,8 @@ if (!app.requestSingleInstanceLock()) {
 
     registerShortcuts(mainWindow)
 
-    registerIpc(mainWindow, app)
+    await registerIpc(mainWindow, app)
+    localTransferService.startDiscovery({ resetList: true })
 
     replaceDevtoolsFont(mainWindow)
 
@@ -147,16 +187,33 @@ if (!app.requestSingleInstanceLock()) {
     //start selection assistant service
     initSelectionService()
 
-    // Start API server if enabled
-    try {
-      const config = await apiServerService.getCurrentConfig()
-      logger.info('API server config:', config)
-      if (config.enabled) {
-        await apiServerService.start()
+    runAsyncFunction(async () => {
+      // Start API server if enabled or if agents exist
+      try {
+        const config = await apiServerService.getCurrentConfig()
+        logger.info('API server config:', config)
+
+        // Check if there are any agents
+        let shouldStart = config.enabled
+        if (!shouldStart) {
+          try {
+            const { total } = await agentService.listAgents({ limit: 1 })
+            if (total > 0) {
+              shouldStart = true
+              logger.info(`Detected ${total} agent(s), auto-starting API server`)
+            }
+          } catch (error: any) {
+            logger.warn('Failed to check agent count:', error)
+          }
+        }
+
+        if (shouldStart) {
+          await apiServerService.start()
+        }
+      } catch (error: any) {
+        logger.error('Failed to check/start API server:', error)
       }
-    } catch (error: any) {
-      logger.error('Failed to check/start API server:', error)
-    }
+    })
   })
 
   registerProtocolClient(app)
@@ -196,16 +253,31 @@ if (!app.requestSingleInstanceLock()) {
     if (selectionService) {
       selectionService.quit()
     }
+
+    lanTransferClientService.dispose()
+    localTransferService.dispose()
   })
 
   app.on('will-quit', async () => {
     // 简单的资源清理，不阻塞退出流程
+    if (isOvmsSupported) {
+      const { ovmsManager } = await import('./services/OvmsManager')
+      if (ovmsManager) {
+        await ovmsManager.stopOvms()
+      } else {
+        logger.warn('Unexpected behavior: undefined ovmsManager, but OVMS should be supported.')
+      }
+    }
+
     try {
+      await analyticsService.destroy()
+      await openClawService.stopGateway()
       await mcpService.cleanup()
       await apiServerService.stop()
     } catch (error) {
-      logger.warn('Error cleaning up MCP service:', error as Error)
+      logger.warn('Error cleaning up services:', error as Error)
     }
+
     // finish the logger
     logger.finish()
   })

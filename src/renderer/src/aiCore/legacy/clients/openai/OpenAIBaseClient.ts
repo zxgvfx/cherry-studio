@@ -1,4 +1,6 @@
+import OpenAI, { AzureOpenAI } from '@cherrystudio/openai'
 import { loggerService } from '@logger'
+import { COPILOT_DEFAULT_HEADERS } from '@renderer/aiCore/provider/constants'
 import {
   isClaudeReasoningModel,
   isOpenAIReasoningModel,
@@ -8,9 +10,9 @@ import {
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import { getAssistantSettings } from '@renderer/services/AssistantService'
 import store from '@renderer/store'
-import { SettingsState } from '@renderer/store/settings'
-import { Assistant, GenerateImageParams, Model, Provider } from '@renderer/types'
-import {
+import type { SettingsState } from '@renderer/store/settings'
+import { type Assistant, type GenerateImageParams, type Model, type Provider } from '@renderer/types'
+import type {
   OpenAIResponseSdkMessageParam,
   OpenAIResponseSdkParams,
   OpenAIResponseSdkRawChunk,
@@ -23,10 +25,11 @@ import {
   OpenAISdkRawOutput,
   ReasoningEffortOptionalParams
 } from '@renderer/types/sdk'
-import { formatApiHost } from '@renderer/utils/api'
-import OpenAI, { AzureOpenAI } from 'openai'
+import { withoutTrailingSlash } from '@renderer/utils/api'
+import { isOllamaProvider } from '@renderer/utils/provider'
 
 import { BaseApiClient } from '../BaseApiClient'
+import { normalizeAzureOpenAIEndpoint } from './azureOpenAIEndpoint'
 
 const logger = loggerService.withContext('OpenAIBaseClient')
 
@@ -113,8 +116,8 @@ export abstract class OpenAIBaseClient<
 
   // 仅适用于openai
   override getBaseURL(): string {
-    const host = this.provider.apiHost
-    return formatApiHost(host)
+    // apiHost is formatted when called by AiProvider
+    return this.provider.apiHost
   }
 
   override async generateImage({
@@ -130,9 +133,19 @@ export abstract class OpenAIBaseClient<
     promptEnhancement
   }: GenerateImageParams): Promise<string[]> {
     const sdk = await this.getSdkInstance()
+    const baseURL = this.getBaseURL()
+    const normalizedBaseURL = withoutTrailingSlash(baseURL || '')
+    const path = /\/v1$/i.test(normalizedBaseURL) ? '/images/generations' : '/v1/images/generations'
+    logger.info('[generateImage] Requesting image generation', {
+      providerId: this.provider.id,
+      providerType: this.provider.type,
+      model,
+      baseURL: normalizedBaseURL,
+      path
+    })
     const response = (await sdk.request({
       method: 'post',
-      path: '/images/generations',
+      path,
       signal,
       body: {
         model,
@@ -145,13 +158,63 @@ export abstract class OpenAIBaseClient<
         guidance_scale: guidanceScale,
         prompt_enhancement: promptEnhancement
       }
-    })) as { data: Array<{ url: string }> }
+    })) as Record<string, any>
 
-    return response.data.map((item) => item.url)
+    const extractImageUrls = (payload: Record<string, any>): string[] => {
+      const results: string[] = []
+      const appendImage = (value: unknown, mimeType = 'image/png') => {
+        if (typeof value !== 'string') return
+        const trimmed = value.trim()
+        if (!trimmed) return
+        if (trimmed.startsWith('data:') || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('blob:')) {
+          results.push(trimmed)
+          return
+        }
+        const cleaned = trimmed.replace(/\s+/g, '')
+        const looksLikeBase64 = cleaned.length > 64 && /^[A-Za-z0-9+/]+={0,2}$/.test(cleaned)
+        if (looksLikeBase64) {
+          results.push(`data:${mimeType};base64,${cleaned}`)
+        }
+      }
+
+      const dataList = Array.isArray(payload.data) ? payload.data : []
+      dataList.forEach((item: any) => {
+        appendImage(item?.url)
+        appendImage(item?.b64_json)
+        appendImage(item?.base64, item?.mime_type || item?.mimeType || 'image/png')
+      })
+
+      const imageList = Array.isArray(payload.images) ? payload.images : []
+      imageList.forEach((item: any) => {
+        appendImage(item?.url || item?.image_url?.url)
+        appendImage(item?.b64_json || item?.base64, item?.mime_type || item?.mimeType || 'image/png')
+      })
+
+      appendImage(payload.url)
+      appendImage(payload.b64_json)
+      appendImage(payload.base64, payload.mime_type || payload.mimeType || 'image/png')
+
+      return results
+    }
+
+    const images = extractImageUrls(response)
+
+    logger.info('[generateImage] Image generation response received', {
+      providerId: this.provider.id,
+      model,
+      responseKeys: Object.keys(response || {}),
+      imageCount: images.length,
+      sample: images[0]?.slice(0, 120)
+    })
+    return images
   }
 
   override async getEmbeddingDimensions(model: Model): Promise<number> {
-    const sdk = await this.getSdkInstance()
+    let sdk: OpenAI = await this.getSdkInstance()
+    if (isOllamaProvider(this.provider)) {
+      const embedBaseUrl = `${this.provider.apiHost.replace(/(\/(api|v1))\/?$/, '')}/v1`
+      sdk = sdk.withOptions({ baseURL: embedBaseUrl })
+    }
 
     const data = await sdk.embeddings.create({
       model: model.id,
@@ -260,6 +323,17 @@ export abstract class OpenAIBaseClient<
       }
 
       const sdk = await this.getSdkInstance()
+      if (this.provider.id === 'openrouter') {
+        // https://openrouter.ai/docs/api/api-reference/embeddings/list-embeddings-models
+        const embedBaseUrl = 'https://openrouter.ai/api/v1/embeddings'
+        const embedSdk = sdk.withOptions({ baseURL: embedBaseUrl })
+        const modelPromise = sdk.models.list()
+        const embedModelPromise = embedSdk.models.list()
+        const [modelResponse, embedModelResponse] = await Promise.all([modelPromise, embedModelPromise])
+        const models = [...modelResponse.data, ...embedModelResponse.data]
+        const uniqueModels = Array.from(new Map(models.map((model) => [model.id, model])).values())
+        return uniqueModels.filter(isSupportedModel)
+      }
       if (this.provider.id === 'github') {
         // GitHub Models 其 models 和 chat completions 两个接口的 baseUrl 不一样
         const baseUrl = 'https://models.github.ai/catalog/'
@@ -275,6 +349,52 @@ export abstract class OpenAIBaseClient<
             owned_by: model.publisher
           }))
           .filter(isSupportedModel)
+      }
+
+      if (isOllamaProvider(this.provider)) {
+        const baseUrl = withoutTrailingSlash(this.getBaseURL())
+          .replace(/\/v1$/, '')
+          .replace(/\/api$/, '')
+
+        // @ts-ignore - Houdini specific handling
+        if (window.api?.ollama?.list) {
+          try {
+            // @ts-ignore
+            const data = await window.api.ollama.list({ host: baseUrl })
+            if (data?.models && Array.isArray(data.models)) {
+              return data.models.map((model) => ({
+                id: model.name,
+                object: 'model',
+                owned_by: 'ollama'
+              }))
+            }
+          } catch (e) {
+            logger.error('Failed to list ollama models via IPC', e as Error)
+          }
+        }
+
+        const response = await fetch(`${baseUrl}/api/tags`, {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            ...this.defaultHeaders(),
+            ...this.provider.extra_headers
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error(`Ollama server returned ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        if (!data?.models || !Array.isArray(data.models)) {
+          throw new Error('Invalid response from Ollama API: missing models array')
+        }
+
+        return data.models.map((model) => ({
+          id: model.name,
+          object: 'model',
+          owned_by: 'ollama'
+        }))
       }
       const response = await sdk.models.list()
       if (this.provider.id === 'together') {
@@ -329,6 +449,12 @@ export abstract class OpenAIBaseClient<
     }
 
     let apiKeyForSdkInstance = this.apiKey
+    let baseURLForSdkInstance = this.getBaseURL()
+    logger.debug('baseURLForSdkInstance', { baseURLForSdkInstance })
+    let headersForSdkInstance = {
+      ...this.defaultHeaders(),
+      ...this.provider.extra_headers
+    }
 
     if (this.provider.id === 'copilot') {
       const defaultHeaders = store.getState().copilot.defaultHeaders
@@ -336,6 +462,11 @@ export abstract class OpenAIBaseClient<
       // this.provider.apiKey不允许修改
       // this.provider.apiKey = token
       apiKeyForSdkInstance = token
+      baseURLForSdkInstance = this.getBaseURL()
+      headersForSdkInstance = {
+        ...headersForSdkInstance,
+        ...COPILOT_DEFAULT_HEADERS
+      }
     }
 
     if (this.provider.id === 'azure-openai' || this.provider.type === 'azure-openai') {
@@ -343,20 +474,14 @@ export abstract class OpenAIBaseClient<
         dangerouslyAllowBrowser: true,
         apiKey: apiKeyForSdkInstance,
         apiVersion: this.provider.apiVersion,
-        endpoint: this.provider.apiHost
+        endpoint: normalizeAzureOpenAIEndpoint(this.provider.apiHost)
       }) as TSdkInstance
     } else {
       this.sdkInstance = new OpenAI({
         dangerouslyAllowBrowser: true,
         apiKey: apiKeyForSdkInstance,
-        baseURL: this.getBaseURL(),
-        fetch: qtFetch,
-        defaultHeaders: {
-          ...this.defaultHeaders(),
-          ...this.provider.extra_headers,
-          ...(this.provider.id === 'copilot' ? { 'editor-version': 'vscode/1.97.2' } : {}),
-          ...(this.provider.id === 'copilot' ? { 'copilot-vision-request': 'true' } : {})
-        }
+        baseURL: baseURLForSdkInstance,
+        defaultHeaders: headersForSdkInstance
       }) as TSdkInstance
     }
     return this.sdkInstance

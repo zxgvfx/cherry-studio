@@ -2,11 +2,13 @@ import EmojiAvatar from '@renderer/components/Avatar/EmojiAvatar'
 import { HStack } from '@renderer/components/Layout'
 import UserPopup from '@renderer/components/Popups/UserPopup'
 import { APP_NAME, AppLogo, isLocalAi } from '@renderer/config/env'
-import { getModelLogo } from '@renderer/config/models'
+import { getModelLogoById } from '@renderer/config/models'
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { useAgent } from '@renderer/hooks/agents/useAgent'
 import useAvatar from '@renderer/hooks/useAvatar'
 import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
+import { useRuntime } from '@renderer/hooks/useRuntime'
 import { useMessageStyle, useSettings } from '@renderer/hooks/useSettings'
 import { getMessageModelId } from '@renderer/services/MessagesService'
 import { getModelName } from '@renderer/services/ModelService'
@@ -16,9 +18,13 @@ import { firstLetter, isEmoji, removeLeadingEmoji } from '@renderer/utils'
 import { Avatar, Checkbox, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { Sparkle } from 'lucide-react'
-import { FC, memo, useCallback, useMemo } from 'react'
+import type { FC } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLocation } from 'react-router-dom'
 import styled from 'styled-components'
+
+import MessageTokens from './MessageTokens'
 
 interface Props {
   message: Message
@@ -30,13 +36,18 @@ interface Props {
 
 const getAvatarSource = (isLocalAi: boolean, modelId: string | undefined) => {
   if (isLocalAi) return AppLogo
-  return modelId ? getModelLogo(modelId) : undefined
+  return modelId ? getModelLogoById(modelId) : undefined
 }
 
 const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGroupContextMessage }) => {
   const avatar = useAvatar()
   const { theme } = useTheme()
   const { userName, sidebarIcons } = useSettings()
+  const { chat } = useRuntime()
+  const { activeAgentId } = chat
+  const { agent } = useAgent(activeAgentId)
+  const { pathname } = useLocation()
+  const isAgentView = pathname.startsWith('/agents')
   const { t } = useTranslation()
   const { isBubbleStyle } = useMessageStyle()
   const { openMinappById } = useMinappPopup()
@@ -52,12 +63,16 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
       return APP_NAME
     }
 
+    if (isAgentView && message.role === 'assistant') {
+      return agent?.name ?? t('common.unknown')
+    }
+
     if (message.role === 'assistant') {
       return getModelName(model) || getMessageModelId(message) || ''
     }
 
     return userName || t('common.you')
-  }, [message, model, t, userName])
+  }, [agent?.name, isAgentView, message, model, t, userName])
 
   const isAssistantMessage = message.role === 'assistant'
   const isUserMessage = message.role === 'user'
@@ -72,11 +87,11 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model?.provider, showMinappIcon])
 
-  const hideHeader = isBubbleStyle ? isUserMessage && !isMultiSelectMode : false
-
-  if (hideHeader) {
-    return null
-  }
+  const userNameJustifyContent = useMemo(() => {
+    if (!isBubbleStyle) return 'flex-start'
+    if (isUserMessage && !isMultiSelectMode) return 'flex-end'
+    return 'flex-start'
+  }, [isBubbleStyle, isUserMessage, isMultiSelectMode])
 
   return (
     <Container className="message-header">
@@ -110,7 +125,7 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
         </>
       )}
       <UserWrap>
-        <HStack alignItems="center">
+        <HStack alignItems="center" justifyContent={userNameJustifyContent}>
           <UserName isBubbleStyle={isBubbleStyle} theme={theme}>
             {username}
           </UserName>
@@ -120,8 +135,14 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
             </Tooltip>
           )}
         </HStack>
-        <InfoWrap className="message-header-info-wrap">
+        <InfoWrap className="message-header-info-wrap text-(--color-text-3) text-[10px]">
           <MessageTime>{dayjs(message?.updatedAt ?? message.createdAt).format('MM/DD HH:mm')}</MessageTime>
+          {isBubbleStyle && message.usage !== undefined && (
+            <>
+              |
+              <MessageTokens message={message} />
+            </>
+          )}
         </InfoWrap>
       </UserWrap>
       {isMultiSelectMode && (

@@ -1,7 +1,8 @@
 import { db } from '@renderer/databases'
 import KnowledgeQueue from '@renderer/queue/KnowledgeQueue'
 import { getKnowledgeBaseParams } from '@renderer/services/KnowledgeService'
-import { RootState, useAppDispatch } from '@renderer/store'
+import type { RootState } from '@renderer/store'
+import { useAppDispatch } from '@renderer/store'
 import {
   addBase,
   clearAllProcessing,
@@ -16,24 +17,16 @@ import {
   updateNotes
 } from '@renderer/store/knowledge'
 import { addFilesThunk, addItemThunk, addNoteThunk, addVedioThunk } from '@renderer/store/thunk/knowledgeThunk'
-import {
-  FileMetadata,
-  isKnowledgeFileItem,
-  isKnowledgeNoteItem,
-  isKnowledgeVideoItem,
-  KnowledgeBase,
-  KnowledgeItem,
-  KnowledgeNoteItem,
-  ProcessingStatus
-} from '@renderer/types'
+import type { FileMetadata, KnowledgeBase, KnowledgeItem, KnowledgeNoteItem, ProcessingStatus } from '@renderer/types'
+import { isKnowledgeFileItem, isKnowledgeNoteItem, isKnowledgeVideoItem } from '@renderer/types'
 import { runAsyncFunction, uuid } from '@renderer/utils'
 import dayjs from 'dayjs'
 import { cloneDeep } from 'lodash'
 import { useCallback, useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
-import { useAgents } from './useAgents'
 import { useAssistants } from './useAssistant'
+import { useAssistantPresets } from './useAssistantPresets'
 import { useTimer } from './useTimer'
 
 export const useKnowledge = (baseId: string) => {
@@ -170,6 +163,7 @@ export const useKnowledge = (baseId: string) => {
         processingProgress: 0,
         processingError: '',
         uniqueId: undefined,
+        retryCount: 0,
         updated_at: Date.now()
       })
       checkAllBases()
@@ -189,6 +183,7 @@ export const useKnowledge = (baseId: string) => {
       processingProgress: 0,
       processingError: '',
       uniqueId: undefined,
+      retryCount: 0,
       updated_at: Date.now()
     })
     setTimeout(() => KnowledgeQueue.checkAllBases(), 0)
@@ -347,7 +342,7 @@ export const useKnowledgeBases = () => {
   const dispatch = useDispatch()
   const bases = useSelector((state: RootState) => state.knowledge.bases)
   const { assistants, updateAssistants } = useAssistants()
-  const { agents, updateAgents } = useAgents()
+  const { presets, setAssistantPresets } = useAssistantPresets()
 
   const addKnowledgeBase = (base: KnowledgeBase) => {
     dispatch(addBase(base))
@@ -360,7 +355,7 @@ export const useKnowledgeBases = () => {
   const deleteKnowledgeBase = (baseId: string) => {
     const base = bases.find((b) => b.id === baseId)
     if (!base) return
-    dispatch(deleteBase({ baseId, baseParams: getKnowledgeBaseParams(base) }))
+    dispatch(deleteBase({ baseId }))
 
     // remove assistant knowledge_base
     const _assistants = assistants.map((assistant) => {
@@ -374,7 +369,7 @@ export const useKnowledgeBases = () => {
     })
 
     // remove agent knowledge_base
-    const _agents = agents.map((agent) => {
+    const _presets = presets.map((agent) => {
       if (agent.knowledge_bases?.find((kb) => kb.id === baseId)) {
         return {
           ...agent,
@@ -385,7 +380,7 @@ export const useKnowledgeBases = () => {
     })
 
     updateAssistants(_assistants)
-    updateAgents(_agents)
+    setAssistantPresets(_presets)
   }
 
   const updateKnowledgeBases = (bases: KnowledgeBase[]) => {

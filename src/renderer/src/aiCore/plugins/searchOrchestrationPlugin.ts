@@ -2,35 +2,36 @@
  * 搜索编排插件
  *
  * 功能：
- * 1. onRequestStart: 智能意图识别 - 分析是否需要网络搜索、知识库搜索、记忆搜索
- * 2. transformParams: 根据意图分析结果动态添加对应的工具
+ * 1. onRequestStart: 记录用户消息
+ * 2. transformParams: 注入内置工具（web search / KB / memory / skill），由主 LLM 决定是否调用
  * 3. onRequestEnd: 自动记忆存储
  */
-import { type AiRequestContext, definePlugin } from '@cherrystudio/ai-core'
-import { loggerService } from '@logger'
-// import { generateObject } from '@cherrystudio/ai-core'
 import {
-  SEARCH_SUMMARY_PROMPT,
-  SEARCH_SUMMARY_PROMPT_KNOWLEDGE_ONLY,
-  SEARCH_SUMMARY_PROMPT_WEB_ONLY
-} from '@renderer/config/prompts'
-import { getDefaultModel, getProviderByModel } from '@renderer/services/AssistantService'
+  type AiPlugin,
+  type AiRequestContext,
+  definePlugin,
+  type StreamTextParams,
+  type StreamTextResult
+} from '@cherrystudio/ai-core'
+import { loggerService } from '@logger'
 import store from '@renderer/store'
 import { selectCurrentUserId, selectGlobalMemoryEnabled, selectMemoryConfig } from '@renderer/store/memory'
 import type { Assistant } from '@renderer/types'
-import { extractInfoFromXML, ExtractResults } from '@renderer/utils/extract'
-import type { LanguageModel, ModelMessage } from 'ai'
-import { generateText } from 'ai'
-import { isEmpty } from 'lodash'
+import type { Chunk } from '@renderer/types/chunk'
+import type { ModelMessage } from 'ai'
 
 import { MemoryProcessor } from '../../services/MemoryProcessor'
-import { knowledgeSearchTool } from '../tools/KnowledgeSearchTool'
-import { memorySearchTool } from '../tools/MemorySearchTool'
-import { webSearchToolWithPreExtractedKeywords } from '../tools/WebSearchTool'
+import { BuiltinToolRegistry } from '../tools/BuiltinToolRegistry'
+import { conversationDetailBuiltinTool } from '../tools/ConversationDetailTool'
+import { conversationImageBuiltinTool } from '../tools/ConversationImageTool'
+import { knowledgeBuiltinTool } from '../tools/KnowledgeSearchTool'
+import { memoryBuiltinTool } from '../tools/MemorySearchTool'
+import { skillBuiltinTool } from '../tools/SkillTool'
+import { webSearchBuiltinTool } from '../tools/WebSearchTool'
 
 const logger = loggerService.withContext('SearchOrchestrationPlugin')
 
-const getMessageContent = (message: ModelMessage) => {
+export const getMessageContent = (message: ModelMessage) => {
   if (typeof message.content === 'string') return message.content
   return message.content.reduce((acc, part) => {
     if (part.type === 'text') {
@@ -38,133 +39,6 @@ const getMessageContent = (message: ModelMessage) => {
     }
     return acc
   }, '')
-}
-
-// === Schema Definitions ===
-
-// const WebSearchSchema = z.object({
-//   question: z
-//     .array(z.string())
-//     .describe('Search queries for web search. Use "not_needed" if no web search is required.'),
-//   links: z.array(z.string()).optional().describe('Specific URLs to search or summarize if mentioned in the query.')
-// })
-
-// const KnowledgeSearchSchema = z.object({
-//   question: z
-//     .array(z.string())
-//     .describe('Search queries for knowledge base. Use "not_needed" if no knowledge search is required.'),
-//   rewrite: z
-//     .string()
-//     .describe('Rewritten query with alternative phrasing while preserving original intent and meaning.')
-// })
-
-// const SearchIntentAnalysisSchema = z.object({
-//   websearch: WebSearchSchema.optional().describe('Web search intent analysis results.'),
-//   knowledge: KnowledgeSearchSchema.optional().describe('Knowledge base search intent analysis results.')
-// })
-
-// type SearchIntentResult = z.infer<typeof SearchIntentAnalysisSchema>
-
-// let isAnalyzing = false
-/**
- * 🧠 意图分析函数 - 使用 XML 解析
- */
-async function analyzeSearchIntent(
-  lastUserMessage: ModelMessage,
-  assistant: Assistant,
-  options: {
-    shouldWebSearch?: boolean
-    shouldKnowledgeSearch?: boolean
-    shouldMemorySearch?: boolean
-    lastAnswer?: ModelMessage
-    context: AiRequestContext
-    topicId: string
-  }
-): Promise<ExtractResults | undefined> {
-  const { shouldWebSearch = false, shouldKnowledgeSearch = false, lastAnswer, context } = options
-
-  if (!lastUserMessage) return undefined
-
-  // 根据配置决定是否需要提取
-  const needWebExtract = shouldWebSearch
-  const needKnowledgeExtract = shouldKnowledgeSearch
-
-  if (!needWebExtract && !needKnowledgeExtract) return undefined
-
-  // 选择合适的提示词
-  let prompt: string
-  // let schema: z.Schema
-
-  if (needWebExtract && !needKnowledgeExtract) {
-    prompt = SEARCH_SUMMARY_PROMPT_WEB_ONLY
-    // schema = z.object({ websearch: WebSearchSchema })
-  } else if (!needWebExtract && needKnowledgeExtract) {
-    prompt = SEARCH_SUMMARY_PROMPT_KNOWLEDGE_ONLY
-    // schema = z.object({ knowledge: KnowledgeSearchSchema })
-  } else {
-    prompt = SEARCH_SUMMARY_PROMPT
-    // schema = SearchIntentAnalysisSchema
-  }
-
-  // 构建消息上下文 - 简化逻辑
-  const chatHistory = lastAnswer ? `assistant: ${getMessageContent(lastAnswer)}` : ''
-  const question = getMessageContent(lastUserMessage) || ''
-
-  // 使用模板替换变量
-  const formattedPrompt = prompt.replace('{chat_history}', chatHistory).replace('{question}', question)
-
-  // 获取模型和provider信息
-  const model = assistant.model || getDefaultModel()
-  const provider = getProviderByModel(model)
-
-  if (!provider || isEmpty(provider.apiKey)) {
-    logger.error('Provider not found or missing API key')
-    return getFallbackResult()
-  }
-  try {
-    logger.info('Starting intent analysis generateText call', {
-      modelId: model.id,
-      topicId: options.topicId,
-      requestId: context.requestId,
-      hasWebSearch: needWebExtract,
-      hasKnowledgeSearch: needKnowledgeExtract
-    })
-
-    const { text: result } = await generateText({
-      model: context.model as LanguageModel,
-      prompt: formattedPrompt
-    }).finally(() => {
-      logger.info('Intent analysis generateText call completed', {
-        modelId: model.id,
-        topicId: options.topicId,
-        requestId: context.requestId
-      })
-    })
-    const parsedResult = extractInfoFromXML(result)
-    logger.debug('Intent analysis result', { parsedResult })
-
-    // 根据需求过滤结果
-    return {
-      websearch: needWebExtract ? parsedResult?.websearch : undefined,
-      knowledge: needKnowledgeExtract ? parsedResult?.knowledge : undefined
-    }
-  } catch (e: any) {
-    logger.error('Intent analysis failed', e as Error)
-    return getFallbackResult()
-  }
-
-  function getFallbackResult(): ExtractResults {
-    const fallbackContent = getMessageContent(lastUserMessage)
-    return {
-      websearch: shouldWebSearch ? { question: [fallbackContent || 'search'] } : undefined,
-      knowledge: shouldKnowledgeSearch
-        ? {
-            question: [fallbackContent || 'search'],
-            rewrite: fallbackContent || 'search'
-          }
-        : undefined
-    }
-  }
 }
 
 /**
@@ -235,174 +109,75 @@ async function storeConversationMemory(
 /**
  * 🎯 搜索编排插件
  */
-export const searchOrchestrationPlugin = (assistant: Assistant, topicId: string) => {
-  // 存储意图分析结果
-  const intentAnalysisResults: { [requestId: string]: ExtractResults } = {}
+export const searchOrchestrationPlugin = (
+  assistant: Assistant,
+  topicId: string,
+  _onChunk?: (chunk: Chunk) => void
+): AiPlugin<StreamTextParams, StreamTextResult> => {
   const userMessages: { [requestId: string]: ModelMessage } = {}
 
-  return definePlugin({
+  return definePlugin<StreamTextParams, StreamTextResult>({
     name: 'search-orchestration',
-    enforce: 'pre', // 确保在其他插件之前执行
-    /**
-     * 🔍 Step 1: 意图识别阶段
-     */
-    onRequestStart: async (context: AiRequestContext) => {
-      // 没开启任何搜索则不进行意图分析
+    enforce: 'pre',
+
+    onRequestStart: async (context) => {
       if (!(assistant.webSearchProviderId || assistant.knowledge_bases?.length || assistant.enableMemory)) return
 
-      try {
-        const messages = context.originalParams.messages
-        if (!messages || messages.length === 0) {
-          return
-        }
+      const messages = context.originalParams.messages
+      if (!messages || messages.length === 0) return
 
-        const lastUserMessage = messages[messages.length - 1]
-        const lastAssistantMessage = messages.length >= 2 ? messages[messages.length - 2] : undefined
-
-        // 存储用户消息用于后续记忆存储
-        userMessages[context.requestId] = lastUserMessage
-
-        // 判断是否需要各种搜索
-        const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
-        const hasKnowledgeBase = !isEmpty(knowledgeBaseIds)
-        const knowledgeRecognition = assistant.knowledgeRecognition || 'on'
-        const globalMemoryEnabled = selectGlobalMemoryEnabled(store.getState())
-        const shouldWebSearch = !!assistant.webSearchProviderId
-        const shouldKnowledgeSearch = hasKnowledgeBase && knowledgeRecognition === 'on'
-        const shouldMemorySearch = globalMemoryEnabled && assistant.enableMemory
-
-        // 执行意图分析
-        if (shouldWebSearch || hasKnowledgeBase) {
-          const analysisResult = await analyzeSearchIntent(lastUserMessage, assistant, {
-            shouldWebSearch,
-            shouldKnowledgeSearch,
-            shouldMemorySearch,
-            lastAnswer: lastAssistantMessage,
-            context,
-            topicId
-          })
-
-          if (analysisResult) {
-            intentAnalysisResults[context.requestId] = analysisResult
-            // logger.info('🧠 Intent analysis completed:', analysisResult)
-          }
-        }
-      } catch (error) {
-        logger.error('🧠 Intent analysis failed:', error as Error)
-        // 不抛出错误，让流程继续
-      }
+      userMessages[context.requestId] = messages[messages.length - 1]
     },
 
-    /**
-     * 🔧 Step 2: 工具配置阶段
-     */
-    transformParams: async (params: any, context: AiRequestContext) => {
-      // logger.info('🔧 Configuring tools based on intent...', context.requestId)
-
+    transformParams: async (params, context) => {
       try {
-        const analysisResult = intentAnalysisResults[context.requestId]
-        // if (!analysisResult || !assistant) {
-        //   logger.info('🔧 No analysis result or assistant, skipping tool configuration')
-        //   return params
-        // }
-
-        // 确保 tools 对象存在
         if (!params.tools) {
           params.tools = {}
         }
 
-        // 🌐 网络搜索工具配置
-        if (analysisResult?.websearch && assistant.webSearchProviderId) {
-          const needsSearch = analysisResult.websearch.question && analysisResult.websearch.question[0] !== 'not_needed'
-
-          if (needsSearch) {
-            // onChunk({ type: ChunkType.EXTERNEL_TOOL_IN_PROGRESS })
-            // logger.info('🌐 Adding web search tool with pre-extracted keywords')
-            params.tools['builtin_web_search'] = webSearchToolWithPreExtractedKeywords(
-              assistant.webSearchProviderId,
-              analysisResult.websearch,
-              context.requestId
-            )
+        const userMessage = userMessages[context.requestId]
+        let userContent = 'search'
+        if (userMessage) {
+          userContent = getMessageContent(userMessage) || 'search'
+        } else {
+          const msgs = context.originalParams.messages
+          if (msgs && msgs.length > 0) {
+            userContent = getMessageContent(msgs[msgs.length - 1]) || 'search'
           }
         }
 
-        // 📚 知识库搜索工具配置
-        const knowledgeBaseIds = assistant.knowledge_bases?.map((base) => base.id)
-        const hasKnowledgeBase = !isEmpty(knowledgeBaseIds)
-        const knowledgeRecognition = assistant.knowledgeRecognition || 'on'
+        const registry = new BuiltinToolRegistry()
+        registry.register(knowledgeBuiltinTool)
+        registry.register(webSearchBuiltinTool)
+        registry.register(memoryBuiltinTool)
+        registry.register(skillBuiltinTool)
+        registry.register(conversationDetailBuiltinTool)
+        registry.register(conversationImageBuiltinTool)
 
-        if (hasKnowledgeBase) {
-          if (knowledgeRecognition === 'off') {
-            // off 模式：直接添加知识库搜索工具，使用用户消息作为搜索关键词
-            const userMessage = userMessages[context.requestId]
-            const fallbackKeywords = {
-              question: [getMessageContent(userMessage) || 'search'],
-              rewrite: getMessageContent(userMessage) || 'search'
-            }
-            // logger.info('📚 Adding knowledge search tool (force mode)')
-            params.tools['builtin_knowledge_search'] = knowledgeSearchTool(
-              assistant,
-              fallbackKeywords,
-              getMessageContent(userMessage),
-              topicId
-            )
-            // params.toolChoice = { type: 'tool', toolName: 'builtin_knowledge_search' }
-          } else {
-            // on 模式：根据意图识别结果决定是否添加工具
-            const needsKnowledgeSearch =
-              analysisResult?.knowledge &&
-              analysisResult.knowledge.question &&
-              analysisResult.knowledge.question[0] !== 'not_needed'
+        registry.registerAll(params as { tools?: Record<string, any> }, {
+          assistant,
+          topicId,
+          userContent,
+          intentKeywords: undefined,
+          requestId: context.requestId
+        })
 
-            if (needsKnowledgeSearch && analysisResult.knowledge) {
-              // logger.info('📚 Adding knowledge search tool (intent-based)')
-              const userMessage = userMessages[context.requestId]
-              params.tools['builtin_knowledge_search'] = knowledgeSearchTool(
-                assistant,
-                analysisResult.knowledge,
-                getMessageContent(userMessage),
-                topicId
-              )
-            }
-          }
-        }
-
-        // 🧠 记忆搜索工具配置
-        const globalMemoryEnabled = selectGlobalMemoryEnabled(store.getState())
-        if (globalMemoryEnabled && assistant.enableMemory) {
-          // logger.info('🧠 Adding memory search tool')
-          params.tools['builtin_memory_search'] = memorySearchTool()
-        }
-
-        // logger.info('🔧 Tools configured:', Object.keys(params.tools))
         return params
       } catch (error) {
-        logger.error('🔧 Tool configuration failed:', error as Error)
+        logger.error('Tool configuration failed:', error as Error)
         return params
       }
     },
 
-    /**
-     * 💾 Step 3: 记忆存储阶段
-     */
-
-    onRequestEnd: async (context: AiRequestContext) => {
-      // context.isAnalyzing = false
-      // logger.info('context.isAnalyzing', context, result)
-      // logger.info('💾 Starting memory storage...', context.requestId)
+    onRequestEnd: async (context) => {
       try {
         const messages = context.originalParams.messages
-
         if (messages && assistant) {
           await storeConversationMemory(messages, assistant, context)
         }
-
-        // 清理缓存
-        delete intentAnalysisResults[context.requestId]
         delete userMessages[context.requestId]
       } catch (error) {
-        logger.error('💾 Memory storage failed:', error as Error)
-        // 不抛出错误，避免影响主流程
+        logger.error('Memory storage failed:', error as Error)
       }
     }
   })

@@ -1,11 +1,27 @@
+/**
+ * @deprecated Scheduled for removal in v2.0.0
+ * --------------------------------------------------------------------------
+ * ⚠️ NOTICE: V2 DATA&UI REFACTORING (by 0xfullex)
+ * --------------------------------------------------------------------------
+ * STOP: Feature PRs affecting this file are currently BLOCKED.
+ * Only critical bug fixes are accepted during this migration phase.
+ *
+ * This file is being refactored to v2 standards.
+ * Any non-critical changes will conflict with the ongoing work.
+ *
+ * 🔗 Context & Status:
+ * - Contribution Hold: https://github.com/CherryHQ/cherry-studio/issues/10954
+ * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
+ * --------------------------------------------------------------------------
+ */
 import { loggerService } from '@logger'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
+import { IpcChannel } from '@shared/IpcChannel'
 import { useDispatch, useSelector, useStore } from 'react-redux'
 import { FLUSH, PAUSE, PERSIST, persistReducer, persistStore, PURGE, REGISTER, REHYDRATE } from 'redux-persist'
 import storage from 'redux-persist/lib/storage'
 
 import storeSyncService from '../services/StoreSyncService'
-import agents from './agents'
 import assistants from './assistants'
 import backup from './backup'
 import codeTools from './codeTools'
@@ -23,13 +39,16 @@ import { setNotesPath } from './note'
 import note from './note'
 import nutstore from './nutstore'
 import ocr from './ocr'
+import openclaw from './openclaw'
 import paintings from './paintings'
 import preprocess from './preprocess'
 import runtime from './runtime'
 import selectionStore from './selectionStore'
 import settings from './settings'
 import shortcuts from './shortcuts'
+import skills from './skills'
 import tabs from './tabs'
+import toolPermissions from './toolPermissions'
 import translate from './translate'
 import websearch from './websearch'
 
@@ -37,7 +56,6 @@ const logger = loggerService.withContext('Store')
 
 const rootReducer = combineReducers({
   assistants,
-  agents,
   backup,
   codeTools,
   nutstore,
@@ -52,6 +70,7 @@ const rootReducer = combineReducers({
   mcp,
   memory,
   copilot,
+  openclaw,
   selectionStore,
   tabs,
   preprocess,
@@ -60,15 +79,17 @@ const rootReducer = combineReducers({
   inputTools: inputToolsReducer,
   translate,
   ocr,
-  note
+  note,
+  toolPermissions,
+  skills
 })
 
 const persistedReducer = persistReducer(
   {
     key: 'cherry-studio',
     storage,
-    version: 157,
-    blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs'],
+    version: 204,
+    blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions'],
     migrate
   },
   rootReducer
@@ -120,6 +141,10 @@ export const persistor = persistStore(store, undefined, () => {
       }
     }, 0)
   }
+
+  // Notify main process that Redux store is ready
+  window.electron?.ipcRenderer?.invoke(IpcChannel.ReduxStoreReady)
+  logger.info('Redux store ready, notified main process')
 })
 
 export const useAppDispatch = useDispatch.withTypes<AppDispatch>()

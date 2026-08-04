@@ -8,7 +8,7 @@ import store from '@renderer/store'
 import { messageBlocksSelectors, removeManyBlocks } from '@renderer/store/messageBlock'
 import { selectMessagesForTopic } from '@renderer/store/newMessage'
 import type { Assistant, FileMetadata, Model, Topic, Usage } from '@renderer/types'
-import { FileTypes } from '@renderer/types'
+import { FILE_TYPE } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { uuid } from '@renderer/utils'
@@ -25,7 +25,7 @@ import { filterContextMessages } from '@renderer/utils/messageUtils/filters'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import dayjs from 'dayjs'
 import { t } from 'i18next'
-import { NavigateFunction } from 'react-router'
+import type { NavigateFunction } from 'react-router'
 
 import { getAssistantById, getAssistantProvider, getDefaultModel } from './AssistantService'
 import { EVENT_NAMES, EventEmitter } from './EventService'
@@ -36,6 +36,7 @@ const logger = loggerService.withContext('MessagesService')
 export {
   filterAfterContextClearMessages,
   filterEmptyMessages,
+  filterErrorOnlyMessagesWithRelated,
   filterMessages,
   filterUsefulMessages,
   filterUserRoleStartMessages,
@@ -131,7 +132,7 @@ export function getUserMessage({
   }
   if (files?.length) {
     files.forEach((file) => {
-      if (file.type === FileTypes.IMAGE) {
+      if (file.type === FILE_TYPE.IMAGE) {
         const imgBlock = createImageBlock(messageId, { file, status: MessageBlockStatus.SUCCESS })
         blocks.push(imgBlock)
         blockIds.push(imgBlock.id)
@@ -208,9 +209,9 @@ export async function getMessageTitle(message: Message, length = 30): Promise<st
         blocks: message.blocks
       })
 
-      const titlePromise = fetchMessagesSummary({ messages: [tempMessage], assistant: {} as Assistant })
+      const titlePromise = fetchMessagesSummary({ messages: [tempMessage] })
       window.toast.loading({ title: t('chat.topics.export.wait_for_title_naming'), promise: titlePromise })
-      const title = await titlePromise
+      const { text: title } = await titlePromise
 
       // store.dispatch(messageBlocksActions.upsertOneBlock(tempTextBlock))
 

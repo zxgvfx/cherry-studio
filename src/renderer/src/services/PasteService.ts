@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { FileMetadata } from '@renderer/types'
+import type { FileMetadata } from '@renderer/types'
 import { getFileExtension, isSupportedFile } from '@renderer/utils'
 
 const logger = loggerService.withContext('PasteService')
@@ -68,20 +68,66 @@ export const handlePaste = async (
 
           // 如果没有路径，可能是剪贴板中的图像数据
           if (!filePath) {
-            // 图像生成也支持图像编辑
-            if (file.type.startsWith('image/') && supportExts.includes(getFileExtension(file.name))) {
-              const tempFilePath = await window.api.file.createTempFile(file.name)
-              const arrayBuffer = await file.arrayBuffer()
-              const uint8Array = new Uint8Array(arrayBuffer)
-              await window.api.file.write(tempFilePath, uint8Array)
-              const selectedFile = await window.api.file.get(tempFilePath)
-              if (selectedFile) {
-                setFiles((prevFiles) => [...prevFiles, selectedFile])
-                break
+            // 处理剪贴板图片：如果 file.type 是 image/*，直接允许
+            if (file.type.startsWith('image/')) {
+              try {
+                // 从 MIME type 提取扩展名（如 'image/png' -> '.png'）
+                const mimeType = file.type.toLowerCase()
+                let extension = '.png' // 默认 PNG
+                if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
+                  extension = '.jpg'
+                } else if (mimeType.includes('gif')) {
+                  extension = '.gif'
+                } else if (mimeType.includes('webp')) {
+                  extension = '.webp'
+                } else if (mimeType.includes('bmp')) {
+                  extension = '.bmp'
+                }
+                
+                // 检查扩展名是否在支持列表中（如果 supportExts 不为空）
+                if (supportExts.length > 0 && !supportExts.includes(extension)) {
+                  if (t) {
+                    window.toast.info(t('chat.input.file_not_supported'))
+                  }
+                  continue
+                }
+                
+                // 使用 savePastedImage API 直接保存图片（更高效）
+                const arrayBuffer = await file.arrayBuffer()
+                const uint8Array = new Uint8Array(arrayBuffer)
+                const fileMetadata = await window.api.file.savePastedImage(uint8Array, extension)
+                
+                if (fileMetadata) {
+                  setFiles((prevFiles) => [...prevFiles, fileMetadata])
+                  break
+                } else {
+                  logger.error('Failed to save pasted image')
+                  if (t) {
+                    window.toast.error(t('chat.input.file_error'))
+                  }
+                }
+              } catch (error) {
+                logger.error('Error handling pasted image:', error as Error)
+                if (t) {
+                  window.toast.error(t('chat.input.file_error'))
+                }
               }
             } else {
-              if (t) {
-                window.toast.info(t('chat.input.file_not_supported'))
+              // 非图片文件，检查扩展名
+              const fileExt = getFileExtension(file.name || '')
+              if (fileExt && fileExt !== '.' && supportExts.includes(fileExt)) {
+                const tempFilePath = await window.api.file.createTempFile(file.name || 'temp_file')
+                const arrayBuffer = await file.arrayBuffer()
+                const uint8Array = new Uint8Array(arrayBuffer)
+                await window.api.file.write(tempFilePath, uint8Array)
+                const selectedFile = await window.api.file.get(tempFilePath)
+                if (selectedFile) {
+                  setFiles((prevFiles) => [...prevFiles, selectedFile])
+                }
+              } else {
+                if (t) {
+                  window.toast.info(t('chat.input.file_not_supported'))
+                }
               }
             }
             continue

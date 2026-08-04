@@ -1,14 +1,24 @@
+/**
+ * @deprecated Scheduled for removal in v2.0.0
+ * --------------------------------------------------------------------------
+ * ⚠️ NOTICE: V2 DATA&UI REFACTORING (by 0xfullex)
+ * --------------------------------------------------------------------------
+ * STOP: Feature PRs affecting this file are currently BLOCKED.
+ * Only critical bug fixes are accepted during this migration phase.
+ *
+ * This file is being refactored to v2 standards.
+ * Any non-critical changes will conflict with the ongoing work.
+ *
+ * 🔗 Context & Status:
+ * - Contribution Hold: https://github.com/CherryHQ/cherry-studio/issues/10954
+ * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
+ * --------------------------------------------------------------------------
+ */
 import { loggerService } from '@logger'
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
+import type { PayloadAction } from '@reduxjs/toolkit'
+import { createSlice } from '@reduxjs/toolkit'
 import FileManager from '@renderer/services/FileManager'
-import {
-  FileMetadata,
-  KnowledgeBase,
-  KnowledgeBaseParams,
-  KnowledgeItem,
-  PreprocessProvider,
-  ProcessingStatus
-} from '@renderer/types'
+import type { FileMetadata, KnowledgeBase, KnowledgeItem, PreprocessProvider, ProcessingStatus } from '@renderer/types'
 
 const logger = loggerService.withContext('Store:Knowledge')
 
@@ -28,13 +38,13 @@ const knowledgeSlice = createSlice({
       state.bases.push(action.payload)
     },
 
-    deleteBase(state, action: PayloadAction<{ baseId: string; baseParams: KnowledgeBaseParams }>) {
+    deleteBase(state, action: PayloadAction<{ baseId: string }>) {
       const base = state.bases.find((b) => b.id === action.payload.baseId)
       if (base) {
         state.bases = state.bases.filter((b) => b.id !== action.payload.baseId)
         const files = base.items.filter((item) => item.type === 'file')
         FileManager.deleteFiles(files.map((item) => item.content) as FileMetadata[])
-        window.api.knowledgeBase.delete(action.payload.baseParams, action.payload.baseId)
+        window.api.knowledgeBase.delete(action.payload.baseId)
       }
     },
 

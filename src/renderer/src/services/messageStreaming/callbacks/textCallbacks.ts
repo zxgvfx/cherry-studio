@@ -1,9 +1,11 @@
 import { loggerService } from '@logger'
-import { WebSearchSource } from '@renderer/types'
-import { CitationMessageBlock, MessageBlock, MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
+import { WEB_SEARCH_SOURCE } from '@renderer/types'
+import type { ProviderMetadata } from '@renderer/types/chunk'
+import type { CitationMessageBlock, MessageBlock } from '@renderer/types/newMessage'
+import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { createMainTextBlock } from '@renderer/utils/messageUtils/create'
 
-import { BlockManager } from '../BlockManager'
+import type { BlockManager } from '../BlockManager'
 
 const logger = loggerService.withContext('TextCallbacks')
 
@@ -13,15 +15,47 @@ interface TextCallbacksDependencies {
   assistantMsgId: string
   getCitationBlockId: () => string | null
   getCitationBlockIdFromTool: () => string | null
+  handleCompactTextComplete?: (text: string, mainTextBlockId: string | null) => Promise<boolean>
 }
 
 export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
-  const { blockManager, getState, assistantMsgId, getCitationBlockId, getCitationBlockIdFromTool } = deps
+  const {
+    blockManager,
+    getState,
+    assistantMsgId,
+    getCitationBlockId,
+    getCitationBlockIdFromTool,
+    handleCompactTextComplete
+  } = deps
 
   // 内部维护的状态
   let mainTextBlockId: string | null = null
+  // Track thoughtSignature for Gemini thought signature persistence
+  let currentThoughtSignature: string | undefined
+
+  const ensureMainTextBlock = async () => {
+    if (mainTextBlockId) return
+    // 复用 onTextStart 逻辑：在部分模型/插件组合下可能出现 text-delta 早于 text-start 的情况
+    //（例如 prompt-tool-use 插件会 hold text-start，直到确认有非工具标签文本）
+    if (blockManager.hasInitialPlaceholder) {
+      const changes = {
+        type: MessageBlockType.MAIN_TEXT,
+        content: '',
+        status: MessageBlockStatus.STREAMING
+      }
+      mainTextBlockId = blockManager.initialPlaceholderBlockId!
+      blockManager.smartBlockUpdate(mainTextBlockId, changes, MessageBlockType.MAIN_TEXT, true)
+      return
+    }
+    const newBlock = createMainTextBlock(assistantMsgId, '', {
+      status: MessageBlockStatus.STREAMING
+    })
+    mainTextBlockId = newBlock.id
+    await blockManager.handleBlockTransition(newBlock, MessageBlockType.MAIN_TEXT)
+  }
 
   return {
+    getCurrentMainTextBlockId: () => mainTextBlockId,
     onTextStart: async () => {
       if (blockManager.hasInitialPlaceholder) {
         const changes = {
@@ -40,11 +74,12 @@ export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
       }
     },
 
-    onTextChunk: async (text: string) => {
+    onTextChunk: async (text: string, providerMetadata?: ProviderMetadata) => {
+      await ensureMainTextBlock()
       const citationBlockId = getCitationBlockId() || getCitationBlockIdFromTool()
       const citationBlockSource = citationBlockId
         ? (getState().messageBlocks.entities[citationBlockId] as CitationMessageBlock).response?.source
-        : WebSearchSource.WEBSEARCH
+        : WEB_SEARCH_SOURCE.WEBSEARCH
       if (text) {
         const blockChanges: Partial<MessageBlock> = {
           content: text,
@@ -53,15 +88,31 @@ export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
         }
         blockManager.smartBlockUpdate(mainTextBlockId!, blockChanges, MessageBlockType.MAIN_TEXT)
       }
+      // Collect thoughtSignature from providerMetadata for Gemini
+      if (providerMetadata?.google?.thoughtSignature) {
+        currentThoughtSignature = providerMetadata.google.thoughtSignature
+      }
     },
 
-    onTextComplete: async (finalText: string) => {
+    onTextComplete: async (finalText: string, providerMetadata?: ProviderMetadata) => {
+      if (!mainTextBlockId && finalText) {
+        await ensureMainTextBlock()
+      }
       if (mainTextBlockId) {
-        const changes = {
+        // Use thoughtSignature from providerMetadata if available, otherwise use collected one
+        const thoughtSignature = providerMetadata?.google?.thoughtSignature || currentThoughtSignature
+        const changes: Partial<MessageBlock> = {
           content: finalText,
-          status: MessageBlockStatus.SUCCESS
+          status: MessageBlockStatus.SUCCESS,
+          // Store thoughtSignature in metadata for persistence
+          metadata: thoughtSignature ? { thoughtSignature } : undefined
         }
         blockManager.smartBlockUpdate(mainTextBlockId, changes, MessageBlockType.MAIN_TEXT, true)
+        if (handleCompactTextComplete) {
+          await handleCompactTextComplete(finalText, mainTextBlockId)
+        }
+        // Clear thoughtSignature after block is complete
+        currentThoughtSignature = undefined
         mainTextBlockId = null
       } else {
         logger.warn(

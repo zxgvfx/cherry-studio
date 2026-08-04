@@ -1,5 +1,5 @@
-import { GlobalOutlined } from '@ant-design/icons'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
+import { McpLogo } from '@renderer/components/Icons'
 import Scrollbar from '@renderer/components/Scrollbar'
 import ModelSettings from '@renderer/pages/settings/ModelSettings/ModelSettings'
 import { Divider as AntDivider } from 'antd'
@@ -8,35 +8,38 @@ import {
   Cloud,
   Command,
   FileCode,
-  Hammer,
-  HardDrive,
+  // Hammer,
+  // HardDrive,
   Info,
   MonitorCog,
-  NotebookPen,
   Package,
   PictureInPicture2,
+  Puzzle,
+  Search,
   Server,
   Settings2,
+  Sparkles,
   TextCursorInput,
   Zap
 } from 'lucide-react'
-import { FC } from 'react'
+import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import styled from 'styled-components'
 
 import AboutSettings from './AboutSettings'
-import DataSettings from './DataSettings/DataSettings'
+// import DataSettings from './DataSettings/DataSettings'
 import DisplaySettings from './DisplaySettings/DisplaySettings'
 import DocProcessSettings from './DocProcessSettings'
 import GeneralSettings from './GeneralSettings'
 import MCPSettings from './MCPSettings'
 import MemorySettings from './MemorySettings'
-import NotesSettings from './NotesSettings'
+import PluginSettings from './PluginSettings'
 import { ProviderList } from './ProviderSettings'
 import QuickAssistantSettings from './QuickAssistantSettings'
 import QuickPhraseSettings from './QuickPhraseSettings'
 import SelectionAssistantSettings from './SelectionAssistantSettings/SelectionAssistantSettings'
+import SkillSettings from './SkillSettings/SkillSettings'
 import ShortcutSettings from './ShortcutSettings'
 import { ApiServerSettings } from './ToolSettings/ApiServerSettings'
 import WebSearchSettings from './WebSearchSettings'
@@ -79,28 +82,29 @@ const SettingsPage: FC = () => {
               {t('settings.display.title')}
             </MenuItem>
           </MenuItemLink>
-          <MenuItemLink to="/settings/data">
+          {/* 暂时隐藏数据设置，避免渲染错误 */}
+          {/* <MenuItemLink to="/settings/data">
             <MenuItem className={isRoute('/settings/data')}>
               <HardDrive size={18} />
               {t('settings.data.title')}
             </MenuItem>
-          </MenuItemLink>
+          </MenuItemLink> */}
           <Divider />
-          <MenuItemLink to="/settings/mcp">
-            <MenuItem className={isRoute('/settings/mcp')}>
-              <Hammer size={18} />
-              {t('settings.mcp.title')}
+          <MenuItemLink to="/settings/plugins">
+            <MenuItem className={isRoute('/settings/plugins')}>
+              <Puzzle size={18} />
+              {t('plugins.title', 'Plugins')}
             </MenuItem>
           </MenuItemLink>
-          <MenuItemLink to="/settings/notes">
-            <MenuItem className={isRoute('/settings/notes')}>
-              <NotebookPen size={18} />
-              {t('notes.settings.title')}
+          <MenuItemLink to="/settings/mcp">
+            <MenuItem className={isRoute('/settings/mcp')}>
+              <McpLogo width={18} height={18} style={{ opacity: 0.8 }} />
+              {t('settings.mcp.title')}
             </MenuItem>
           </MenuItemLink>
           <MenuItemLink to="/settings/websearch">
             <MenuItem className={isRoute('/settings/websearch')}>
-              <GlobalOutlined style={{ fontSize: 18 }} />
+              <Search size={18} />
               {t('settings.tool.websearch.title')}
             </MenuItem>
           </MenuItemLink>
@@ -108,6 +112,12 @@ const SettingsPage: FC = () => {
             <MenuItem className={isRoute('/settings/memory')}>
               <Brain size={18} />
               {t('memory.title')}
+            </MenuItem>
+          </MenuItemLink>
+          <MenuItemLink to="/settings/skills">
+            <MenuItem className={isRoute('/settings/skills')}>
+              <Sparkles size={18} />
+              {t('settings.skills.title')}
             </MenuItem>
           </MenuItemLink>
           <MenuItemLink to="/settings/api-server">
@@ -159,19 +169,22 @@ const SettingsPage: FC = () => {
           <Routes>
             <Route path="provider" element={<ProviderList />} />
             <Route path="model" element={<ModelSettings />} />
-            <Route path="websearch" element={<WebSearchSettings />} />
+            <Route path="websearch/*" element={<WebSearchSettings />} />
             <Route path="api-server" element={<ApiServerSettings />} />
             <Route path="docprocess" element={<DocProcessSettings />} />
             <Route path="quickphrase" element={<QuickPhraseSettings />} />
+            <Route path="plugins" element={<PluginSettings />} />
             <Route path="mcp/*" element={<MCPSettings />} />
             <Route path="memory" element={<MemorySettings />} />
+            <Route path="skills" element={<SkillSettings />} />
             <Route path="general/*" element={<GeneralSettings />} />
             <Route path="display" element={<DisplaySettings />} />
             <Route path="shortcut" element={<ShortcutSettings />} />
             <Route path="quickAssistant" element={<QuickAssistantSettings />} />
             <Route path="selectionAssistant" element={<SelectionAssistantSettings />} />
-            <Route path="data" element={<DataSettings />} />
-            <Route path="notes" element={<NotesSettings />} />
+            {/* 暂时隐藏数据设置路由，避免渲染错误 */}
+            {/* <Route path="data" element={<DataSettings />} /> */}
+            {/* <Route path="notes" element={<NotesSettings />} /> */}
             <Route path="about" element={<AboutSettings />} />
           </Routes>
         </SettingContent>

@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import { Readability } from '@mozilla/readability'
 import { nanoid } from '@reduxjs/toolkit'
-import { WebSearchProviderResult } from '@renderer/types'
+import type { WebSearchProviderResult } from '@renderer/types'
 import { createAbortPromise } from '@renderer/utils/abortController'
 import { isAbortError } from '@renderer/utils/error'
 import TurndownService from 'turndown'
@@ -10,8 +10,94 @@ const logger = loggerService.withContext('Utils:fetch')
 
 const turndownService = new TurndownService()
 export const noContent = 'No content found'
+const maxExtractedLinks = 20
+const maxExtractedImages = 20
 
 type ResponseFormat = 'markdown' | 'html' | 'text'
+
+function toAbsoluteHttpUrl(rawUrl: string | null | undefined, baseUrl: string): string | null {
+  if (!rawUrl) {
+    return null
+  }
+
+  try {
+    const absoluteUrl = new URL(rawUrl, baseUrl)
+    if (absoluteUrl.protocol !== 'http:' && absoluteUrl.protocol !== 'https:') {
+      return null
+    }
+    return absoluteUrl.toString()
+  } catch {
+    return null
+  }
+}
+
+function dedupeUrls(urls: Array<string | null>, maxCount: number): string[] {
+  const uniqueUrls = new Set<string>()
+  for (const url of urls) {
+    if (!url || uniqueUrls.has(url)) {
+      continue
+    }
+    uniqueUrls.add(url)
+    if (uniqueUrls.size >= maxCount) {
+      break
+    }
+  }
+  return Array.from(uniqueUrls)
+}
+
+function extractPageAssets(doc: Document, baseUrl: string) {
+  const links = dedupeUrls(
+    Array.from(doc.querySelectorAll('a[href]')).map((node) => toAbsoluteHttpUrl(node.getAttribute('href'), baseUrl)),
+    maxExtractedLinks
+  )
+
+  const images = dedupeUrls(
+    Array.from(doc.querySelectorAll('img')).flatMap((node) => {
+      const candidates: Array<string | null | undefined> = [
+        node.getAttribute('src'),
+        node.getAttribute('data-src'),
+        node.getAttribute('data-original'),
+        node.getAttribute('data-lazy-src')
+      ]
+
+      const srcset = node.getAttribute('srcset') || node.getAttribute('data-srcset')
+      if (srcset) {
+        const firstSrcsetUrl = srcset
+          .split(',')
+          .map((entry) => entry.trim().split(/\s+/)[0])
+          .find(Boolean)
+        candidates.push(firstSrcsetUrl)
+      }
+
+      return candidates.map((candidate) => toAbsoluteHttpUrl(candidate, baseUrl))
+    }),
+    maxExtractedImages
+  )
+
+  return { links, images }
+}
+
+function appendPageAssetsMarkdown(content: string, links: string[], images: string[]): string {
+  const sections: string[] = []
+
+  if (links.length > 0) {
+    sections.push(
+      ['## Extracted Page Links', ...links.map((link, index) => `- [Link ${index + 1}](${link})`)].join('\n')
+    )
+  }
+
+  if (images.length > 0) {
+    sections.push(
+      ['## Extracted Images', ...images.map((image, index) => `![Extracted image ${index + 1}](${image})`)].join('\n\n')
+    )
+  }
+
+  if (sections.length === 0) {
+    return content
+  }
+
+  return [content, ...sections].filter(Boolean).join('\n\n')
+}
 
 /**
  * Validates if the string is a properly formatted URL
@@ -50,7 +136,8 @@ export async function fetchWebContent(
   url: string,
   format: ResponseFormat = 'markdown',
   usingBrowser: boolean = false,
-  httpOptions: RequestInit = {}
+  httpOptions: RequestInit = {},
+  includePageAssets: boolean = false
 ): Promise<WebSearchProviderResult> {
   try {
     // Validate URL before attempting to fetch
@@ -59,10 +146,71 @@ export async function fetchWebContent(
     }
 
     let html: string
-    if (usingBrowser) {
+    const networkApi = (window as any).api?.network
+    const httpProxyApi = (window as any).api?.httpProxy
+
+    const overallTimeoutMs = 25000
+    const withTimeout = async <T>(promise: Promise<T>, label: string): Promise<T> => {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} timeout after ${overallTimeoutMs}ms`)), overallTimeoutMs)
+        )
+      ])
+    }
+
+    if (networkApi?.fetchProxy) {
+      logger.info(`Fetching via backend network proxy: ${url}`)
+      const proxyResult: any = await withTimeout(
+        networkApi.fetchProxy({
+          url,
+          method: 'GET',
+          timeout: 30000,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        }),
+        'network.fetchProxy'
+      )
+
+      if (proxyResult?.error) {
+        throw new Error(proxyResult.error)
+      }
+      if (proxyResult?.status && proxyResult.status >= 400) {
+        throw new Error(`HTTP error: ${proxyResult.status}`)
+      }
+
+      html = proxyResult?.body || ''
+    } else if (httpProxyApi?.get) {
+      logger.info(`Fetching via backend httpProxy: ${url}`)
+      const proxyResult: any = await withTimeout(
+        httpProxyApi.get({
+          url,
+          timeout: 30000,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        }),
+        'httpProxy.get'
+      )
+
+      if (!proxyResult?.success || !proxyResult.data) {
+        throw new Error(proxyResult?.error || 'httpProxy failed to fetch content')
+      }
+
+      html = typeof proxyResult.data === 'string' ? proxyResult.data : JSON.stringify(proxyResult.data)
+    } else if (usingBrowser) {
+      logger.info(`Fetching via browser window: ${url}`)
       const windowApiPromise = window.api.searchService.openUrlInSearchWindow(`search-window-${nanoid()}`, url)
 
-      const promisesToRace: [Promise<string>] = [windowApiPromise]
+      const browserTimeoutMs = 30000
+      const timeoutPromise = new Promise<string>((_, reject) => {
+        setTimeout(() => reject(new Error(`Browser fetch timeout after ${browserTimeoutMs}ms`)), browserTimeoutMs)
+      })
+
+      const promisesToRace: Promise<string>[] = [windowApiPromise, timeoutPromise]
 
       if (httpOptions?.signal) {
         const signal = httpOptions.signal
@@ -70,7 +218,7 @@ export async function fetchWebContent(
         promisesToRace.push(abortPromise)
       }
 
-      html = await Promise.race(promisesToRace)
+      html = await withTimeout(Promise.race(promisesToRace), 'Browser fetch')
     } else {
       const response = await fetch(url, {
         headers: {
@@ -92,6 +240,7 @@ export async function fetchWebContent(
     const parser = new DOMParser()
     const doc = parser.parseFromString(html, 'text/html')
     const article = new Readability(doc).parse()
+    const { links, images } = includePageAssets ? extractPageAssets(doc, url) : { links: [], images: [] }
     // Logger.log('Parsed article:', article)
 
     switch (format) {
@@ -100,20 +249,26 @@ export async function fetchWebContent(
         return {
           title: article?.title || url,
           url: url,
-          content: markdown || noContent
+          content: appendPageAssetsMarkdown(markdown || noContent, links, images),
+          links,
+          images
         }
       }
       case 'html':
         return {
           title: article?.title || url,
           url: url,
-          content: article?.content || noContent
+          content: article?.content || noContent,
+          links,
+          images
         }
       case 'text':
         return {
           title: article?.title || url,
           url: url,
-          content: article?.textContent || noContent
+          content: article?.textContent || noContent,
+          links,
+          images
         }
     }
   } catch (e: unknown) {
@@ -127,6 +282,46 @@ export async function fetchWebContent(
       url: url,
       content: noContent
     }
+  }
+}
+
+/**
+ * Check if a URL is an X/Twitter post URL
+ */
+export function isXPostUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.replace(/^www\./, '')
+    return (host === 'x.com' || host === 'twitter.com') && /\/status\/\d+/.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Fetch tweet content via X oEmbed API
+ * @see https://docs.x.com/x-for-websites/oembed-api
+ */
+export async function fetchXOEmbed(url: string): Promise<{ author: string; text: string } | null> {
+  try {
+    const oembedUrl = `https://publish.x.com/oembed?url=${encodeURIComponent(url)}&omit_script=1&dnt=1`
+    const response = await fetch(oembedUrl, { signal: AbortSignal.timeout(10000) })
+    if (!response.ok) return null
+    const data = await response.json()
+    // Extract text from html: <blockquote ...><p ...>text</p>&mdash; author ...</blockquote>
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(data.html || '', 'text/html')
+    const paragraphs = doc.querySelectorAll('blockquote p')
+    const text = Array.from(paragraphs)
+      .map((p) => p.textContent)
+      .join('\n')
+    return {
+      author: data.author_name || '',
+      text: text || ''
+    }
+  } catch (e) {
+    logger.warn('Failed to fetch X oEmbed', e as Error)
+    return null
   }
 }
 

@@ -1,29 +1,28 @@
 import { CloseOutlined } from '@ant-design/icons'
-import {
-  DragDropContext,
-  Draggable,
-  DraggableProvided,
-  Droppable,
-  DroppableProvided,
-  DropResult
-} from '@hello-pangea/dnd'
+import type { DraggableProvided, DroppableProvided, DropResult } from '@hello-pangea/dnd'
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd'
+import { OpenClawSidebarIcon } from '@renderer/components/Icons/SVGIcon'
+import { useEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import { getSidebarIconLabel } from '@renderer/i18n/label'
 import { useAppDispatch } from '@renderer/store'
 import { setSidebarIcons } from '@renderer/store/settings'
-import { SidebarIcon } from '@renderer/types'
+import type { SidebarIcon } from '@renderer/types'
 import { message } from 'antd'
 import {
+  Box,
   Code,
   FileSearch,
   Folder,
   Languages,
   LayoutGrid,
   MessageSquareQuote,
+  MousePointerClick,
   NotepadText,
   Palette,
   Sparkle
 } from 'lucide-react'
-import { FC, useCallback, useMemo } from 'react'
+import type { FC, ReactNode } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -41,6 +40,7 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
   setDisabledIcons
 }) => {
   const { t } = useTranslation()
+  const { enableDeveloperMode } = useEnableDeveloperMode()
 
   const dispatch = useAppDispatch()
 
@@ -118,17 +118,21 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
 
   // 使用useMemo缓存图标映射
   const iconMap = useMemo(
-    () => ({
-      assistants: <MessageSquareQuote size={16} />,
-      agents: <Sparkle size={16} />,
-      paintings: <Palette size={16} />,
-      translate: <Languages size={16} />,
-      minapp: <LayoutGrid size={16} />,
-      knowledge: <FileSearch size={16} />,
-      files: <Folder size={16} />,
-      notes: <NotepadText size={16} />,
-      code_tools: <Code size={16} />
-    }),
+    () =>
+      ({
+        assistants: <MessageSquareQuote size={16} />,
+        agents: <MousePointerClick size={16} />,
+        plugins: <Box size={16} />,
+        store: <Sparkle size={16} />,
+        paintings: <Palette size={16} />,
+        translate: <Languages size={16} />,
+        minapp: <LayoutGrid size={16} />,
+        knowledge: <FileSearch size={16} />,
+        files: <Folder size={16} />,
+        notes: <NotepadText size={16} />,
+        code_tools: <Code size={16} />,
+        openclaw: <OpenClawSidebarIcon style={{ width: 16, height: 16 }} />
+      }) satisfies Record<SidebarIcon, ReactNode>,
     []
   )
 
@@ -142,23 +146,25 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
           <Droppable droppableId="visible">
             {(provided: DroppableProvided) => (
               <IconList ref={provided.innerRef} {...provided.droppableProps}>
-                {visibleIcons.map((icon, index) => (
-                  <Draggable key={icon} draggableId={icon} index={index}>
-                    {(provided: DraggableProvided) => (
-                      <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                        <IconContent>
-                          {renderIcon(icon)}
-                          <span>{getSidebarIconLabel(icon)}</span>
-                        </IconContent>
-                        {icon !== 'assistants' && (
-                          <CloseButton onClick={() => onMoveIcon(icon, 'visible')}>
-                            <CloseOutlined />
-                          </CloseButton>
-                        )}
-                      </IconItem>
-                    )}
-                  </Draggable>
-                ))}
+                {visibleIcons
+                  .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
+                  .map((icon, index) => (
+                    <Draggable key={icon} draggableId={icon} index={index}>
+                      {(provided: DraggableProvided) => (
+                        <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                          <IconContent>
+                            {renderIcon(icon)}
+                            <span>{getSidebarIconLabel(icon)}</span>
+                          </IconContent>
+                          {icon !== 'assistants' && (
+                            <CloseButton onClick={() => onMoveIcon(icon, 'visible')}>
+                              <CloseOutlined />
+                            </CloseButton>
+                          )}
+                        </IconItem>
+                      )}
+                    </Draggable>
+                  ))}
                 {provided.placeholder}
               </IconList>
             )}
@@ -172,21 +178,23 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
                 {disabledIcons.length === 0 ? (
                   <EmptyPlaceholder>{t('settings.display.sidebar.empty')}</EmptyPlaceholder>
                 ) : (
-                  disabledIcons.map((icon, index) => (
-                    <Draggable key={icon} draggableId={icon} index={index}>
-                      {(provided: DraggableProvided) => (
-                        <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                          <IconContent>
-                            {renderIcon(icon)}
-                            <span>{getSidebarIconLabel(icon)}</span>
-                          </IconContent>
-                          <CloseButton onClick={() => onMoveIcon(icon, 'disabled')}>
-                            <CloseOutlined />
-                          </CloseButton>
-                        </IconItem>
-                      )}
-                    </Draggable>
-                  ))
+                  disabledIcons
+                    .filter((icon) => icon !== 'openclaw' || enableDeveloperMode)
+                    .map((icon, index) => (
+                      <Draggable key={icon} draggableId={icon} index={index}>
+                        {(provided: DraggableProvided) => (
+                          <IconItem ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                            <IconContent>
+                              {renderIcon(icon)}
+                              <span>{getSidebarIconLabel(icon)}</span>
+                            </IconContent>
+                            <CloseButton onClick={() => onMoveIcon(icon, 'disabled')}>
+                              <CloseOutlined />
+                            </CloseButton>
+                          </IconItem>
+                        )}
+                      </Draggable>
+                    ))
                 )}
                 {provided.placeholder}
               </IconList>

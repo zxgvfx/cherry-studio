@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import ContextMenu from '@renderer/components/ContextMenu'
 import { LoadingIcon } from '@renderer/components/Icons'
-import Scrollbar from '@renderer/components/Scrollbar'
 import { LOAD_MORE_COUNT } from '@renderer/config/constant'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useChatContext } from '@renderer/hooks/useChatContext'
@@ -21,7 +20,8 @@ import { messageBlocksSelectors, updateOneBlock } from '@renderer/store/messageB
 import { newMessagesActions } from '@renderer/store/newMessage'
 import { saveMessageAndBlocksToDB, updateMessageAndBlocksThunk } from '@renderer/store/thunk/messageThunk'
 import type { Assistant, Topic } from '@renderer/types'
-import { type Message, MessageBlock, MessageBlockType } from '@renderer/types/newMessage'
+import type { MessageBlock } from '@renderer/types/newMessage'
+import { type Message, MessageBlockType } from '@renderer/types/newMessage'
 import {
   captureScrollableAsBlob,
   captureScrollableAsDataURL,
@@ -41,6 +41,7 @@ import MessageAnchorLine from './MessageAnchorLine'
 import MessageGroup from './MessageGroup'
 import NarrowLayout from './NarrowLayout'
 import Prompt from './Prompt'
+import { MessagesContainer, ScrollContainer } from './shared'
 
 interface MessagesProps {
   assistant: Assistant
@@ -161,7 +162,7 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, o
 
           const { message: clearMessage } = getUserMessage({ assistant, topic, type: 'clear' })
           dispatch(newMessagesActions.addMessage({ topicId: topic.id, message: clearMessage }))
-          await saveMessageAndBlocksToDB(clearMessage, [])
+          await saveMessageAndBlocksToDB(topic.id, clearMessage, [])
 
           scrollToBottom()
         } finally {
@@ -187,8 +188,12 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, o
         if (success) {
           // 3. Set the new topic as active
           setActiveTopic(newTopic)
-          // 4. Trigger auto-rename for the new topic
-          autoRenameTopic(assistant, newTopic.id)
+          // 4. Trigger auto-rename for the new topic（延迟到下一个事件循环，完全不阻塞UI）
+          setTimeout(() => {
+            autoRenameTopic(assistant, newTopic.id).catch((error) => {
+              console.error('[autoRenameTopic] Failed to rename topic:', error)
+            })
+          }, 0)
         } else {
           // Optional: Handle cloning failure (e.g., show an error message)
           // You might want to remove the added topic if cloning fails
@@ -390,27 +395,6 @@ const LoaderContainer = styled.div`
   width: 100%;
   background: var(--color-background);
   pointer-events: none;
-`
-
-const ScrollContainer = styled.div`
-  display: flex;
-  flex-direction: column-reverse;
-  padding: 10px 10px 20px;
-  .multi-select-mode & {
-    padding-bottom: 60px;
-  }
-`
-
-interface ContainerProps {
-  $right?: boolean
-}
-
-const MessagesContainer = styled(Scrollbar)<ContainerProps>`
-  display: flex;
-  flex-direction: column-reverse;
-  overflow-x: hidden;
-  z-index: 1;
-  position: relative;
 `
 
 export default Messages

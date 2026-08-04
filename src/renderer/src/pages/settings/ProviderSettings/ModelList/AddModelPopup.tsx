@@ -1,11 +1,15 @@
 import { TopView } from '@renderer/components/TopView'
-import { isNotSupportedTextDelta } from '@renderer/config/models'
+import { endpointTypeOptions } from '@renderer/config/endpointTypes'
+import { isNotSupportTextDeltaModel } from '@renderer/config/models'
+import { useDynamicLabelWidth } from '@renderer/hooks/useDynamicLabelWidth'
 import { useProvider } from '@renderer/hooks/useProvider'
-import { Model, Provider } from '@renderer/types'
+import type { EndpointType, Model, Provider } from '@renderer/types'
 import { getDefaultGroupName } from '@renderer/utils'
-import { Button, Flex, Form, FormProps, Input, Modal } from 'antd'
+import { isEndpointTypeConfigurableProvider } from '@renderer/utils/provider'
+import type { FormProps } from 'antd'
+import { Button, Flex, Form, Input, Modal, Select } from 'antd'
 import { find } from 'lodash'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface ShowParams {
@@ -22,6 +26,7 @@ type FieldType = {
   id: string
   name?: string
   group?: string
+  endpointType?: EndpointType
 }
 
 const PopupContainer: React.FC<Props> = ({ title, provider, resolve }) => {
@@ -29,6 +34,21 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve }) => {
   const [form] = Form.useForm()
   const { addModel, models } = useProvider(provider.id)
   const { t } = useTranslation()
+  const canConfigureEndpointType = isEndpointTypeConfigurableProvider(provider)
+  const labelWidth = useDynamicLabelWidth([
+    t('settings.models.add.model_id.label'),
+    t('settings.models.add.endpoint_type.label')
+  ])
+  const endpointOptions = useMemo(
+    () =>
+      endpointTypeOptions.filter((opt) => {
+        if (provider.type === 'openai' || provider.type === 'azure-openai') {
+          return opt.value === 'openai' || opt.value === 'image-generation'
+        }
+        return true
+      }),
+    [provider.type]
+  )
 
   const onOk = () => {
     setOpen(false)
@@ -54,10 +74,11 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve }) => {
       id,
       provider: provider.id,
       name: values.name ? values.name : id.toUpperCase(),
-      group: values.group ?? getDefaultGroupName(id)
+      group: values.group ?? getDefaultGroupName(id),
+      endpoint_type: canConfigureEndpointType ? values.endpointType : undefined
     }
 
-    addModel({ ...model, supported_text_delta: !isNotSupportedTextDelta(model) })
+    addModel({ ...model, supported_text_delta: !isNotSupportTextDeltaModel(model) })
 
     return true
   }
@@ -67,7 +88,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve }) => {
 
     if (id.includes(',')) {
       const ids = id.split(',')
-      ids.forEach((id) => onAddModel({ id, name: id } as FieldType))
+      ids.forEach((id) => onAddModel({ ...values, id, name: id } as FieldType))
       resolve({})
       return
     }
@@ -90,11 +111,14 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve }) => {
       centered>
       <Form
         form={form}
-        labelCol={{ flex: '110px' }}
+        labelCol={{ flex: canConfigureEndpointType ? labelWidth : '110px' }}
         labelAlign="left"
         colon={false}
         style={{ marginTop: 25 }}
-        onFinish={onFinish}>
+        onFinish={onFinish}
+        initialValues={{
+          endpointType: 'openai'
+        }}>
         <Form.Item
           name="id"
           label={t('settings.models.add.model_id.label')}
@@ -122,6 +146,21 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve }) => {
           tooltip={t('settings.models.add.group_name.tooltip')}>
           <Input placeholder={t('settings.models.add.group_name.placeholder')} spellCheck={false} />
         </Form.Item>
+        {canConfigureEndpointType && (
+          <Form.Item
+            name="endpointType"
+            label={t('settings.models.add.endpoint_type.label')}
+            tooltip={t('settings.models.add.endpoint_type.tooltip')}
+            rules={[{ required: true, message: t('settings.models.add.endpoint_type.required') }]}>
+            <Select placeholder={t('settings.models.add.endpoint_type.placeholder')}>
+              {endpointOptions.map((opt) => (
+                <Select.Option key={opt.value} value={opt.value}>
+                  {t(opt.label)}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+        )}
         <Form.Item style={{ marginBottom: 8, textAlign: 'center' }}>
           <Flex justify="end" align="center" style={{ position: 'relative' }}>
             <Button type="primary" htmlType="submit" size="middle">

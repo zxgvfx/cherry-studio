@@ -6,7 +6,7 @@ import { VertexAPIClient } from '@renderer/aiCore/legacy/clients/gemini/VertexAP
 import { NewAPIClient } from '@renderer/aiCore/legacy/clients/newapi/NewAPIClient'
 import { OpenAIAPIClient } from '@renderer/aiCore/legacy/clients/openai/OpenAIApiClient'
 import { OpenAIResponseAPIClient } from '@renderer/aiCore/legacy/clients/openai/OpenAIResponseAPIClient'
-import { EndpointType, Model, Provider } from '@renderer/types'
+import type { EndpointType, Model, Provider } from '@renderer/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@renderer/config/models', () => ({
@@ -36,7 +36,7 @@ vi.mock('@renderer/config/models', () => ({
   isFunctionCallingModel: vi.fn().mockReturnValue(false),
   DEFAULT_MAX_TOKENS: 4096,
   qwen38bModel: {},
-  glm45FlashModel: {}
+  qwen3Next80BModel: {}
 }))
 
 vi.mock('@renderer/services/AssistantService', () => ({

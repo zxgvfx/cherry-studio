@@ -2,11 +2,11 @@ import ExpandableText from '@renderer/components/ExpandableText'
 import ModelIdWithTags from '@renderer/components/ModelIdWithTags'
 import CustomTag from '@renderer/components/Tags/CustomTag'
 import { DynamicVirtualList } from '@renderer/components/VirtualList'
-import { getModelLogo } from '@renderer/config/models'
-import { isNewApiProvider } from '@renderer/config/providers'
+import { getModelLogoById } from '@renderer/config/models'
 import FileItem from '@renderer/pages/files/FileItem'
 import NewApiBatchAddModelPopup from '@renderer/pages/settings/ProviderSettings/ModelList/NewApiBatchAddModelPopup'
-import { Model, Provider } from '@renderer/types'
+import type { Model, Provider } from '@renderer/types'
+import { isNewApiProvider } from '@renderer/utils/provider'
 import { Button, Flex, Tooltip } from 'antd'
 import { Avatar } from 'antd'
 import { ChevronRight, Minus, Plus } from 'lucide-react'
@@ -14,7 +14,7 @@ import React, { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
-import { isModelInProvider, isValidNewApiModel } from './utils'
+import { canAutoAddNewApiModel, isModelInProvider } from './utils'
 
 // 列表项类型定义
 interface GroupRowData {
@@ -93,7 +93,7 @@ const ManageModelsList: React.FC<ManageModelsListProps> = ({ modelGroups, provid
           const wouldAddModels = models.filter((model) => !isModelInProvider(provider, model.id))
 
           if (isNewApiProvider(provider)) {
-            if (wouldAddModels.every(isValidNewApiModel)) {
+            if (wouldAddModels.every(canAutoAddNewApiModel)) {
               wouldAddModels.forEach(onAddModel)
             } else {
               NewApiBatchAddModelPopup.show({
@@ -200,7 +200,7 @@ const ModelListItem: React.FC<ModelListItemProps> = memo(({ model, provider, onA
           boxShadow: 'none'
         }}
         fileInfo={{
-          icon: <Avatar src={getModelLogo(model.id)}>{model?.name?.[0]?.toUpperCase()}</Avatar>,
+          icon: <Avatar src={getModelLogoById(model.id)}>{model?.name?.[0]?.toUpperCase()}</Avatar>,
           name: <ModelIdWithTags model={model} />,
           extra: model.description && <ExpandableText text={model.description} />,
           ext: '.model',

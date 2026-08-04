@@ -1,3 +1,5 @@
+import '@renderer/utils/abortSignalPolyfill'
+
 import i18n from '@renderer/i18n'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
