@@ -1,3 +1,4 @@
+import '@renderer/utils/abortSignalPolyfill'
 import '@renderer/assets/styles/index.css'
 import '@renderer/assets/styles/tailwind.css'
 

@@ -1,3 +1,4 @@
+import '@renderer/utils/abortSignalPolyfill'
 import '@renderer/assets/styles/tailwind.css'
 
 import { prepareWindow } from '@renderer/windows/prepareWindow'
