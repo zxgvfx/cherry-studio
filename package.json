@@ -22,7 +22,7 @@
     "build:check": "pnpm lint && pnpm docs:check-links && pnpm test",
     "build:builtin-knowledge": "tsx scripts/generate-cherry-assistant-knowledge",
     "build:builtin-knowledge:check": "tsx scripts/generate-cherry-assistant-knowledge --check",
-    "build:unpack": "dotenv pnpm run build && electron-builder --dir",
+    "build:unpack": "pnpm run rebuild:electron && dotenv pnpm run build && electron-builder --dir",
     "build:win": "dotenv pnpm run build && electron-builder --win --x64 --arm64",
     "build:win:x64": "dotenv pnpm run build && electron-builder --win --x64",
     "build:win:arm64": "dotenv pnpm run build && electron-builder --win --arm64",
