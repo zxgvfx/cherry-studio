@@ -1433,6 +1433,48 @@ export class AiUsageRecordService {
     }
   }
 
+  /**
+   * Best-effort correction applied after `recordInvocation` already wrote a
+   * row with a locally-computed cost estimate (see `hooks/billingHook.ts` +
+   * `ai/utils/newApiCostLookup.ts`). Real provider-billing lookups (e.g.
+   * NewAPI's consumption log) resolve asynchronously, after the row has
+   * already been inserted with `costSource: 'computed'` (or no cost at all).
+   * No-ops silently if the row is gone (e.g. topic deleted in the meantime).
+   */
+  patchInvocationCost(
+    requestId: string,
+    cost: { amount: number; currency: Currency; source: AiUsageRecordCostSource; breakdown?: AiUsageCostBreakdown }
+  ): void {
+    try {
+      let affectedRef: MessageRef | null = null
+      const changed = application.get('DbService').withWriteTx((tx) => {
+        const existing = tx.select().from(aiUsageRecordTable).where(eq(aiUsageRecordTable.requestId, requestId)).get()
+        if (!existing) return false
+        tx.update(aiUsageRecordTable)
+          .set({
+            cost: cost.amount,
+            costCurrency: cost.currency,
+            costSource: cost.source,
+            costBreakdown: cost.breakdown ?? null
+          })
+          .where(eq(aiUsageRecordTable.requestId, requestId))
+          .run()
+        if (existing.messageKind && existing.messageId) {
+          affectedRef = { kind: existing.messageKind, id: existing.messageId }
+          rebuildMessageUsageProjectionTx(tx, affectedRef)
+        }
+        return true
+      })
+      if (!changed) return
+      notifyDataApiDataChange([
+        ...AI_USAGE_RECORD_READ_MODEL_CHANGES,
+        ...(affectedRef ? messageReadModelEffects([affectedRef]) : [])
+      ])
+    } catch (err) {
+      logger.error('patchInvocationCost failed', err as Error, { requestId })
+    }
+  }
+
   recordLegacyAggregatesTx(db: DbOrTx, inputs: readonly LegacyAggregateInput[]): number {
     return insertRowsTx(db, inputs.map(legacyToRow), false).inserted
   }

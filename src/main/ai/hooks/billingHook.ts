@@ -8,6 +8,7 @@ import {
 import type { LanguageModelMiddleware } from 'ai'
 
 import { extractProviderCostWithCurrency } from '../utils/billingCost'
+import { fetchNewApiLastRequestCost, isNewApiBillableProvider } from '../utils/newApiCostLookup'
 
 export const BILLABLE_AI_OPERATIONS = ['streamText', 'generateText', 'embedMany', 'generateImage', 'rerank'] as const
 export type BillableAiOperation = (typeof BILLABLE_AI_OPERATIONS)[number]
@@ -68,6 +69,32 @@ function recordLanguageInvocation(
     metrics,
     completedAt
   })
+
+  // Houdini/fork customization: the row above already carries a usable cost
+  // (provider-reported from the raw response, or locally computed from the
+  // model's price table). For centralized NewAPI-backed providers we can do
+  // better — correct it in place with what NewAPI's own consumption log
+  // actually charged, once that log entry propagates. Fire-and-forget: must
+  // never delay or fail the primary usage-recording path above.
+  if (!providerCost && isNewApiBillableProvider(context.providerId)) {
+    const startedAtMs = completedAt - (metrics?.timeCompletionMs ?? 0)
+    fetchNewApiLastRequestCost({
+      providerId: context.providerId,
+      modelName: context.modelId,
+      promptTokens: usage.inputTokens.total,
+      completionTokens: usage.outputTokens.total,
+      sinceTs: Math.floor(startedAtMs / 1000)
+    })
+      .then((realCost) => {
+        if (!realCost) return
+        aiUsageRecordService.patchInvocationCost(requestId, {
+          amount: realCost.amount,
+          currency: realCost.currency,
+          source: 'provider'
+        })
+      })
+      .catch(() => {})
+  }
 }
 
 export function createLanguageUsageMiddleware(context: AiUsageCaptureContext): LanguageModelMiddleware {

@@ -82,6 +82,23 @@ const startApp = async () => {
   // bootstrap and IPC readiness. TODO(v2): decompose into per-service
   // ipcHandle/ipcOn inside lifecycle services.
   await registerIpc()
+
+  // Houdini/fork customization: sync centrally-configured providers/models
+  // (see data/centralizedConfig/centralizedConfigSync.ts). No-op unless
+  // CHERRY_STUDIO_CENTRALIZED_CONFIG_PATH is set; never throws.
+  const { syncCentralizedConfig } = await import('./data/centralizedConfig/centralizedConfigSync')
+  await syncCentralizedConfig().catch((error) => logger.error('syncCentralizedConfig failed:', error))
+
+  // Houdini headless backend mode: this Electron process is launched by the
+  // Python/Qt host as a windowless background service (see
+  // main/headless/httpBridge.ts and MainWindowService's onReady guard). Every
+  // other line above is unchanged — the full desktop app still boots exactly
+  // as-is, this only adds an HTTP entry point Python can reach in place of a
+  // renderer's ipcApi/dataApi calls.
+  if (process.env.CHERRY_HEADLESS === '1') {
+    const { startHeadlessBridge } = await import('./headless/httpBridge')
+    await startHeadlessBridge()
+  }
 }
 
 // Top-level safety net: bootstrap() handles known fatal errors internally

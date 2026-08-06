@@ -1,6 +1,7 @@
 import { Button, Tooltip } from '@cherrystudio/ui'
 import { usePersistCache } from '@data/hooks/useCache'
 import { loggerService } from '@logger'
+import { NewApiAccountBadge } from '@renderer/components/app/NewApiAccountBadge'
 import { CommandTooltip } from '@renderer/components/command'
 import GlobalSearchPopup from '@renderer/components/GlobalSearch/GlobalSearchPopup'
 import { getSidebarLayout, type SidebarVisibleLayout } from '@renderer/components/Sidebar'
@@ -44,6 +45,8 @@ export function ShellTabBarActions() {
   return (
     <div className="flex h-full shrink-0 items-stretch">
       <div className="flex items-center gap-1 pr-2 [-webkit-app-region:no-drag]">
+        {/* Houdini/fork customization: real NewAPI account balance/spend, see NewApiAccountBadge. */}
+        <NewApiAccountBadge />
         {hasUpdateAction && (
           <Tooltip content={updateLabel} placement="bottom" delay={800}>
             <Button

@@ -47,10 +47,19 @@ export function canonicalizeUserDataPath(userDataPath: string): string {
  * storage to the selected directory as well.
  */
 export function resolveUserDataLocation(): void {
-  if (!app.isPackaged) {
+  // Headless mode (see main/headless/httpBridge.ts) is a background service
+  // spawned by a Python/Qt DCC host, always alongside — potentially at the
+  // very same time — a normal desktop Cherry Studio install using the
+  // platform-default userData path. Without its own suffixed userData dir,
+  // this process's `app.requestSingleInstanceLock()` call collides with that
+  // unrelated desktop instance (or a sibling DCC's headless instance) and
+  // silently loses, exiting before the HTTP bridge ever starts. This must be
+  // checked before the `isPackaged` branch below, since headless runs are
+  // always packaged (electron-builder --dir) in real deployments.
+  if (!app.isPackaged || process.env.CHERRY_HEADLESS === '1') {
     const devPath = app.getPath('userData') + resolveDevUserDataSuffix()
     app.setPath('userData', devPath)
-    logger.info('userData set with dev suffix', { devPath })
+    logger.info('userData set with dev suffix', { devPath, headless: process.env.CHERRY_HEADLESS === '1' })
     return
   }
 

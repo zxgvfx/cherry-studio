@@ -1311,7 +1311,18 @@ export class AiStreamManager extends BaseService {
   // the same code path with a fake `WebContents`-shaped sender.
 
   attach(sender: Electron.WebContents, req: AiStreamAttachRequest): AiStreamAttachResponse {
-    const stream = this.activeStreams.get(req.topicId)
+    return this.attachListener(req.topicId, new WebContentsListener(sender, req.topicId))
+  }
+
+  /**
+   * Generic form of `attach()` for non-renderer subscribers — currently only the headless HTTP
+   * bridge's SSE listener (see `main/headless/httpBridge.ts`), which has no `Electron.WebContents`
+   * to construct a `WebContentsListener` from. Takes an already-constructed `StreamListener` so the
+   * caller controls the id/transport; `attach()` above is now a thin wrapper around this for the
+   * renderer case.
+   */
+  attachListener(topicId: string, listener: StreamListener): AiStreamAttachResponse {
+    const stream = this.activeStreams.get(topicId)
     if (!stream) return { status: 'not-found' }
     // Prompt-stream lifecycle returns false here — re-attach is meaningless
     // for one-shot ad-hoc streams, and the listener was already consumed by
@@ -1328,7 +1339,7 @@ export class AiStreamManager extends BaseService {
       let firstFinalMessage: CherryUIMessage | undefined
       for (const exec of stream.executions.values()) {
         if (!exec.finalMessage) continue
-        const finalMessage = projectStreamMessageForRenderer(req.topicId, exec.finalMessage)
+        const finalMessage = projectStreamMessageForRenderer(topicId, exec.finalMessage)
         finalMessages[exec.modelId] = finalMessage
         if (!firstFinalMessage) firstFinalMessage = finalMessage
       }
@@ -1354,13 +1365,12 @@ export class AiStreamManager extends BaseService {
 
     // Reconnect: compact-replay each execution's buffer in isolation so
     // text-delta / reasoning-delta merging stays per-execution.
-    const listener = new WebContentsListener(sender, req.topicId)
     stream.listeners.set(listener.id, listener)
 
     const totalDropped = [...stream.executions.values()].reduce((sum, exec) => sum + exec.droppedChunks, 0)
     if (totalDropped > 0) {
       logger.warn('attach: replay has gaps due to buffer overflow', {
-        topicId: req.topicId,
+        topicId,
         droppedChunks: totalDropped
       })
     }

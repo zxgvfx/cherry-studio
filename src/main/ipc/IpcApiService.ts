@@ -11,6 +11,7 @@ import { IpcChannel } from '@shared/IpcChannel'
 import type { IpcMainInvokeEvent } from 'electron'
 import { ipcMain } from 'electron'
 
+import { publishHeadlessEvent } from '../headless/eventBus'
 import { ipcHandlers } from './handlers/ipcHandlers'
 import { IpcRouter } from './IpcRouter'
 
@@ -89,11 +90,13 @@ export class IpcApiService extends BaseService {
 
   /** Broadcast a typed event to every window. */
   broadcast<E extends IpcEventName>(event: E, payload: EventPayload<E>): void {
+    publishHeadlessEvent(event, payload)
     application.get('WindowManager').broadcast(IpcChannel.IpcApi_Event, event, payload)
   }
 
   /** Broadcast a typed event only to windows of the given type (destroyed windows are skipped). */
   broadcastToType<E extends IpcEventName>(windowType: WindowType, event: E, payload: EventPayload<E>): void {
+    publishHeadlessEvent(event, payload)
     application.get('WindowManager').broadcastToType(windowType, IpcChannel.IpcApi_Event, event, payload)
   }
 
@@ -108,6 +111,7 @@ export class IpcApiService extends BaseService {
    * `broadcast` give the same safety guarantee).
    */
   send<E extends IpcEventName>(windowId: WindowId, event: E, payload: EventPayload<E>): void {
+    publishHeadlessEvent(event, payload)
     const window = application.get('WindowManager').getWindow(windowId)
     if (window && !window.isDestroyed()) {
       window.webContents.send(IpcChannel.IpcApi_Event, event, payload)

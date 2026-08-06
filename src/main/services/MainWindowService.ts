@@ -103,6 +103,11 @@ export class MainWindowService extends BaseService {
   }
 
   protected async onReady() {
+    // Houdini headless backend mode (see main/headless/httpBridge.ts): this process
+    // never shows a UI, so skip opening the main window entirely. Every other
+    // service still boots normally — only this one visible-window step is gated.
+    if (process.env.CHERRY_HEADLESS === '1') return
+
     // Mac: when launching into tray, suppress the Dock icon up-front by telling
     // WindowManager that Main-type windows do not contribute to Dock visibility.
     // WindowManager reads this override when the first Main window is created
@@ -119,14 +124,6 @@ export class MainWindowService extends BaseService {
     void installDevtoolsExtensions()
 
     this.openMainWindow()
-  }
-
-  private requireMainWindow(): BrowserWindow {
-    const mainWindow = this.mainWindow
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      throw new Error('Main window does not exist or has been destroyed')
-    }
-    return mainWindow
   }
 
   private registerActivateHandler() {
@@ -150,14 +147,26 @@ export class MainWindowService extends BaseService {
     this.ipcHandle(IpcChannel.App_QuoteToMain, (_, text: string) => this.quoteToMainWindow(text))
   }
 
-  /** Set the main window's minimum size (window.main.set_minimum_size). */
+  /**
+   * Set the main window's minimum size (window.main.set_minimum_size).
+   *
+   * Silently a no-op when there is no live main window — notably in Houdini
+   * headless mode (see `onReady` above), where this Electron process never
+   * opens a BrowserWindow at all (the real window is a Qt QWebEngineView owned
+   * by the Python host). Callers such as `AgentPage`'s mount effect fire this
+   * unconditionally; throwing here would surface as an unhandled promise
+   * rejection in the renderer for a capability that is meaningless off-Electron.
+   */
   public setMainWindowMinimumSize(width: number, height: number): void {
-    this.requireMainWindow().setMinimumSize(width, height)
+    const mainWindow = this.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    mainWindow.setMinimumSize(width, height)
   }
 
   /** Reset the main window's minimum size, growing it back if it shrank below the floor. */
   public resetMainWindowMinimumSize(): void {
-    const mainWindow = this.requireMainWindow()
+    const mainWindow = this.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed()) return
     mainWindow.setMinimumSize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
     const [width, height] = mainWindow.getSize() ?? [MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT]
     if (width < MIN_WINDOW_WIDTH) {

@@ -316,6 +316,22 @@ describe('resolveUserDataLocation', () => {
       expect(setPathMock).toHaveBeenCalledTimes(1)
     })
 
+    it('app.isPackaged=true + CHERRY_HEADLESS=1: still applies dev-style suffix, ignoring BootConfig', async () => {
+      vi.stubEnv('CHERRY_HEADLESS', '1')
+      vi.stubEnv('CS_DEV_USER_DATA_SUFFIX', 'HoudiniHeadless')
+      stubConstants({ isLinux: false, isWin: false, isPortable: false })
+      stubElectron({ isPackaged: true, userData: '/mock/userData' })
+      // Even though packaged, headless mode must not fall through to the
+      // BootConfig/default-userData branch below — that path is shared with
+      // a normal desktop install and would collide on the single-instance lock.
+      stubBootConfig({ 'app.user_data_path': { '/mock/exe': '/custom/data' } })
+      stubFs()
+      const { resolveUserDataLocation } = await loadModule()
+      resolveUserDataLocation()
+      expect(setPathMock).toHaveBeenCalledWith('userData', '/mock/userDataHoudiniHeadless')
+      expect(setPathMock).toHaveBeenCalledTimes(1)
+    })
+
     it('BootConfig has matching exe with valid path: setPath called with that path', async () => {
       stubConstants({ isLinux: false, isWin: false, isPortable: false })
       stubElectron({ exePath: '/mock/exe' })

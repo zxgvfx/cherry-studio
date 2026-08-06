@@ -1,9 +1,11 @@
 import { getFilePreviewExtension } from '@renderer/utils/filePreview'
 import { normalizeExt } from '@shared/utils/file'
 
+import { diagramFilePreviewPlugin } from './plugins/diagram/diagramFilePreviewPlugin'
 import { htmlFilePreviewPlugin } from './plugins/html/htmlFilePreviewPlugin'
 import { imageFilePreviewPlugin } from './plugins/image/imageFilePreviewPlugin'
 import { markdownFilePreviewPlugin } from './plugins/markdown/markdownFilePreviewPlugin'
+import { model3dFilePreviewPlugin } from './plugins/model3d/model3dFilePreviewPlugin'
 import { pdfFilePreviewPlugin } from './plugins/pdf/pdfFilePreviewPlugin'
 import { powerPointFilePreviewPlugin } from './plugins/powerpoint/powerPointFilePreviewPlugin'
 import { textFilePreviewPlugin } from './plugins/text/textFilePreviewPlugin'
@@ -43,9 +45,11 @@ export function resolveExtensionPlugin(filePath: string, registry: FilePreviewRe
 
 export const filePreviewRegistry = createFilePreviewRegistry({
   extensionPlugins: [
+    diagramFilePreviewPlugin,
     htmlFilePreviewPlugin,
     imageFilePreviewPlugin,
     markdownFilePreviewPlugin,
+    model3dFilePreviewPlugin,
     pdfFilePreviewPlugin,
     powerPointFilePreviewPlugin,
     textFilePreviewPlugin,

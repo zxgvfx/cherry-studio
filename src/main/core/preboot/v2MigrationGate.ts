@@ -85,6 +85,14 @@ async function quitWithDataLocationError(cause: unknown): Promise<V2MigrationGat
  * prefix in both file name and exported function name.
  */
 export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
+  // Houdini headless backend mode (see main/headless/httpBridge.ts): this
+  // process's userData directory is a fresh one dedicated to the Python/Qt
+  // host, never a v1 install migrated in place, and it must never block on
+  // interactive migration dialogs/windows — there is no user to click them.
+  // The real desktop app (if ever run standalone) still goes through the
+  // normal gate below.
+  if (process.env.CHERRY_HEADLESS === '1') return 'skipped'
+
   // Step 0: Resolve all migration-critical paths, including v1 legacy
   // userData detection. This MUST run before migrationEngine.initialize()
   // so that all subsequent path-dependent operations use the correct
