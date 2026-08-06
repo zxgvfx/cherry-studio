@@ -485,6 +485,21 @@ export class MainWindowService extends BaseService {
   }
 
   public showMainWindow(initData?: MainWindowInitData) {
+    // Houdini headless backend mode (see onReady() above): this process never
+    // shows a UI (the real window is a Qt QWebEngineView owned by the Python
+    // host). Every caller of showMainWindow — the 'second-instance' handler
+    // below, macOS 'activate', quoteToMainWindow, deep-link restore — assumes
+    // a desktop app and unconditionally forces WindowManager into existence
+    // via application.get() right below. In headless mode WindowManager (and
+    // whatever it transitively constructs) was never created during the
+    // normal WhenReady bootstrap, so this late first-time construction path
+    // crashes with a "Service 'DbService' has already been instantiated"
+    // error instead of reusing the instance created at boot. A second
+    // headless launch attempt (blocked by the single-instance lock) is
+    // exactly what triggers 'second-instance' here, so this guard is not
+    // just theoretical — skip entirely rather than risk it.
+    if (process.env.CHERRY_HEADLESS === '1') return
+
     // Lift any close-to-tray override so the Dock icon reappears as the user
     // brings the main window back. Idempotent when the app is not currently
     // in tray mode — WM deduplicates via its dockShouldBeVisible flag.
