@@ -134,6 +134,11 @@ export function matchesPreset(provider: Pick<Provider, 'id' | 'presetProviderId'
  * linked preset ID. Preset-derived user providers remain user-manageable.
  */
 export function canManageProvider(provider: Provider): boolean {
+  // Houdini/fork customization: centrally-configured providers (see
+  // centralizedConfigSync.ts) are admin-managed — ports the pre-v2.0
+  // "只读保护" behavior (delete/edit hidden for isCentralized items, see
+  // CENTRALIZED_CONFIG_README.md).
+  if (provider.settings?.isCentralized) return false
   return provider.presetProviderId == null || provider.presetProviderId !== provider.id
 }
 

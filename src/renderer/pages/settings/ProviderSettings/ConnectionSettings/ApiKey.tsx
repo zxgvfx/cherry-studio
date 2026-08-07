@@ -34,6 +34,11 @@ export default function ApiKey({
   const [showApiKey, setShowApiKey] = useState(false)
   const [keyListOpen, setKeyListOpen] = useState(false)
   const [apiKeyEdited, setApiKeyEdited] = useState(false)
+  // Houdini/fork customization: centrally-managed provider (see
+  // centralizedConfigSync.ts + ProviderSettingsSchema.isCentralized) —
+  // the key is auto-provisioned per user and must not be hand-edited,
+  // deleted, or shown in plaintext (ports the pre-v2.0 "只读保护" behavior).
+  const isCentralized = Boolean(provider?.settings?.isCentralized)
 
   useEffect(() => {
     setShowApiKey(false)
@@ -80,7 +85,7 @@ export default function ApiKey({
           <div className={fieldClasses.inputRow}>
             <InputGroup className={fieldClasses.inputGroup}>
               <InputGroupInput
-                type={showApiKey ? 'text' : 'password'}
+                type={showApiKey && !isCentralized ? 'text' : 'password'}
                 className={fieldClasses.input}
                 value={inputApiKey}
                 placeholder={t('settings.provider.api_key.placeholder')}
@@ -89,9 +94,9 @@ export default function ApiKey({
                   setInputApiKey(event.target.value)
                 }}
                 onBlur={() => void handleApiKeyBlur()}
-                disabled={provider.id === 'copilot'}
+                disabled={provider.id === 'copilot' || isCentralized}
               />
-              {provider.id !== 'copilot' && (
+              {provider.id !== 'copilot' && !isCentralized && (
                 <InputGroupAddon align="inline-end" className="-mr-0.5 pr-0">
                   <Tooltip
                     content={
@@ -111,7 +116,7 @@ export default function ApiKey({
               <span className="inline-flex shrink-0">
                 <button
                   type="button"
-                  disabled={provider.id === 'copilot'}
+                  disabled={provider.id === 'copilot' || isCentralized}
                   className={fieldClasses.inputActionButton}
                   aria-label={t('settings.provider.api.key.list.title')}
                   onClick={() => setKeyListOpen(true)}>
@@ -138,9 +143,16 @@ export default function ApiKey({
               </span>
             </Tooltip>
           </div>
+          {isCentralized ? (
+            <p className="text-[11px] text-foreground-tertiary leading-4">
+              {t('settings.provider.api_key.centralized_hint')}
+            </p>
+          ) : null}
         </ProviderField>
       </ProviderSection>
-      <ProviderApiKeyListDrawer providerId={providerId} open={keyListOpen} onClose={() => setKeyListOpen(false)} />
+      {!isCentralized && (
+        <ProviderApiKeyListDrawer providerId={providerId} open={keyListOpen} onClose={() => setKeyListOpen(false)} />
+      )}
     </>
   )
 }

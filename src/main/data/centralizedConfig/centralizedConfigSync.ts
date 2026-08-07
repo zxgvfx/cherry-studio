@@ -119,7 +119,22 @@ export function getCentralizedNewApiProviderIds(): readonly string[] {
   return cachedNewApiProviderIds
 }
 
-/** Fetch per-user provisioned API keys from the Python host (never re-implemented here). */
+/**
+ * Fetch per-user provisioned API keys from the Python host (never re-implemented
+ * here). Uses `POST /api/v1/config/reload`, NOT `GET /api/v1/config/merged`.
+ *
+ * `config_manager.py#load()` memoizes its result (including the provisioned
+ * NewAPI key) for a TTL that can span many headless Electron restarts — the
+ * Python backend process tends to outlive individual Electron
+ * launches/relaunches by a lot. `provision_provider()`'s own
+ * `_is_api_key_usable()` self-heals an expired/revoked key by re-provisioning,
+ * but only when it actually *runs* — a cache hit skips it entirely. Since this
+ * function only fires once per Electron boot anyway (see `syncCentralizedConfig`
+ * below), forcing a `reload` (which unconditionally clears the cache before
+ * loading) costs nothing extra here but guarantees we always write a freshly
+ * validated key into the v2.0 DB, instead of occasionally persisting a stale
+ * one for the TTL's remaining lifetime.
+ */
 async function fetchProvisionedApiKeys(): Promise<Map<string, string>> {
   const backendUrl = process.env.CHERRY_STUDIO_BACKEND_URL?.replace(/\/$/, '')
   const map = new Map<string, string>()
@@ -128,7 +143,7 @@ async function fetchProvisionedApiKeys(): Promise<Map<string, string>> {
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15_000)
-    const response = await fetch(`${backendUrl}/api/v1/config/merged`, { signal: controller.signal })
+    const response = await fetch(`${backendUrl}/api/v1/config/reload`, { method: 'POST', signal: controller.signal })
     clearTimeout(timeout)
     if (!response.ok) {
       logger.warn('config/merged request failed', { status: response.status })
@@ -242,16 +257,17 @@ function normalizeBaseUrl(apiHost: string, endpointType: EndpointType): string {
   return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`
 }
 
-function buildProviderSettings(provider: CentralizedProviderDef): Partial<ProviderSettings> | undefined {
-  if (!provider.anthropicCacheControl) return undefined
-  return {
-    cacheControl: {
+function buildProviderSettings(provider: CentralizedProviderDef): Partial<ProviderSettings> {
+  const settings: Partial<ProviderSettings> = { isCentralized: true }
+  if (provider.anthropicCacheControl) {
+    settings.cacheControl = {
       enabled: true,
       tokenThreshold: provider.anthropicCacheControl.tokenThreshold,
       cacheSystemMessage: provider.anthropicCacheControl.cacheSystemMessage,
       cacheLastNMessages: provider.anthropicCacheControl.cacheLastNMessages
     }
   }
+  return settings
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -7535,6 +7535,7 @@
       "api_host_preview": "预览：{{url}}",
       "api_host_tooltip": "仅在服务商需要自定义的 OpenAI 兼容地址时覆盖。",
       "api_key": {
+        "centralized_hint": "此服务由中心化配置统一管理，API 密钥已按账号自动分配，无需也无法手动查看或修改",
         "copy": "复制",
         "enabled_suffix": "已启用",
         "hide_key": "隐藏密钥",

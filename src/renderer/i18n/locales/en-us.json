@@ -7535,6 +7535,7 @@
       "api_host_preview": "Preview: {{url}}",
       "api_host_tooltip": "Override only when your provider requires a custom OpenAI-compatible endpoint.",
       "api_key": {
+        "centralized_hint": "This service is centrally managed — an API key is automatically provisioned per account and cannot be viewed or edited manually.",
         "copy": "Copy",
         "enabled_suffix": "enabled",
         "hide_key": "Hide key",

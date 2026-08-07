@@ -218,6 +218,20 @@ export const ProviderSettingsSchema = z.object({
   // User notes
   notes: z.string().optional(),
 
+  /**
+   * Houdini/fork customization: marks a provider as seeded by
+   * `centralizedConfigSync.ts` from `centralized-config.json` (admin-managed,
+   * per-user-provisioned API key). Ports the pre-v2.0 `isCentralized` flag
+   * (see old `cherrystudio/core/config_manager.py` +
+   * `CENTRALIZED_CONFIG_README.md`'s "只读保护" section): the API
+   * key/host are auto-provisioned per user and were never meant to be
+   * hand-edited or deleted by the end user, and the raw key value is not
+   * meant to be shown in plaintext in Settings. Read by
+   * `ConnectionSettings/ApiKey.tsx` (mask + disable the key field) and
+   * `ProviderList` (hide the delete action).
+   */
+  isCentralized: z.boolean().optional(),
+
   // GitHub Copilot auth state (stored here because v2 Provider has no isAuthed column)
   isAuthed: z.boolean().optional(),
   oauthUsername: z.string().optional(),
