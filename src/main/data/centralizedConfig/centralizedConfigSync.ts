@@ -45,6 +45,8 @@ import {
 } from '@shared/data/types/model'
 import type { EndpointConfigOverride, ProviderSettings } from '@shared/data/types/provider'
 
+import { getBackendUrl } from './backendUrlRegistry'
+
 const logger = loggerService.withContext('CentralizedConfig')
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,9 +138,12 @@ export function getCentralizedNewApiProviderIds(): readonly string[] {
  * one for the TTL's remaining lifetime.
  */
 async function fetchProvisionedApiKeys(): Promise<Map<string, string>> {
-  const backendUrl = process.env.CHERRY_STUDIO_BACKEND_URL?.replace(/\/$/, '')
+  const backendUrl = getBackendUrl()
   const map = new Map<string, string>()
-  if (!backendUrl) return map
+  if (!backendUrl) {
+    logger.warn('No Python backend URL registered yet; skipping API key provisioning')
+    return map
+  }
 
   try {
     const controller = new AbortController()
@@ -146,7 +151,7 @@ async function fetchProvisionedApiKeys(): Promise<Map<string, string>> {
     const response = await fetch(`${backendUrl}/api/v1/config/reload`, { method: 'POST', signal: controller.signal })
     clearTimeout(timeout)
     if (!response.ok) {
-      logger.warn('config/merged request failed', { status: response.status })
+      logger.warn('config/reload request failed', { status: response.status, backendUrl })
       return map
     }
     const body = (await response.json()) as MergedConfigResponse
@@ -155,8 +160,13 @@ async function fetchProvisionedApiKeys(): Promise<Map<string, string>> {
         map.set(provider.id, provider.apiKey)
       }
     }
+    logger.info('Fetched provisioned API keys', {
+      backendUrl,
+      count: map.size,
+      providers: body.centralizedProviders?.map((p) => ({ id: p.id, hasKey: Boolean(p.apiKey) }))
+    })
   } catch (error) {
-    logger.warn('Failed to fetch provisioned API keys from Python backend', { error })
+    logger.warn('Failed to fetch provisioned API keys from Python backend', { error, backendUrl })
   }
   return map
 }

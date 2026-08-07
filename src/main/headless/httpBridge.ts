@@ -31,6 +31,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 
 import type { StreamListener } from '../ai/streamManager'
 import { ApiServer } from '../data/api'
+import { setBackendUrl } from '../data/centralizedConfig/backendUrlRegistry'
+import { syncCentralizedConfig } from '../data/centralizedConfig/centralizedConfigSync'
 import { ipcHandlers } from '../ipc/handlers/ipcHandlers'
 import { IpcRouter } from '../ipc/IpcRouter'
 import { publishHeadlessEvent, setHeadlessEventPublisher } from './eventBus'
@@ -272,6 +274,34 @@ async function handlePreferenceSetMultiple(req: IncomingMessage, res: ServerResp
   }
 }
 
+/**
+ * `POST /backend-url { url }` — called by `headless_electron_manager.py` on
+ * *every* `start()` (including the "already running, reuse it" fast path),
+ * not just fresh spawns. See `backendUrlRegistry.ts` for why a one-shot env
+ * var isn't enough for a long-lived Electron process talking to a
+ * short-lived-per-session Python backend. Re-runs `syncCentralizedConfig()`
+ * whenever the URL actually changes (new Python session ⇒ fresh chance to
+ * provision/repair a per-user API key that a dead backend previously
+ * prevented from ever refreshing).
+ */
+async function handleBackendUrl(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let body: { url?: string }
+  try {
+    body = (await readJsonBody(req)) as typeof body
+  } catch {
+    sendJson(res, 400, { ok: false, error: { code: 'BAD_JSON', message: 'Invalid JSON body' } })
+    return
+  }
+  const changed = setBackendUrl(body?.url)
+  sendJson(res, 200, { ok: true, changed })
+  if (changed) {
+    logger.info('Python backend URL updated; re-syncing centralized config', { url: body?.url })
+    void syncCentralizedConfig().catch((error) => {
+      logger.warn('Re-sync after backend-url update failed', { error })
+    })
+  }
+}
+
 async function handleDataApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
   let body: Partial<DataRequest>
   try {
@@ -492,6 +522,7 @@ export async function startHeadlessBridge(): Promise<void> {
         if (req.method === 'POST' && url === '/ai-stream/attach') return await handleAiStreamAttach(req, res)
         if (req.method === 'POST' && url === '/ai-stream/detach') return await handleAiStreamDetach(req, res)
         if (req.method === 'POST' && url === '/ai-stream/abort') return await handleAiStreamAbort(req, res)
+        if (req.method === 'POST' && url === '/backend-url') return await handleBackendUrl(req, res)
         sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: `No such route: ${url}` } })
       } catch (e) {
         logger.error('Unhandled headless bridge error', e as Error)

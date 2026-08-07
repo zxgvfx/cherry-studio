@@ -86,6 +86,7 @@ const startApp = async () => {
   // Houdini/fork customization: sync centrally-configured providers/models
   // (see data/centralizedConfig/centralizedConfigSync.ts). No-op unless
   // CHERRY_STUDIO_CENTRALIZED_CONFIG_PATH is set; never throws.
+  logger.info('Pre-sync backend URL env snapshot', { CHERRY_STUDIO_BACKEND_URL: process.env.CHERRY_STUDIO_BACKEND_URL })
   const { syncCentralizedConfig } = await import('./data/centralizedConfig/centralizedConfigSync')
   await syncCentralizedConfig().catch((error) => logger.error('syncCentralizedConfig failed:', error))
 

@@ -23,6 +23,7 @@
 import { loggerService } from '@logger'
 import { CURRENCY, type Currency } from '@shared/data/types/model'
 
+import { getBackendUrl } from '../../data/centralizedConfig/backendUrlRegistry'
 import { getCentralizedNewApiProviderIds } from '../../data/centralizedConfig/centralizedConfigSync'
 
 const logger = loggerService.withContext('NewApiCostLookup')
@@ -56,7 +57,7 @@ function isCurrency(value: unknown): value is Currency {
  * "no correction" as the normal outcome, not an error.
  */
 export async function fetchNewApiLastRequestCost(params: LastCostParams): Promise<LastCostResult | undefined> {
-  const backendUrl = process.env.CHERRY_STUDIO_BACKEND_URL?.replace(/\/$/, '')
+  const backendUrl = getBackendUrl()
   if (!backendUrl) return undefined
 
   try {
