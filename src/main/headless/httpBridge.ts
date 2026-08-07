@@ -31,7 +31,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 
 import type { StreamListener } from '../ai/streamManager'
 import { ApiServer } from '../data/api'
-import { setBackendUrl } from '../data/centralizedConfig/backendUrlRegistry'
+import { getBackendUrl, setBackendUrl } from '../data/centralizedConfig/backendUrlRegistry'
 import { syncCentralizedConfig } from '../data/centralizedConfig/centralizedConfigSync'
 import { ipcHandlers } from '../ipc/handlers/ipcHandlers'
 import { IpcRouter } from '../ipc/IpcRouter'
@@ -105,7 +105,14 @@ function handleEvents(_req: IncomingMessage, res: ServerResponse): void {
 }
 
 async function dispatchForkConfigRoute(route: string, input: unknown): Promise<unknown> {
-  const backendUrl = process.env.CHERRY_STUDIO_BACKEND_URL?.replace(/\/$/, '')
+  // Houdini/fork customization: use the live backendUrlRegistry (kept fresh
+  // via POST /backend-url on every headless_electron_manager.py start/reuse)
+  // instead of process.env.CHERRY_STUDIO_BACKEND_URL — that's a one-time
+  // snapshot from this process's original Popen() call and goes stale the
+  // moment the Python backend restarts on a new ephemeral port, which is
+  // exactly what broke both the "regenerate"/config.reload button and the
+  // NewAPI account-summary/last-cost lookups from the renderer.
+  const backendUrl = getBackendUrl().replace(/\/$/, '')
   if (!backendUrl) throw new Error('CHERRY_STUDIO_BACKEND_URL is not configured')
 
   const value = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
@@ -279,10 +286,21 @@ async function handlePreferenceSetMultiple(req: IncomingMessage, res: ServerResp
  * *every* `start()` (including the "already running, reuse it" fast path),
  * not just fresh spawns. See `backendUrlRegistry.ts` for why a one-shot env
  * var isn't enough for a long-lived Electron process talking to a
- * short-lived-per-session Python backend. Re-runs `syncCentralizedConfig()`
- * whenever the URL actually changes (new Python session ⇒ fresh chance to
- * provision/repair a per-user API key that a dead backend previously
- * prevented from ever refreshing).
+ * short-lived-per-session Python backend.
+ *
+ * Always re-runs `syncCentralizedConfig()` here, even when `changed` is
+ * false — NOT just when the URL string differs from before. Reasoning: the
+ * boot-time sync in `main.ts` races against the Python backend actually
+ * being ready to accept HTTP requests (Python calls `mgr.start()` for this
+ * Electron process, but that doesn't guarantee its *own* `/api/v1/config`
+ * server was already listening at the exact moment this process's very
+ * first `syncCentralizedConfig()` ran during startup). If that first attempt
+ * loses the race, gating the retry on "did the URL change" would mean it
+ * never gets a second chance for the lifetime of this Electron process,
+ * since Python keeps pushing the *same* URL for its own session. Re-running
+ * unconditionally on every push costs one extra HTTP round-trip to Python
+ * (cheap, and `syncCentralizedConfig()` is designed to be safe/idempotent to
+ * call repeatedly) in exchange for guaranteed self-healing.
  */
 async function handleBackendUrl(req: IncomingMessage, res: ServerResponse): Promise<void> {
   let body: { url?: string }
@@ -294,12 +312,10 @@ async function handleBackendUrl(req: IncomingMessage, res: ServerResponse): Prom
   }
   const changed = setBackendUrl(body?.url)
   sendJson(res, 200, { ok: true, changed })
-  if (changed) {
-    logger.info('Python backend URL updated; re-syncing centralized config', { url: body?.url })
-    void syncCentralizedConfig().catch((error) => {
-      logger.warn('Re-sync after backend-url update failed', { error })
-    })
-  }
+  logger.info('Python backend URL pushed; re-syncing centralized config', { url: body?.url, changed })
+  void syncCentralizedConfig().catch((error) => {
+    logger.warn('Re-sync after backend-url push failed', { error })
+  })
 }
 
 async function handleDataApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
