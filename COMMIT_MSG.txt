@@ -1,3 +1,0 @@
-feat(2.0): painting model UX, Qt raw-image path, and headless coalescer
-
-Keep edit images across provider switches, disambiguate same-name models, fix painting white-screen via raw-image path, and land related headless/migration WIP on upgrade-cherry-studio-2.0.
