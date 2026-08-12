@@ -18,6 +18,28 @@ function getTotalTokens(stats: MessageStats): number {
   return stats.totalTokens ?? (stats.inputTokens ?? 0) + (stats.outputTokens ?? 0)
 }
 
+function formatInlineCosts(costs: MessageStats['costs'], locale: string | undefined): string | undefined {
+  if (!costs || costs.length === 0) return undefined
+
+  const formatted = costs.flatMap((cost) => {
+    if (!Number.isFinite(cost.amount)) return []
+    // Small per-call AI charges would otherwise round to a visually misleading
+    // zero. Keep enough precision for the inline COCO footer while the hover
+    // card remains the complete cost breakdown.
+    const smallAmount = cost.amount > 0 && cost.amount < 0.01
+    return [
+      new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: cost.currency,
+        minimumFractionDigits: smallAmount ? 4 : 2,
+        maximumFractionDigits: smallAmount ? 6 : 4
+      }).format(cost.amount)
+    ]
+  })
+
+  return formatted.length > 0 ? formatted.join(' · ') : undefined
+}
+
 function UserMessageTokens({ label, onLocate }: { label: string; onLocate: () => void }) {
   return (
     <button
@@ -115,10 +137,12 @@ const MessageTokens: FC<MessageTokensProps> = ({ message }) => {
 
   const totalTokens = getTotalTokens(stats)
   const tokenLabel = t('chat.message.token_details.tokens', { value: compactFormatter.format(totalTokens) })
+  const costLabel = formatInlineCosts(stats.costs, i18n.resolvedLanguage)
+  const usageLabel = costLabel ? `${tokenLabel} · ${costLabel}` : tokenLabel
   const locateMessage = () => actions.locateMessage?.(message.id, false)
 
   if (message.role === 'user') {
-    return <UserMessageTokens label={tokenLabel} onLocate={locateMessage} />
+    return <UserMessageTokens label={usageLabel} onLocate={locateMessage} />
   }
 
   if (message.role === 'assistant') {
@@ -129,7 +153,7 @@ const MessageTokens: FC<MessageTokensProps> = ({ message }) => {
         : t('chat.message.token_details.tokens_per_second_value', {
             value: decimalFormatter.format(tokensPerSecond)
           })
-    const label = throughputLabel ? `${tokenLabel} · ${throughputLabel}` : tokenLabel
+    const label = throughputLabel ? `${usageLabel} · ${throughputLabel}` : usageLabel
 
     return <AssistantMessageTokens label={label} message={message} onLocate={locateMessage} />
   }

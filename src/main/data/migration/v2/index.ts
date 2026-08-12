@@ -40,6 +40,13 @@ export {
 // Migrators
 export { getAllMigrators } from './migrators/migratorRegistry'
 
+// Headless (CoCo / Qt host legacy import)
+export {
+  type CocoLegacySource,
+  prepareCocoLegacyMigrationPayload,
+  resolveCocoLegacySource
+} from './headless/CocoLegacySource'
+
 // Window management
 export {
   registerMigrationIpcHandlers,

@@ -300,12 +300,22 @@ describe('usePaintingComposerInputFiles', () => {
     expect(out.entries).toEqual([])
   })
 
-  it('clears the draft when switching provider', async () => {
+  it('preserves the draft when switching provider while still accepting images', async () => {
     const { result, rerender } = renderSwitchHarness({ inputCapability: 'accept', providerId: 'openai' })
     await attachChip(result)
     expect(result.current.files).toHaveLength(1)
 
+    // Cross-provider edit→edit: keep the uploaded reference image.
     rerender({ inputCapability: 'accept', providerId: 'gemini' })
+    expect(result.current.files).toHaveLength(1)
+  })
+
+  it('clears the draft when switching provider onto a model that cannot accept images', async () => {
+    const { result, rerender } = renderSwitchHarness({ inputCapability: 'accept', providerId: 'openai' })
+    await attachChip(result)
+    expect(result.current.files).toHaveLength(1)
+
+    rerender({ inputCapability: 'reject', providerId: 'gemini' })
     expect(result.current.files).toEqual([])
   })
 
@@ -389,11 +399,14 @@ describe('usePaintingComposerInputFiles', () => {
     expect(out.entries).toEqual([])
   })
 
-  it('ignores an in-flight SEED that resolves after a provider switch cleared the draft', async () => {
+  it('ignores an in-flight SEED that resolves after a provider switch drops image support', async () => {
     const release = deferPhysicalPath()
     const { result, rerender } = renderRaceHarness({ inputCapability: 'accept', providerId: 'openai' })
 
-    rerender({ inputCapability: 'accept', providerId: 'gemini' })
+    // Provider change alone must not clear; losing image support must.
+    rerender({ inputCapability: 'reject', providerId: 'gemini' })
+    expect(result.current.files).toEqual([])
+
     release()
     await flushMicrotasks()
 

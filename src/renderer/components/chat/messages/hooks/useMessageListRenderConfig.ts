@@ -19,6 +19,13 @@ export function useMessageListRenderConfig() {
   const [multiModelGridPopoverTrigger, setMultiModelGridPopoverTrigger] = usePreference(
     'chat.message.multi_model.grid_popover_trigger'
   )
+  // Houdini/COCO's former Cherry client always exposed per-message usage in
+  // the response footer. v2 defaults this preference to false, which made the
+  // restored token/cost UI invisible even after `message.stats` was available.
+  // Keep the user preference for native Electron, but preserve the established
+  // COCO behavior in the Qt-hosted renderer.
+  const forceMessageUsageDisplay = typeof window !== 'undefined' && 'qt' in window
+  const showMessageUsage = forceMessageUsageDisplay || showEstimatedTokens
 
   const renderConfig = useMemo(
     () => ({
@@ -33,7 +40,7 @@ export function useMessageListRenderConfig() {
       collapseCompletedToolHistory: true,
       mathEnableSingleDollar,
       showMessageOutline,
-      showEstimatedTokens,
+      showEstimatedTokens: showMessageUsage,
       multiModelMessageStyle,
       multiModelGridColumns,
       multiModelGridPopoverTrigger
@@ -49,7 +56,7 @@ export function useMessageListRenderConfig() {
       multiModelMessageStyle,
       narrowMode,
       renderInputMessageAsMarkdown,
-      showEstimatedTokens,
+      showMessageUsage,
       showMessageOutline,
       thoughtAutoCollapse,
       userName

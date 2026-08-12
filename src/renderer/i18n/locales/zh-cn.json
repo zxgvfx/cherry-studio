@@ -2670,6 +2670,8 @@
         "title": "无法预览此 PDF"
       }
     },
+    "reveal_in_folder": "在文件夹中显示",
+    "reveal_in_folder_error": "无法在文件夹中显示此文件",
     "text": {
       "empty": {
         "description": "此文本文件没有内容。",
@@ -8399,6 +8401,7 @@
     "unpin": "取消固定"
   },
   "title": {
+    "ai_pipeline": "AI 工作流",
     "apps": "小程序",
     "chat": "对话",
     "code": "编码搭档",

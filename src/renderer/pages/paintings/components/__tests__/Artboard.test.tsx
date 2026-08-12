@@ -171,6 +171,17 @@ describe('Artboard', () => {
     expect(screen.queryByRole('img', { name: 'paintings.image_placeholder' })).not.toBeInTheDocument()
   })
 
+  it('zooms the generated image with the mouse wheel', () => {
+    render(<Artboard painting={makePainting()} isLoading={false} />)
+    const image = screen.getByTestId('artboard-image-transform')
+
+    fireEvent.wheel(image, { deltaY: -100 })
+    expect(image).toHaveStyle({ transform: 'translate(0px, 0px) scale(1.25) rotate(0deg)' })
+
+    fireEvent.wheel(image, { deltaY: 100 })
+    expect(image).toHaveStyle({ transform: 'translate(0px, 0px) scale(1) rotate(0deg)' })
+  })
+
   it('enters reveal skeleton before showing a newly generated image', () => {
     mockComputeImageNaturalSize.mockReturnValue(new Promise(() => {}))
     const painting = makePainting({ files: [] })

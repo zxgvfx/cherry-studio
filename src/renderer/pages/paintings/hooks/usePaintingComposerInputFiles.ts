@@ -24,7 +24,10 @@ interface Params {
   setFiles: Dispatch<SetStateAction<ComposerAttachment[]>>
   /** Resolved-model image-input capability; drives the model-switch draft clear. */
   inputCapability: InputCapability
-  /** Provider of the current painting; a change means switchModel reset the context. */
+  /**
+   * Provider of the current painting. Kept for call-site stability; draft clear is
+   * driven only by `inputCapability` (accept→reject), not by provider identity.
+   */
   providerId: string | undefined
 }
 
@@ -67,10 +70,9 @@ async function entryStillExists(id: FileEntryId): Promise<boolean> {
  * - CLEAR: a same-painting model switch does NOT remount the composer (the provider
  *   is keyed on painting id only), so SEED never re-runs to reconcile `switchModel`
  *   dropping `inputFiles`. This effect is that reconciliation: switching to a model
- *   that can't accept images (`accept`→`reject`) or to a different provider clears
- *   the draft, mirroring `switchModel`'s `inputFiles: []`. It does NOT rely on the
- *   stale `painting.inputFiles === files` assumption the removed writeback used to
- *   uphold.
+ *   that can't accept images (`accept`→`reject`) clears the draft. Switching
+ *   provider (or edit→edit) while capability stays `accept` keeps the chips — the
+ *   uploaded reference image is still valid for the next edit-capable model.
  *
  * SEED and CLEAR are separate effects racing over the same draft, so both go through
  * `draftEpochRef`: CLEAR bumps it, SEED refuses to commit results from a superseded
@@ -86,8 +88,9 @@ export function usePaintingComposerInputFiles({
   files,
   setFiles,
   inputCapability,
-  providerId
+  providerId: _providerId
 }: Params) {
+  void _providerId
   const { t } = useTranslation()
   const entryCacheRef = useRef(new Map<string, FileEntry>())
   // Input files that failed to resolve to a physical path during SEED: they get no
@@ -107,10 +110,9 @@ export function usePaintingComposerInputFiles({
   inputFilesRef.current = inputFiles
   const filesRef = useRef(files)
   filesRef.current = files
-  // CLEAR bookkeeping: last *resolved* capability (ignores 'unknown' load blips) and
-  // the last provider, to detect the model-switch transitions that drop the draft.
+  // CLEAR bookkeeping: last *resolved* capability (ignores 'unknown' load blips)
+  // so we can detect accept→reject after a model switch.
   const lastCapabilityRef = useRef<'accept' | 'reject' | null>(null)
-  const lastProviderIdRef = useRef<string | undefined>(providerId)
 
   // SEED — once per painting.
   useEffect(() => {
@@ -163,16 +165,15 @@ export function usePaintingComposerInputFiles({
   // CLEAR — reconcile a same-painting model switch (which does NOT remount, so SEED
   // never re-runs). See the hook docs. A different painting id remounts this hook
   // fresh, so the refs re-initialize and neither branch fires spuriously on mount.
+  // Provider id is tracked by the caller for API stability but no longer clears the
+  // draft by itself — only losing image-input support should wipe chips.
   useEffect(() => {
-    const providerChanged = lastProviderIdRef.current !== providerId
-    lastProviderIdRef.current = providerId
-
     const droppedImageSupport = lastCapabilityRef.current === 'accept' && inputCapability === 'reject'
     // 'unknown' (catalog still loading) carries the last resolved capability forward,
     // so a load blip between two edit models never looks like a support drop.
     if (inputCapability !== 'unknown') lastCapabilityRef.current = inputCapability
 
-    if (!providerChanged && !droppedImageSupport) return
+    if (!droppedImageSupport) return
 
     // Bump first: a SEED still awaiting `getPhysicalPath` must lose the right to
     // write back, or it would undo this clear the moment it resolves.
@@ -180,7 +181,7 @@ export function usePaintingComposerInputFiles({
     entryCacheRef.current = new Map()
     unseededEntriesRef.current = []
     setFiles([])
-  }, [inputCapability, providerId, setFiles])
+  }, [inputCapability, setFiles])
 
   // MATERIALIZE — at generate time. Promote the current composer attachments to
   // FileEntry[]; a cache hit (seeded, or promoted earlier this session) is reused,

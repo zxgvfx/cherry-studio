@@ -9,7 +9,8 @@ import {
   MessageSquare,
   MousePointerClick,
   NotepadText,
-  Palette
+  Palette,
+  Workflow
 } from 'lucide-react'
 
 /**
@@ -21,6 +22,7 @@ import {
 export const SIDEBAR_ICON_COMPONENTS: Record<SidebarAppId, LucideIcon> = {
   assistants: MessageSquare,
   agents: MousePointerClick,
+  ai_pipeline: Workflow,
   paintings: Palette,
   translate: Languages,
   mini_app: LayoutGrid,

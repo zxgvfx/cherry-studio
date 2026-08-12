@@ -24,6 +24,7 @@ import { loggerService } from '@logger'
 import { BaseService, type Disposable, Injectable, ServicePhase } from '@main/core/lifecycle'
 import { Phase } from '@main/core/lifecycle'
 import { validateSender } from '@main/core/security/validateSender'
+import { publishHeadlessEvent } from '@main/headless/eventBus'
 import type {
   InferSharedCacheValue,
   MainPersistCacheKey,
@@ -805,6 +806,12 @@ export class CacheService extends BaseService {
         window.webContents.send(IpcChannel.Cache_Sync, message)
       }
     }
+    // Houdini/fork customization: headless has zero BrowserWindows, so the loop
+    // above never fires — shared-cache sync (notably `topic.stream.statuses.*`,
+    // which drives the post-stream overlay-refresh handoff that picks up
+    // `message.stats` for token/cost display) would otherwise never reach the
+    // Qt renderer. Forward the same message over the headless SSE bridge.
+    publishHeadlessEvent(IpcChannel.Cache_Sync, message)
   }
 
   /**

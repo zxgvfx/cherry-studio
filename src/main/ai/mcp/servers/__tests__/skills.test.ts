@@ -220,8 +220,49 @@ describe('SkillsServer', () => {
       })
 
       expect(result.isError).toBe(true)
-      expect(result.content[0].text).toContain('was not returned by search_skills in this session')
+      expect(result.content[0].text).toContain('could not be revalidated')
       expect(installMock).not.toHaveBeenCalled()
+    })
+
+    it('revalidates an exact marketplace source after a runtime connection rebuild', async () => {
+      const installSource = 'skills.sh:kif11/houdini-mcp-server/houdini-mcp'
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => {
+          if (url.startsWith('https://skills.sh/')) {
+            return {
+              query: 'houdini mcp',
+              count: 1,
+              skills: [
+                {
+                  id: 'kif11/houdini-mcp-server/houdini-mcp',
+                  skillId: 'houdini-mcp',
+                  name: 'houdini-mcp',
+                  source: 'kif11/houdini-mcp-server',
+                  installs: 1
+                }
+              ]
+            }
+          }
+          if (url.startsWith('https://clawhub.ai/')) return { results: [] }
+          return { skills: [] }
+        }
+      }))
+      installMock.mockResolvedValue({
+        id: 'houdini-mcp-id',
+        name: 'houdini-mcp',
+        folderName: 'houdini-mcp',
+        description: 'Houdini MCP server'
+      })
+      toggleMock.mockReturnValue({ id: 'houdini-mcp-id', isEnabled: true })
+
+      const result = await callTool(createServer('agent-42'), 'install_skill', { install_source: installSource })
+
+      expect(installMock).toHaveBeenCalledWith({ installSource })
+      expect(toggleMock).toHaveBeenCalledWith({ skillId: 'houdini-mcp-id', agentId: 'agent-42', isEnabled: true })
+      expect(result.isError).toBeFalsy()
     })
 
     it('errors when install_source is missing (never touches SkillService)', async () => {

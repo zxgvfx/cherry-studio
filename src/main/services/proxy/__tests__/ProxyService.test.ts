@@ -189,6 +189,37 @@ describe('ProxyService — preference wiring', () => {
     expect(sessionSetProxyMock).toHaveBeenLastCalledWith({ mode: 'direct' })
   })
 
+  it('applies a managed proxy globally and prevents preferences from overriding it', async () => {
+    const manager = new ProxyService()
+    const reconciler = reconcilerOf(manager)
+    await (manager as any).onReady()
+    await reconciler.flush()
+    const systemMonitor = intervalRegistrations[0]
+
+    await manager.setManagedProxy('http://confidential.internal:1080', 'localhost,*.internal')
+
+    const expected = {
+      mode: 'fixed_servers',
+      proxyRules: 'http://confidential.internal:1080',
+      proxyBypassRules: 'localhost,*.internal'
+    }
+    expect(nodeProxyConfigureMock).toHaveBeenLastCalledWith({
+      proxyRules: expected.proxyRules,
+      proxyBypassRules: expected.proxyBypassRules
+    })
+    expect(sessionSetProxyMock).toHaveBeenLastCalledWith(expected)
+    expect(webviewSetProxyMock).toHaveBeenLastCalledWith(expected)
+    expect(appSetProxyMock).toHaveBeenLastCalledWith(expected)
+    expect(systemMonitor.dispose).toHaveBeenCalledTimes(1)
+
+    sessionSetProxyMock.mockClear()
+    MockMainPreferenceServiceUtils.setPreferenceValue('app.proxy.mode', 'none')
+    await reconciler.flush()
+
+    // Managed deployment policy remains authoritative and is already settled.
+    expect(sessionSetProxyMock).not.toHaveBeenCalled()
+  })
+
   it('coalesces to the latest change when one lands while an apply is in flight', async () => {
     // Block the first apply mid-flight so a newer change arrives before it finishes.
     let releaseFirstApply!: () => void

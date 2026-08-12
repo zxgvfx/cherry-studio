@@ -35,7 +35,7 @@ interface AccountSummary {
   requestCount: number
 }
 
-interface AccountSummaryResponse {
+interface AccountSummaryPayload {
   ok?: boolean
   username?: string
   balance?: number | null
@@ -43,6 +43,20 @@ interface AccountSummaryResponse {
   currency?: string
   unlimitedQuota?: boolean
   requestCount?: number
+}
+
+/**
+ * `window.api.ipcApi.request` is the generic v2.0 RPC transport
+ * (`IpcApi_Request` → `IpcRouter.dispatch`, see `web/src/preload/ipc.ts`):
+ * every successful call is wrapped as `{ ok: true, data: <payload> }`
+ * regardless of what the underlying route handler returns, and the Houdini
+ * headless bridge's `dispatchForkConfigRoute` (`httpBridge.ts`) preserves
+ * that same envelope for `config.*` routes. The actual account-summary
+ * fields live one level down at `.data`, not on the envelope itself.
+ */
+interface IpcApiEnvelope {
+  ok?: boolean
+  data?: AccountSummaryPayload
 }
 
 function formatMoney(amount: number, currency: string): string {
@@ -53,10 +67,11 @@ function formatMoney(amount: number, currency: string): string {
 
 async function fetchAccountSummary(providerId: string): Promise<AccountSummary | null> {
   try {
-    const raw = (await window.api.ipcApi.request('config.getAccountSummary', {
+    const envelope = (await window.api.ipcApi.request('config.getAccountSummary', {
       providerId
-    })) as AccountSummaryResponse | null
-    if (!raw?.ok || typeof raw.spent !== 'number') return null
+    })) as IpcApiEnvelope | null
+    const raw = envelope?.data
+    if (!envelope?.ok || !raw?.ok || typeof raw.spent !== 'number') return null
     return {
       username: raw.username || '',
       balance: raw.balance ?? null,

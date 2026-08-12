@@ -333,4 +333,30 @@ describe('useModelSelectorData', () => {
     expect(byModelId.get('openai::variant-b')?.showIdentifier).toBe(true)
     expect(byModelId.get('openai::unique')?.showIdentifier).toBe(false)
   })
+
+  it('marks the same display name across providers so painting channels stay distinguishable', () => {
+    wireDeps({
+      providers: [makeProvider('coco-rightcode'), makeProvider('coco-vapi')],
+      models: [
+        makeModel('gpt-image-2@rc', 'coco-rightcode', {
+          name: 'gpt-image-2',
+          apiModelId: 'gpt-image-2@rc'
+        }),
+        makeModel('gpt-image-2@vapi', 'coco-vapi', {
+          name: 'gpt-image-2',
+          apiModelId: 'gpt-image-2@vapi'
+        })
+      ]
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '' }))
+    const byModelId = new Map<string, ModelSelectorModelItem>(
+      result.current.modelItems.map((item) => [item.modelId, item])
+    )
+
+    expect(byModelId.get('coco-rightcode::gpt-image-2@rc')?.showIdentifier).toBe(true)
+    expect(byModelId.get('coco-vapi::gpt-image-2@vapi')?.showIdentifier).toBe(true)
+    expect(byModelId.get('coco-rightcode::gpt-image-2@rc')?.modelIdentifier).toBe('gpt-image-2@rc')
+    expect(byModelId.get('coco-vapi::gpt-image-2@vapi')?.modelIdentifier).toBe('gpt-image-2@vapi')
+  })
 })

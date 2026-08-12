@@ -74,9 +74,13 @@ async function loadPaintingTemplateCatalog(resourcesPath: string, language: stri
     }
 
     const previewPath = AbsoluteFilePathSchema.parse(joinPath(resourceRoot, `images/${id}.webp`))
+    const runtimeWindow = window as Window & { __CHERRY_BACKEND_URL?: string }
+    const imageUrl = runtimeWindow.__CHERRY_BACKEND_URL
+      ? `${runtimeWindow.__CHERRY_BACKEND_URL.replace(/\/$/, '')}/api/v1/files/raw-image?path=${encodeURIComponent(previewPath)}`
+      : toFileUrl(previewPath)
     return {
       id,
-      imageUrl: toFileUrl(previewPath),
+      imageUrl,
       ...translation
     }
   })

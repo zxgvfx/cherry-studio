@@ -26,5 +26,18 @@ export function getPaintingFileUrl(file: PaintingFileUrlSource): FileUrlString |
     }
     return undefined
   }
+  // The Qt page is served from localhost, so Chromium/QWebEngine blocks
+  // `http(s) -> file://` image loads. Stream the allowlisted headless output
+  // through the local backend instead. Desktop Electron keeps its native
+  // file URL path.
+  const runtimeWindow = window as Window & { __CHERRY_BACKEND_URL?: string }
+  // A backend URL is only injected by the Qt/Houdini host. Do not additionally
+  // gate on __IS_QT: module/runtime ordering can leave that marker unavailable
+  // even though this page is running under Qt, which falls through to a blocked
+  // file:// URL.
+  if (runtimeWindow.__CHERRY_BACKEND_URL) {
+    const backendUrl = runtimeWindow.__CHERRY_BACKEND_URL.replace(/\/$/, '')
+    return `${backendUrl}/api/v1/files/raw-image?path=${encodeURIComponent(parsedPath.data)}` as FileUrlString
+  }
   return toSafeFileUrl(parsedPath.data, file.ext || null)
 }

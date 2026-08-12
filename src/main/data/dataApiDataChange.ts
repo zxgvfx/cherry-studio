@@ -1,5 +1,6 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { publishHeadlessEvent } from '@main/headless/eventBus'
 import type { DataApiDataChangeEffect } from '@shared/data/api/types'
 import { IpcChannel } from '@shared/IpcChannel'
 
@@ -74,4 +75,9 @@ export function notifyDataApiDataChange(effects: DataApiDataChangeEffect[]): voi
     // Notification failure must never affect the already-committed write.
     logger.warn('data change notification failed', error as Error)
   }
+  // Houdini/fork customization: headless has zero BrowserWindows, so
+  // WindowManager.broadcast above is a no-op there — forward the same
+  // effects over the headless SSE bridge so the Qt renderer's `useDataChange`
+  // subscribers (usage settings, agent sessions, etc.) still converge.
+  publishHeadlessEvent(IpcChannel.DataApi_DataChanged, effects)
 }

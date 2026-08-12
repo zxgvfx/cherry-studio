@@ -244,6 +244,16 @@ export class MigrationEngine {
     return null
   }
 
+  async backupCurrentDatabase(label = 'pre-migration'): Promise<string> {
+    if (!this.migrationDb) {
+      throw new Error('MigrationEngine not initialized — call initialize() first')
+    }
+    const safeTimestamp = new Date().toISOString().replaceAll(':', '-')
+    const destination = path.join(this.paths.userData, 'migration_backups', `${label}-${safeTimestamp}.sqlite`)
+    await this.migrationDb.backup(destination)
+    return destination
+  }
+
   /**
    * Execute full migration
    * @param reduxData - Parsed Redux state data from Renderer

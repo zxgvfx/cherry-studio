@@ -2670,6 +2670,8 @@
         "title": "Can't preview this PDF"
       }
     },
+    "reveal_in_folder": "Show in folder",
+    "reveal_in_folder_error": "Couldn't show this file in its folder",
     "text": {
       "empty": {
         "description": "This text file has no content.",
@@ -8399,6 +8401,7 @@
     "unpin": "Unpin Tab"
   },
   "title": {
+    "ai_pipeline": "AI Workflows",
     "apps": "Apps",
     "chat": "Chat",
     "code": "Code Mate",

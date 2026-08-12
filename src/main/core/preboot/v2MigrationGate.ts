@@ -19,6 +19,7 @@ import {
   migrationWindowManager,
   pinUserDataPath,
   registerMigrationIpcHandlers,
+  resolveCocoLegacySource,
   resolveMigrationPaths,
   setDataLocationNotice,
   setVersionIncompatible,
@@ -85,13 +86,13 @@ async function quitWithDataLocationError(cause: unknown): Promise<V2MigrationGat
  * prefix in both file name and exported function name.
  */
 export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
-  // Houdini headless backend mode (see main/headless/httpBridge.ts): this
-  // process's userData directory is a fresh one dedicated to the Python/Qt
-  // host, never a v1 install migrated in place, and it must never block on
-  // interactive migration dialogs/windows — there is no user to click them.
-  // The real desktop app (if ever run standalone) still goes through the
-  // normal gate below.
-  if (process.env.CHERRY_HEADLESS === '1') return 'skipped'
+  // CoCo persists its v1 renderer data as JSON because Qt WebEngine does not
+  // share Electron's Chromium profile. When Python supplies both source files,
+  // reuse the official migration window/engine with a file-source adapter.
+  // Headless installations without those files retain the old non-interactive
+  // startup path.
+  const cocoLegacySource = process.env.CHERRY_HEADLESS === '1' ? resolveCocoLegacySource() : null
+  if (process.env.CHERRY_HEADLESS === '1' && !cocoLegacySource) return 'skipped'
 
   // Step 0: Resolve all migration-critical paths, including v1 legacy
   // userData detection. This MUST run before migrationEngine.initialize()
@@ -154,7 +155,7 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
 
   try {
     logger.info('Checking if data migration v2 is needed')
-    migrationEngine.initialize(paths, legacyDataConfirmed)
+    migrationEngine.initialize(paths, legacyDataConfirmed || cocoLegacySource !== null)
     migrationEngine.registerMigrators(getAllMigrators())
     needsMigration = await migrationEngine.needsMigration()
     logger.info('Migration status check result', { needsMigration })
@@ -225,7 +226,13 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
       check: versionCheck,
       previousVersion,
       versionLogExists
-    } = evaluateCandidateVersion(paths.userData, app.getVersion())
+    } = cocoLegacySource
+      ? {
+          check: { outcome: 'allow' as const },
+          previousVersion: 'CoCo v1 file export',
+          versionLogExists: false
+        }
+      : evaluateCandidateVersion(paths.userData, app.getVersion())
 
     logger.info('Version compatibility check', { currentVersion: app.getVersion(), previousVersion, versionLogExists })
 
@@ -261,7 +268,11 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
     // Surface the auto-recovered non-default data directory on the intro
     // screen (fuzzy B1 fallback only). Must precede handler registration so the
     // renderer reads it via GetProgress on mount.
-    if (dataLocation) setDataLocationNotice(dataLocation)
+    if (cocoLegacySource) {
+      setDataLocationNotice(cocoLegacySource.localStorageFile)
+    } else if (dataLocation) {
+      setDataLocationNotice(dataLocation)
+    }
 
     logger.info('Data Migration v2 needed, starting migration process')
     registerMigrationIpcHandlers(paths.userData)

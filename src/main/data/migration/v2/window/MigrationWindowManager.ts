@@ -9,6 +9,7 @@ import { app, BrowserWindow, dialog } from 'electron'
 import { join } from 'path'
 
 const logger = loggerService.withContext('MigrationWindowManager')
+const HEADLESS_MIGRATION_RESTART_EXIT_CODE = 42
 
 // Exhaustive by stage so adding a MigrationStage requires an explicit close-confirm decision.
 const CLOSE_CONFIRM_BY_STAGE: Record<MigrationStage, boolean> = {
@@ -263,6 +264,15 @@ export class MigrationWindowManager {
    */
   async restartApp(): Promise<void> {
     logger.info('Restarting application after migration')
+
+    // The Python host owns the headless process handle. Electron's app.relaunch()
+    // would create an orphan that Python cannot supervise, so use a dedicated
+    // exit code and let HeadlessElectronManager spawn the replacement.
+    if (process.env.CHERRY_HEADLESS === '1') {
+      this.close()
+      app.exit(HEADLESS_MIGRATION_RESTART_EXIT_CODE)
+      return
+    }
 
     // In development mode, relaunch might not work properly
     if (isDev || !app.isPackaged) {

@@ -25,6 +25,7 @@ import type { AiStreamAbortRequest, AiStreamOpenRequest } from '@shared/ai/trans
 import { projectStreamChunkForRenderer } from '@shared/ai/transport'
 import type { DataRequest } from '@shared/data/api/types'
 import { IpcError } from '@shared/ipc/errors/IpcError'
+import { createInternalEntryInputSchema } from '@shared/ipc/schemas/file'
 import { ipcRequestSchemas } from '@shared/ipc/schemas/ipcSchemas'
 import { randomUUID } from 'crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'http'
@@ -35,7 +36,9 @@ import { getBackendUrl, setBackendUrl } from '../data/centralizedConfig/backendU
 import { syncCentralizedConfig } from '../data/centralizedConfig/centralizedConfigSync'
 import { ipcHandlers } from '../ipc/handlers/ipcHandlers'
 import { IpcRouter } from '../ipc/IpcRouter'
+import { EnsureExternalEntryIpcSchema } from '../services/file'
 import { publishHeadlessEvent, setHeadlessEventPublisher } from './eventBus'
+import { StreamChunkCoalescer } from './StreamChunkCoalescer'
 
 const logger = loggerService.withContext('HeadlessHttpBridge')
 
@@ -89,6 +92,7 @@ function handleEvents(_req: IncomingMessage, res: ServerResponse): void {
     'X-Accel-Buffering': 'no'
   })
   eventClients.add(res)
+  logger.debug('/events client connected', { totalClients: eventClients.size })
   res.write(': connected\n\n')
   const heartbeat = setInterval(() => {
     try {
@@ -101,6 +105,7 @@ function handleEvents(_req: IncomingMessage, res: ServerResponse): void {
   res.on('close', () => {
     clearInterval(heartbeat)
     eventClients.delete(res)
+    logger.debug('/events client disconnected', { totalClients: eventClients.size })
   })
 }
 
@@ -318,6 +323,87 @@ async function handleBackendUrl(req: IncomingMessage, res: ServerResponse): Prom
   })
 }
 
+/**
+ * `POST /managed-proxy` is an internal localhost-only control channel used by
+ * Python to install the confidential deployment proxy in the headless
+ * Electron network stack. The URL is never persisted or returned.
+ */
+async function handleManagedProxy(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let body: { proxyUrl?: string; bypassRules?: string }
+  try {
+    body = (await readJsonBody(req)) as typeof body
+  } catch {
+    sendJson(res, 400, { ok: false, error: { code: 'BAD_JSON', message: 'Invalid JSON body' } })
+    return
+  }
+  if (typeof body?.proxyUrl !== 'string' || !body.proxyUrl.trim()) {
+    sendJson(res, 400, { ok: false, error: { code: 'BAD_REQUEST', message: 'Missing managed proxy' } })
+    return
+  }
+  try {
+    await application
+      .get('ProxyService')
+      .setManagedProxy(body.proxyUrl, typeof body.bypassRules === 'string' ? body.bypassRules : '')
+    logger.info('Managed proxy applied to the headless Electron network stack')
+    sendJson(res, 200, { ok: true, managed: true })
+  } catch {
+    // Do not attach the underlying error: native/network errors may echo the
+    // confidential URL they were given.
+    logger.error('Managed proxy apply failed (configuration hidden)')
+    sendJson(res, 500, { ok: false, error: { code: 'INTERNAL', message: 'Managed proxy apply failed' } })
+  }
+}
+
+/**
+ * Resolve a v2 FileEntry id through the real headless FileManager.
+ *
+ * Painting results are persisted by Electron before this call. The Qt
+ * renderer still adapts them to legacy FileMetadata, so it needs the absolute
+ * path stored behind the entry id.
+ */
+async function handleFilePhysicalPath(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  let body: { id?: string }
+  try {
+    body = (await readJsonBody(req)) as typeof body
+  } catch {
+    sendJson(res, 400, { ok: false, error: { code: 'BAD_JSON', message: 'Invalid JSON body' } })
+    return
+  }
+  if (typeof body?.id !== 'string' || !body.id.trim()) {
+    sendJson(res, 400, { ok: false, error: { code: 'BAD_REQUEST', message: 'Missing file entry id' } })
+    return
+  }
+  try {
+    const path = application.get('FileManager').getPhysicalPath(body.id as never)
+    sendJson(res, 200, { ok: true, path })
+  } catch (e) {
+    logger.warn('file physical-path resolution failed', e as Error)
+    sendJson(res, 200, { ok: false, error: IpcError.from(e).toJSON() })
+  }
+}
+
+async function handleFileCreateInternalEntry(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const input = createInternalEntryInputSchema.parse(await readJsonBody(req))
+    const entry = await application.get('FileManager').createInternalEntry(input)
+    sendJson(res, 200, { ok: true, entry })
+  } catch (e) {
+    logger.warn('file create-internal-entry failed', e as Error)
+    sendJson(res, 200, { ok: false, error: IpcError.from(e).toJSON() })
+  }
+}
+
+async function handleFileEnsureExternalEntry(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  try {
+    const input = EnsureExternalEntryIpcSchema.parse(await readJsonBody(req))
+    const entry = await application.get('FileManager').ensureExternalEntry(input)
+    sendJson(res, 200, { ok: true, entry })
+  } catch (e) {
+    logger.warn('file ensure-external-entry failed', e as Error)
+    sendJson(res, 200, { ok: false, error: IpcError.from(e).toJSON() })
+  }
+}
+
 async function handleDataApi(req: IncomingMessage, res: ServerResponse): Promise<void> {
   let body: Partial<DataRequest>
   try {
@@ -348,37 +434,118 @@ async function handleDataApi(req: IncomingMessage, res: ServerResponse): Promise
  * to the frontend's `ipcApi.on(event, callback)` registry completely unchanged — no
  * headless-specific event names on the wire.
  *
- * Deliberately does NOT coalesce rapid text-delta/reasoning-delta chunks the way
- * `WebContentsListener` does (that's a renderer-paint optimization; an extra network hop
- * doesn't need it) — every chunk is forwarded as soon as it arrives.
+ * Coalesces rapid text/reasoning/tool-input deltas before they cross the extra
+ * Electron → Python → browser SSE hops. Long reasoning traces otherwise flood
+ * Qt WebEngine with thousands of paint-triggering events and can make the host
+ * appear frozen. Terminal events always flush pending text first.
  */
+// Tracks the currently-registered headless SSE listener's underlying HTTP response per
+// deterministic listener id (see `headlessListenerId()` below). `ai.stream.open` and
+// `ai.stream.attach` for the SAME topic share one id — exactly like real desktop's
+// `WebContentsListener` (`wc:<senderId>:<topicId>`) — so `AiStreamManager`'s
+// `stream.listeners.set(id, ...)` naturally REPLACES the open's listener object with
+// attach's rather than adding a second one (which would double-fire global
+// `ai.stream.chunk` / `done` events).
+//
+// There is one essential headless-only wrinkle: Python waits for the first
+// `open-result` SSE frame before returning the renderer's `ai.stream.open`
+// promise. Agent session UI can issue `ai.stream.attach` immediately after
+// `open`, before `AiStreamManager.dispatch()` has returned. Eagerly ending
+// that still-pending open response then drops its acknowledgement; Python
+// waits for 60 seconds and reports `open-result timed out`, even though the
+// model run itself proceeds. Defer closing a superseded open response until
+// its acknowledgement has been written, then close it normally.
+interface HeadlessListenerConnection {
+  response: ServerResponse
+  awaitingOpenResult: boolean
+  closeAfterOpenResult: boolean
+}
+
+const headlessListenerConnections = new Map<string, HeadlessListenerConnection>()
+
+function headlessListenerId(topicId: string): string {
+  return `headless:${topicId}`
+}
+
+function endHeadlessListenerConnection(connection: HeadlessListenerConnection): void {
+  try {
+    connection.response.end()
+  } catch {
+    // already closed
+  }
+}
+
+function registerHeadlessListenerConnection(
+  listenerId: string,
+  res: ServerResponse,
+  options: { awaitingOpenResult?: boolean } = {}
+): HeadlessListenerConnection {
+  const connection: HeadlessListenerConnection = {
+    response: res,
+    awaitingOpenResult: options.awaitingOpenResult === true,
+    closeAfterOpenResult: false
+  }
+  const previous = headlessListenerConnections.get(listenerId)
+  if (previous && previous.response !== res) {
+    if (previous.awaitingOpenResult) {
+      previous.closeAfterOpenResult = true
+    } else {
+      endHeadlessListenerConnection(previous)
+    }
+  }
+  headlessListenerConnections.set(listenerId, connection)
+  res.on('close', () => {
+    if (headlessListenerConnections.get(listenerId) === connection) {
+      headlessListenerConnections.delete(listenerId)
+    }
+  })
+  return connection
+}
+
+function finishHeadlessOpenHandshake(connection: HeadlessListenerConnection, close = false): void {
+  connection.awaitingOpenResult = false
+  if (close || connection.closeAfterOpenResult) {
+    endHeadlessListenerConnection(connection)
+  }
+}
+
 function createHttpSseListener(res: ServerResponse, id: string, topicId: string): StreamListener {
   let closed = false
+  const emitChunk = (
+    chunk: Parameters<StreamListener['onChunk']>[0],
+    sourceModelId?: Parameters<StreamListener['onChunk']>[1],
+    anchorMessageId?: Parameters<StreamListener['onChunk']>[2]
+  ) => {
+    publishHeadlessEvent('ai.stream.chunk', {
+      topicId,
+      executionId: sourceModelId,
+      anchorMessageId,
+      chunk: projectStreamChunkForRenderer(chunk, topicId, anchorMessageId)
+    })
+  }
+  const coalescer = new StreamChunkCoalescer(emitChunk)
   const end = () => {
     if (closed) return
     closed = true
+    coalescer.discard()
     try {
       res.end()
     } catch {
       // already closed
     }
   }
-  const emit = (event: string, payload: unknown) => publishHeadlessEvent(event, payload)
   res.on('close', () => {
     closed = true
+    coalescer.discard()
   })
   return {
     id,
     onChunk: (chunk, sourceModelId, anchorMessageId) => {
-      emit('ai.stream.chunk', {
-        topicId,
-        executionId: sourceModelId,
-        anchorMessageId,
-        chunk: projectStreamChunkForRenderer(chunk, topicId, anchorMessageId)
-      })
+      if (!closed) coalescer.push(chunk, sourceModelId, anchorMessageId)
     },
     onDone: (result) => {
-      emit('ai.stream.done', {
+      coalescer.flush()
+      publishHeadlessEvent('ai.stream.done', {
         topicId,
         executionId: result.modelId,
         anchorMessageId: result.anchorMessageId,
@@ -388,7 +555,8 @@ function createHttpSseListener(res: ServerResponse, id: string, topicId: string)
       end()
     },
     onPaused: (result) => {
-      emit('ai.stream.done', {
+      coalescer.flush()
+      publishHeadlessEvent('ai.stream.done', {
         topicId,
         executionId: result.modelId,
         anchorMessageId: result.anchorMessageId,
@@ -398,7 +566,8 @@ function createHttpSseListener(res: ServerResponse, id: string, topicId: string)
       end()
     },
     onError: (result) => {
-      emit('ai.stream.error', {
+      coalescer.flush()
+      publishHeadlessEvent('ai.stream.error', {
         topicId,
         executionId: result.modelId,
         anchorMessageId: result.anchorMessageId,
@@ -429,17 +598,19 @@ async function handleAiStreamOpen(req: IncomingMessage, res: ServerResponse): Pr
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no'
   })
-  const listenerId = `headless:${request.topicId}:${randomUUID()}`
+  const listenerId = headlessListenerId(request.topicId)
+  const connection = registerHeadlessListenerConnection(listenerId, res, { awaitingOpenResult: true })
   const listener = createHttpSseListener(res, listenerId, request.topicId)
   try {
     const openResult = await application.get('AiStreamManager').dispatch(listener, request)
     // Surface the synchronous open result (e.g. `{mode:'blocked', reason:'paused'}`) as
     // the first SSE frame — the streamed chunks (if any) follow via the listener above.
     res.write(`data: ${JSON.stringify({ type: 'open-result', result: openResult, listenerId })}\n\n`)
+    finishHeadlessOpenHandshake(connection)
   } catch (e) {
     logger.error('ai.stream.open failed', e as Error)
     res.write(`data: ${JSON.stringify({ type: 'error', result: { error: String(e) } })}\n\n`)
-    res.end()
+    finishHeadlessOpenHandshake(connection, true)
   }
 }
 
@@ -464,13 +635,36 @@ async function handleAiStreamAttach(req: IncomingMessage, res: ServerResponse): 
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no'
   })
-  const listenerId = `headless:${body.topicId}:${randomUUID()}`
+  const listenerId = headlessListenerId(body.topicId)
+  const currentConnection = headlessListenerConnections.get(listenerId)
+  // The Qt bridge fans one open listener's events to every browser subscriber
+  // over `/events`; a same-window attach therefore does not need to replace a
+  // healthy open listener. In particular, Agent overlays attach during their
+  // initial React reconciliation and may immediately detach again. Replacing
+  // the open listener in that window made this transient lifecycle capable of
+  // dropping tool-approval and tool-result chunks from an otherwise healthy
+  // Agent turn.
+  if (currentConnection && !currentConnection.response.writableEnded && !currentConnection.response.destroyed) {
+    const result = { status: 'attached' as const, bufferedChunks: [] }
+    res.write(`data: ${JSON.stringify({ type: 'attach-result', result, listenerId })}\n\n`)
+    res.end()
+    return
+  }
+
   const listener = createHttpSseListener(res, listenerId, body.topicId)
   try {
     const result = application.get('AiStreamManager').attachListener(body.topicId, listener)
+    // Only supersede the physical `/open` response after Main confirmed this
+    // attach is live. During a newly-started Agent turn an eager attach can
+    // race before `dispatch()` has inserted the stream; that `not-found`
+    // response must not evict the still-valid open listener or its pending
+    // `open-result` acknowledgement.
+    if (result.status === 'attached') {
+      registerHeadlessListenerConnection(listenerId, res)
+    }
     res.write(`data: ${JSON.stringify({ type: 'attach-result', result, listenerId })}\n\n`)
-    // `attached` keeps the SSE connection open for future chunks; every other status
-    // (not-found/done/paused/error) is a one-shot reply — the listener was never registered.
+    // A real attach keeps the SSE connection open for future chunks; every
+    // other status (not-found/done/paused/error) is a one-shot reply.
     if (result.status !== 'attached') res.end()
   } catch (e) {
     logger.error('ai.stream.attach failed', e as Error)
@@ -539,6 +733,12 @@ export async function startHeadlessBridge(): Promise<void> {
         if (req.method === 'POST' && url === '/ai-stream/detach') return await handleAiStreamDetach(req, res)
         if (req.method === 'POST' && url === '/ai-stream/abort') return await handleAiStreamAbort(req, res)
         if (req.method === 'POST' && url === '/backend-url') return await handleBackendUrl(req, res)
+        if (req.method === 'POST' && url === '/managed-proxy') return await handleManagedProxy(req, res)
+        if (req.method === 'POST' && url === '/file/create-internal-entry')
+          return await handleFileCreateInternalEntry(req, res)
+        if (req.method === 'POST' && url === '/file/ensure-external-entry')
+          return await handleFileEnsureExternalEntry(req, res)
+        if (req.method === 'POST' && url === '/file/physical-path') return await handleFilePhysicalPath(req, res)
         sendJson(res, 404, { ok: false, error: { code: 'NOT_FOUND', message: `No such route: ${url}` } })
       } catch (e) {
         logger.error('Unhandled headless bridge error', e as Error)

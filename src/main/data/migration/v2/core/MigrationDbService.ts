@@ -71,6 +71,12 @@ export class MigrationDbService {
     return this.db
   }
 
+  async backup(destination: string): Promise<void> {
+    await fs.promises.mkdir(path.dirname(destination), { recursive: true })
+    await this.sqlite.backup(destination)
+    logger.info('Migration database backup created', { destination })
+  }
+
   close(): void {
     try {
       this.sqlite.close()

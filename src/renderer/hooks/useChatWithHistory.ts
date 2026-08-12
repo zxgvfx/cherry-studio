@@ -56,13 +56,34 @@ export function useChatWithHistory(
     stop: sdkStop,
     status,
     error,
-    sendMessage,
-    regenerate,
+    sendMessage: sdkSendMessage,
+    regenerate: sdkRegenerate,
     resumeStream
   } = useChat<CherryUIMessage>({
     chat,
     experimental_throttle: 0
   })
+
+  // Houdini/headless fork fix — see `selfInitiatedSendRef` below for why this
+  // wrapping exists at all: `sendMessage`/`regenerate` must flip the ref
+  // *synchronously*, before `ai.stream.open`'s own round trip even starts,
+  // so it is already true by the time the "started-event" effect can
+  // possibly observe the resulting `topicStreamStatus` flip to `pending`.
+  const selfInitiatedSendRef = useRef(false)
+  const sendMessage = useCallback<UseChatWithHistoryResult['sendMessage']>(
+    (message, options) => {
+      selfInitiatedSendRef.current = true
+      return sdkSendMessage(message, options)
+    },
+    [sdkSendMessage]
+  )
+  const regenerate = useCallback<UseChatWithHistoryResult['regenerate']>(
+    (options) => {
+      selfInitiatedSendRef.current = true
+      return sdkRegenerate(options)
+    },
+    [sdkRegenerate]
+  )
 
   const stop = useCallback(async () => {
     if (enabled) {
@@ -160,7 +181,30 @@ export function useChatWithHistory(
     prevTopicStatusRef.current = { status: topicStreamStatus, topicId }
     if (!enabled) return
     if (topicStreamStatus === 'pending' && prev !== 'pending') {
-      resumeActiveStream('started-event')
+      // Houdini/headless fork fix — over the headless HTTP/SSE relay,
+      // `ai.stream.open`'s own ack takes an extra Python<->Electron hop and
+      // can resolve (flipping the SDK's `status` to submitted/streaming)
+      // *after* this window's shared-cache `topicStreamStatus` has already
+      // flipped to `pending` from that same self-initiated send. That raced
+      // this effect ahead of the `statusRef.current === 'streaming' |
+      // 'submitted'` guard inside `resumeActiveStream`, so a genuinely new
+      // `ai.stream.attach` fired for a topic that already had a live
+      // listener from `ai.stream.open` — and `AiStreamManager.removeListener`
+      // is a hard delete, so the *original* listener silently stopped
+      // getting onChunk/onDone forever (the generation still finished and
+      // persisted to DB via Main's own bookkeeping — just never told this
+      // window). Symptom: chat looks stuck on "preparing reply" until
+      // switching topics away and back forces a fresh DB read.
+      // `selfInitiatedSendRef` is flipped synchronously inside our
+      // `sendMessage`/`regenerate` wrappers before any round trip starts, so
+      // it is already true here whenever this `pending` transition is the
+      // direct result of a call this window itself just made — consume it
+      // and skip the attach instead of racing it.
+      if (selfInitiatedSendRef.current) {
+        selfInitiatedSendRef.current = false
+      } else {
+        resumeActiveStream('started-event')
+      }
     }
   }, [enabled, resumeActiveStream, topicId, topicStreamStatus])
 

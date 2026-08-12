@@ -9,6 +9,7 @@ import { model3dFilePreviewPlugin } from './plugins/model3d/model3dFilePreviewPl
 import { pdfFilePreviewPlugin } from './plugins/pdf/pdfFilePreviewPlugin'
 import { powerPointFilePreviewPlugin } from './plugins/powerpoint/powerPointFilePreviewPlugin'
 import { textFilePreviewPlugin } from './plugins/text/textFilePreviewPlugin'
+import { videoFilePreviewPlugin } from './plugins/video/videoFilePreviewPlugin'
 import { wordFilePreviewPlugin } from './plugins/word/wordFilePreviewPlugin'
 import type { FilePreviewPlugin } from './types'
 
@@ -53,6 +54,7 @@ export const filePreviewRegistry = createFilePreviewRegistry({
     pdfFilePreviewPlugin,
     powerPointFilePreviewPlugin,
     textFilePreviewPlugin,
+    videoFilePreviewPlugin,
     wordFilePreviewPlugin
   ]
 })

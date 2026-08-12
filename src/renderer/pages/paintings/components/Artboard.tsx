@@ -226,6 +226,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
   const previousLoadingRef = useRef(isLoading)
   const paintingIdRef = useRef(painting.id)
   const viewerResizeObserverRef = useRef<ResizeObserver | null>(null)
+  const viewerWheelCleanupRef = useRef<(() => void) | null>(null)
   const promptBarResizeObserverRef = useRef<ResizeObserver | null>(null)
   const displayedImageIndex = painting.files.length > 0 ? Math.min(currentImageIndex, painting.files.length - 1) : 0
   const currentFile = painting.files[displayedImageIndex]
@@ -248,6 +249,14 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
 
   const zoomOut = useCallback(() => {
     setImageScale((scale) => Math.max(MIN_IMAGE_SCALE, scale - IMAGE_SCALE_STEP))
+  }, [])
+
+  const zoomImageFromWheel = useCallback((deltaY: number) => {
+    if (deltaY === 0) return
+    setImageScale((scale) => {
+      const next = scale + (deltaY < 0 ? IMAGE_SCALE_STEP : -IMAGE_SCALE_STEP)
+      return Math.min(MAX_IMAGE_SCALE, Math.max(MIN_IMAGE_SCALE, next))
+    })
   }, [])
 
   const rotateImageRight = useCallback(() => {
@@ -323,16 +332,30 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
   // (already-generated) branch renders, which usually happens later (after a
   // generation completes) than Artboard's own mount. A callback ref re-attaches
   // the observer every time the branch swaps this node in, not just the first time.
-  const setViewerContainerRef = useCallback((el: HTMLDivElement | null) => {
-    viewerResizeObserverRef.current?.disconnect()
-    viewerResizeObserverRef.current = null
-    if (!el) return
-    const measure = () => setViewerContainer({ width: el.clientWidth, height: el.clientHeight })
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    viewerResizeObserverRef.current = observer
-  }, [])
+  const setViewerContainerRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      viewerResizeObserverRef.current?.disconnect()
+      viewerResizeObserverRef.current = null
+      viewerWheelCleanupRef.current?.()
+      viewerWheelCleanupRef.current = null
+      if (!el) return
+      const measure = () => setViewerContainer({ width: el.clientWidth, height: el.clientHeight })
+      measure()
+      const observer = new ResizeObserver(measure)
+      observer.observe(el)
+      viewerResizeObserverRef.current = observer
+      const handleWheel = (event: globalThis.WheelEvent) => {
+        const target = event.target
+        if (!(target instanceof Element) || !target.closest('[data-testid="artboard-image-layout"]')) return
+        event.preventDefault()
+        event.stopPropagation()
+        zoomImageFromWheel(event.deltaY)
+      }
+      el.addEventListener('wheel', handleWheel, { capture: true, passive: false })
+      viewerWheelCleanupRef.current = () => el.removeEventListener('wheel', handleWheel, { capture: true })
+    },
+    [zoomImageFromWheel]
+  )
 
   // `promptBar` renders in the fixed layout wrapper above the transformed image,
   // so its own rendered height has to come out of the space

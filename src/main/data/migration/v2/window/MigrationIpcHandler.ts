@@ -21,6 +21,7 @@ import path from 'path'
 import * as z from 'zod'
 
 import { migrationEngine } from '../core/MigrationEngine'
+import { prepareCocoLegacyMigrationPayload, resolveCocoLegacySource } from '../headless/CocoLegacySource'
 import { isValidLocalDate } from '../utils/localDate'
 import { migrationWindowManager } from './MigrationWindowManager'
 
@@ -34,6 +35,7 @@ let inFlightDiagnosticSave: Promise<MigrationDiagnosticSaveResult> | null = null
 let quitScheduled = false
 
 let lastSavedDiagnosticBundlePath: string | null = null
+let cocoPreMigrationBackupPath: string | null = null
 
 // Current migration progress
 let currentProgress: MigrationProgress = {
@@ -228,7 +230,23 @@ export function registerMigrationIpcHandlers(userDataPath: string): void {
     let runPromise: Promise<MigrationResult> | null = null
 
     try {
-      const { reduxData, dexieExportPath, localStorageExportPath } = payload
+      let effectivePayload = payload
+      const cocoLegacySource = resolveCocoLegacySource()
+      if (cocoLegacySource) {
+        if (!cocoPreMigrationBackupPath) {
+          cocoPreMigrationBackupPath = await migrationEngine.backupCurrentDatabase('pre-coco-v1-import')
+          logger.info('Backed up current V2 database before CoCo legacy import', {
+            backupPath: cocoPreMigrationBackupPath
+          })
+        }
+        effectivePayload = await prepareCocoLegacyMigrationPayload(cocoLegacySource, migrationEngine.paths.userData)
+        logger.info('Prepared CoCo legacy JSON files for the official V2 migration engine', {
+          localStorageFile: cocoLegacySource.localStorageFile,
+          indexedDbFile: cocoLegacySource.indexedDbFile
+        })
+      }
+
+      const { reduxData, dexieExportPath, localStorageExportPath } = effectivePayload
 
       if (!reduxData || !dexieExportPath) {
         throw new Error('Migration data not ready. Redux data or Dexie export path missing.')
@@ -481,6 +499,7 @@ export function resetMigrationData(): void {
   quitScheduled = false
   dataLocationNotice = null
   lastSavedDiagnosticBundlePath = null
+  cocoPreMigrationBackupPath = null
   currentProgress = {
     stage: 'introduction',
     overallProgress: 0,

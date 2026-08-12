@@ -4,13 +4,16 @@ import ImageViewer from '@renderer/components/ImageViewer'
 import { FILE_TYPE } from '@renderer/types/file'
 import { toComposerAttachments } from '@renderer/utils/message/composerAttachment'
 import type { AbsoluteFilePath } from '@shared/types/file'
-import { toSafeFileUrl } from '@shared/utils/file'
 import { Plus, X } from 'lucide-react'
 import { type FC, type MouseEvent, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { getPaintingFileUrl } from '../utils/paintingFileUrl'
+
 function imagePreviewUrl(path: AbsoluteFilePath, ext: string): string {
-  return toSafeFileUrl(path, ext.replace(/^\./, '').toLowerCase() || null)
+  // Qt WebEngine blocks http(s) → file:// image loads. Prefer the same
+  // backend raw-image bridge used by Artboard when __CHERRY_BACKEND_URL is set.
+  return getPaintingFileUrl({ path, ext: ext.replace(/^\./, '').toLowerCase() || null }) ?? ''
 }
 
 // Stop button clicks from bubbling to the tile (which would open the viewer) or the input frame.

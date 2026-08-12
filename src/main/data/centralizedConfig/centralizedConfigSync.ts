@@ -181,9 +181,16 @@ function endpointTypeForModel(model: CentralizedModelDef): EndpointType {
       return ENDPOINT_TYPE.ANTHROPIC_MESSAGES
     case 'openai-response':
       return ENDPOINT_TYPE.OPENAI_RESPONSES
+    case 'image-edit':
+    case 'openai-image-edit':
+      return ENDPOINT_TYPE.OPENAI_IMAGE_EDIT
+    case 'image-generation':
+    case 'openai-image-generation':
+      return ENDPOINT_TYPE.OPENAI_IMAGE_GENERATION
     default:
       break
   }
+  if (model.protocol === 'image-edit') return ENDPOINT_TYPE.OPENAI_IMAGE_EDIT
   if (model.protocol === 'image-generation') return ENDPOINT_TYPE.OPENAI_IMAGE_GENERATION
   if (model.modality === 'embedding') return ENDPOINT_TYPE.OPENAI_EMBEDDINGS
   return ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS
@@ -196,7 +203,23 @@ interface CapabilityMapping {
   supportsStreaming: boolean
 }
 
+function isImageEditModel(model: CentralizedModelDef): boolean {
+  return (
+    model.protocol === 'image-edit' ||
+    model.endpoint_type === 'image-edit' ||
+    model.endpoint_type === 'openai-image-edit'
+  )
+}
+
 function mapCapabilities(model: CentralizedModelDef): CapabilityMapping {
+  if (isImageEditModel(model)) {
+    return {
+      capabilities: [MODEL_CAPABILITY.IMAGE_GENERATION],
+      inputModalities: [MODALITY.TEXT, MODALITY.IMAGE],
+      outputModalities: [MODALITY.IMAGE],
+      supportsStreaming: false
+    }
+  }
   if (model.protocol === 'image-generation' || model.modality === 'image') {
     return {
       capabilities: [MODEL_CAPABILITY.IMAGE_GENERATION],
@@ -258,7 +281,8 @@ const OPENAI_FAMILY_ENDPOINT_TYPES: ReadonlySet<EndpointType> = new Set([
   ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS,
   ENDPOINT_TYPE.OPENAI_RESPONSES,
   ENDPOINT_TYPE.OPENAI_EMBEDDINGS,
-  ENDPOINT_TYPE.OPENAI_IMAGE_GENERATION
+  ENDPOINT_TYPE.OPENAI_IMAGE_GENERATION,
+  ENDPOINT_TYPE.OPENAI_IMAGE_EDIT
 ])
 
 function normalizeBaseUrl(apiHost: string, endpointType: EndpointType): string {

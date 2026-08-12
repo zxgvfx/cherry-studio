@@ -56,6 +56,7 @@ function makeInput(params: Record<string, unknown>, overrides: Partial<PaintingD
 describe('canonicalGenerate', () => {
   beforeEach(() => {
     generatePaintingMock.mockClear()
+    delete (window as unknown as { __CHERRY_BACKEND_URL?: string }).__CHERRY_BACKEND_URL
   })
 
   it('ships the validated params as one canonical paramValues bag (no partition / rename)', async () => {
@@ -101,7 +102,9 @@ describe('canonicalGenerate', () => {
 
   it('prefetches attached input images as data URLs, carried separately from paramValues', async () => {
     const binaryImage = vi.fn(async () => ({ data: [1, 2, 3], mime: 'image/png' }))
-    ;(window as unknown as { api: unknown }).api = { file: { binaryImage } }
+    ;(window as unknown as { api: unknown }).api = {
+      file: { binaryImage, getPhysicalPath: vi.fn() }
+    }
 
     const inputFiles = [{ id: 'file-1', ext: 'png' }] as unknown as FileEntry[]
     await canonicalGenerate(makeInput({}, { inputFiles }))
@@ -113,9 +116,62 @@ describe('canonicalGenerate', () => {
     expect(call.paramValues).toEqual({})
   })
 
+  it('accepts Qt-style binaryImage payloads that return a data-URL string in data', async () => {
+    // Qt's JSON bridge used to put `data:image/...;base64,...` in `data`. Treating
+    // that string as byte indices OOMs the renderer; the loader must pass it through.
+    const binaryImage = vi.fn(async () => ({
+      data: 'data:image/png;base64,AQID',
+      mime: 'image/png'
+    }))
+    ;(window as unknown as { api: unknown }).api = {
+      file: { binaryImage, getPhysicalPath: vi.fn() }
+    }
+
+    const inputFiles = [{ id: 'file-1', ext: 'png' }] as unknown as FileEntry[]
+    await canonicalGenerate(makeInput({}, { inputFiles }))
+
+    expect(lastGenerateCall().inputImages).toEqual(['data:image/png;base64,AQID'])
+  })
+
+  it('loads input images via raw-image when a Qt backend URL is present', async () => {
+    const getPhysicalPath = vi.fn(async () => 'C:/data/file-1.png')
+    const binaryImage = vi.fn()
+    ;(window as unknown as { api: unknown; __CHERRY_BACKEND_URL?: string }).api = {
+      file: { binaryImage, getPhysicalPath }
+    }
+    ;(window as unknown as { __CHERRY_BACKEND_URL?: string }).__CHERRY_BACKEND_URL = 'http://127.0.0.1:9876'
+
+    const bytes = Uint8Array.from([1, 2, 3])
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      blob: async () => ({
+        type: 'image/png',
+        arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+      })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const inputFiles = [{ id: 'file-1', ext: 'png' }] as unknown as FileEntry[]
+      await canonicalGenerate(makeInput({}, { inputFiles }))
+
+      expect(binaryImage).not.toHaveBeenCalled()
+      expect(getPhysicalPath).toHaveBeenCalledWith({ id: 'file-1' })
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://127.0.0.1:9876/api/v1/files/raw-image?path=C%3A%2Fdata%2Ffile-1.png'
+      )
+      expect(lastGenerateCall().inputImages).toEqual(['data:image/png;base64,AQID'])
+    } finally {
+      delete (window as unknown as { __CHERRY_BACKEND_URL?: string }).__CHERRY_BACKEND_URL
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('rejects input images beyond the selected mode limit before reading files', async () => {
     const binaryImage = vi.fn()
-    ;(window as unknown as { api: unknown }).api = { file: { binaryImage } }
+    ;(window as unknown as { api: unknown }).api = {
+      file: { binaryImage, getPhysicalPath: vi.fn() }
+    }
     const inputFiles = [
       { id: 'file-1', ext: 'png' },
       { id: 'file-2', ext: 'png' }
@@ -134,7 +190,9 @@ describe('canonicalGenerate', () => {
 
   it('skips non-image input files (e.g. a pasted-text .txt) so they never ship as images', async () => {
     const binaryImage = vi.fn(async () => ({ data: [1, 2, 3], mime: 'image/png' }))
-    ;(window as unknown as { api: unknown }).api = { file: { binaryImage } }
+    ;(window as unknown as { api: unknown }).api = {
+      file: { binaryImage, getPhysicalPath: vi.fn() }
+    }
 
     const inputFiles = [
       { id: 'note', ext: 'txt' },

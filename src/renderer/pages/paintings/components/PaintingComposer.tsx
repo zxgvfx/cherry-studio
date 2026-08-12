@@ -293,7 +293,7 @@ const PaintingComposerInner: FC<PaintingComposerInnerProps> = ({
                   hideTitle
                   painting={painting}
                   onSelect={onModelSelect}
-                  className={cn(COMPOSER_SELECTOR_BUTTON_CLASS, 'w-auto max-w-[200px] border border-border-subtle')}
+                  className={cn(COMPOSER_SELECTOR_BUTTON_CLASS, 'w-auto max-w-[280px] border border-border-subtle')}
                 />
                 <PaintingParamsButton
                   painting={painting}

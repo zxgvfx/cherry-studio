@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { useModels } from '@renderer/hooks/useModel'
+import type { Model } from '@shared/data/types/model'
 import { isEditImageModel } from '@shared/utils/model'
 import { useCallback } from 'react'
 
@@ -50,7 +51,9 @@ export function usePaintingModelSwitch({
         // sent to a generate-only model. `onPaintingChange` merges, so the
         // clear must be explicit.
         const nextModel = models.find((model) => model.apiModelId === modelId)
-        const keepInputFiles = nextModel ? isEditImageModel(nextModel) : false
+        // Unknown target → keep until CLEAR sees accept→reject; only drop when
+        // the resolved model is known not to accept image inputs.
+        const keepInputFiles = !nextModel || isEditImageModel(nextModel)
         onPaintingChange({
           params: { ...painting.params, ...resetPatch },
           model: modelId,
@@ -59,16 +62,27 @@ export function usePaintingModelSwitch({
         return
       }
 
+      // Apply provider+model immediately so the trigger stops showing the previous
+      // channel's identically-named model (gpt-image-2 on rightcode vs vapi) while
+      // the destination catalog loads. Catalog failure still surfaces an error, but
+      // the selection the user clicked is kept.
+      onPaintingChange({
+        providerId,
+        model: modelId
+      } as Partial<PaintingData>)
+
+      let catalog: ModelOption[]
       try {
-        await ensureProviderCatalog(providerId)
+        catalog = await ensureProviderCatalog(providerId)
       } catch (error) {
-        // Cold-cache + DB/IPC failure must not silently revert the dropdown —
-        // surface it like the generate path instead of swallowing the switch.
         logger.error('Failed to load provider catalog on model switch', error as Error)
         presentPaintingGenerateError(error)
         return
       }
       const targetPainting = createDefaultPainting(providerId)
+      const nextOption = catalog.find((option) => String(option.value || '').trim() === modelId)
+      const nextModel = nextOption?.raw as Model | undefined
+      const keepInputFiles = nextModel ? isEditImageModel(nextModel) : false
 
       onPaintingChange({
         ...targetPainting,
@@ -78,9 +92,9 @@ export function usePaintingModelSwitch({
         providerId,
         mode: 'generate',
         model: modelId,
-        // Switching providers resets the form context; never carry input
-        // images across to a different provider's model.
-        inputFiles: []
+        // Keep reference images when the destination model still accepts them
+        // (edit-capable). Generate-only / unknown targets get a clean slate.
+        inputFiles: keepInputFiles ? (painting.inputFiles ?? []) : []
       } as Partial<PaintingData>)
     },
     [currentProviderId, ensureProviderCatalog, models, onPaintingChange, painting]

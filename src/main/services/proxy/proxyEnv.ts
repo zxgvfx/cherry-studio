@@ -35,6 +35,23 @@ export const normalizeProxyBypassRules = (rules?: string | string[]): string[] =
     : []
 }
 
+/**
+ * Expand deployment wildcard rules into forms understood by child-process
+ * proxy libraries. Electron accepts `*.ccc.net`, while several Node/Claude
+ * dependencies only recognize the conventional `.ccc.net` suffix form.
+ * Keep both so all stacks make the same routing decision.
+ */
+const buildStandardNoProxyRules = (rules: string[]): string[] => {
+  const expanded: string[] = []
+  for (const rule of rules) {
+    expanded.push(rule)
+    if (rule.startsWith('*.') && rule.length > 2) {
+      expanded.push(rule.slice(1))
+    }
+  }
+  return [...new Set(expanded)]
+}
+
 export const getProxyEnvironment = (env: NodeJS.ProcessEnv = process.env): Record<string, string> => {
   const proxyEnv: Record<string, string> = {}
 
@@ -71,15 +88,16 @@ export const buildNodeProxyEnvironment = (config: NodeProxyConfig): Record<strin
   }
 
   const normalizedByPassRules = normalizeProxyBypassRules(config.proxyBypassRules)
+  const standardNoProxyRules = buildStandardNoProxyRules(normalizedByPassRules)
   const proxyProtocol = getProxyProtocol(proxyUrl)
   const env: Record<string, string> = {
     [CHERRY_NODE_PROXY_RULES_ENV]: proxyUrl,
     [CHERRY_NODE_PROXY_BYPASS_RULES_ENV]: normalizedByPassRules.join(',')
   }
 
-  if (normalizedByPassRules.length > 0) {
-    env.NO_PROXY = normalizedByPassRules.join(',')
-    env.no_proxy = normalizedByPassRules.join(',')
+  if (standardNoProxyRules.length > 0) {
+    env.NO_PROXY = standardNoProxyRules.join(',')
+    env.no_proxy = standardNoProxyRules.join(',')
   }
 
   if (isSocksProxyProtocol(proxyProtocol)) {

@@ -238,6 +238,31 @@ describe('MessageTokens', () => {
     expect(screen.getByRole('button', { name: '3.3K Tokens' })).toHaveClass('message-tokens')
   })
 
+  it('includes the recorded per-message cost in the compact footer label', () => {
+    const amount = 0.003456
+    renderWithProvider(
+      createMessage('assistant', {
+        totalTokens: 42,
+        costs: [
+          {
+            currency: 'USD',
+            amount,
+            providerReportedRequestCount: 1,
+            computedRequestCount: 0
+          }
+        ]
+      })
+    )
+
+    const expectedCost = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 6
+    }).format(amount)
+    expect(screen.getByRole('button', { name: `42 Tokens · ${expectedCost}` })).toHaveClass('message-tokens')
+  })
+
   it('shows the frozen model identity, provider display name, and a full local creation time', () => {
     const message = createMessage(
       'assistant',

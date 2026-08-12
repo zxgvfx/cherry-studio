@@ -18,15 +18,19 @@ vi.mock('@renderer/ipc', () => ({
   ipcApi: { request: mocks.ipcApiRequest }
 }))
 
-vi.mock('@cherrystudio/ui', () => ({
-  EmptyState: ({ title, description }: { title?: string; description?: string }) => (
-    <div data-testid="empty-state">
-      <div>{title}</div>
-      <div>{description}</div>
-    </div>
-  ),
-  Scrollbar: ({ children, ...props }: ComponentPropsWithoutRef<'div'>) => <div {...props}>{children}</div>
-}))
+vi.mock('@cherrystudio/ui', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    EmptyState: ({ title, description }: { title?: string; description?: string }) => (
+      <div data-testid="empty-state">
+        <div>{title}</div>
+        <div>{description}</div>
+      </div>
+    ),
+    Scrollbar: ({ children, ...props }: ComponentPropsWithoutRef<'div'>) => <div {...props}>{children}</div>
+  }
+})
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key })

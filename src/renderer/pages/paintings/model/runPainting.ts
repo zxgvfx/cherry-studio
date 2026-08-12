@@ -73,7 +73,19 @@ export async function runPainting(
       // `data`. Recover it so the log AND the user-facing modal show the real cause
       // instead of collapsing to an empty `REMOTE_ERROR`.
       const detail = aiErrorDetail(error)
-      logger.error('Image generation failed:', detail ?? error)
+      // Avoid dumping huge/circular objects into the Qt console (`[object Object]`
+      // and, worse, multi-MB response bodies that can pressure the renderer).
+      const logPayload = detail
+        ? {
+            name: detail.name,
+            message: detail.message,
+            statusCode: detail.statusCode,
+            responseBody: typeof detail.responseBody === 'string' ? detail.responseBody.slice(0, 500) : undefined
+          }
+        : error instanceof Error
+          ? { name: error.name, message: error.message }
+          : { message: String(error) }
+      logger.error('Image generation failed:', logPayload)
       if (detail) {
         throw createPaintingGenerateError('REMOTE_ERROR', { message: aiDetailMessage(detail) })
       }

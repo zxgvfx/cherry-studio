@@ -91,6 +91,7 @@ vi.mock('@renderer/i18n/label', () => ({
   getSidebarIconLabelKey: (icon: string) =>
     ({
       agents: 'Work',
+      ai_pipeline: 'AI Workflows',
       assistants: 'Chat',
       translate: 'Translate'
     })[icon] ?? icon
@@ -413,7 +414,7 @@ describe('app Sidebar', () => {
     const labels = Array.from(screen.getByTestId('sidebar-items').querySelectorAll('span')).map(
       (element) => element.textContent
     )
-    expect(labels).toEqual(['Translate', 'Chat', 'Work'])
+    expect(labels).toEqual(['AI Workflows', 'Translate', 'Chat', 'Work'])
   })
 
   it('removes a sidebar app favorite from the context menu', () => {
@@ -427,7 +428,11 @@ describe('app Sidebar', () => {
 
     fireEvent.click(screen.getByTestId('sidebar-menu-sidebar.remove-app.knowledge'))
 
-    expect(mocks.setSidebarFavorites).toHaveBeenCalledWith([appFavorite('assistants'), appFavorite('files')])
+    expect(mocks.setSidebarFavorites).toHaveBeenCalledWith([
+      appFavorite('ai_pipeline'),
+      appFavorite('assistants'),
+      appFavorite('files')
+    ])
   })
 
   it('keeps required sidebar favorites protected in the context menu', () => {
@@ -472,6 +477,7 @@ describe('app Sidebar', () => {
     fireEvent.click(screen.getByTestId('sidebar-menu-sidebar.remove-mini-app.calculator'))
 
     expect(mocks.setSidebarFavorites).toHaveBeenCalledWith([
+      appFavorite('ai_pipeline'),
       appFavorite('assistants'),
       appFavorite('mini_app'),
       miniAppFavorite('weather')
@@ -484,11 +490,12 @@ describe('app Sidebar', () => {
     mocks.allApps = [calculatorMiniApp]
 
     render(<Sidebar />)
-    // Mixed list is [assistants, knowledge, files, calculator]; drag files to front.
-    act(() => mocks.onEntriesReorder?.({ oldIndex: 2, newIndex: 0 }))
+    // Mixed list is [ai_pipeline, assistants, knowledge, files, calculator]; drag files to front.
+    act(() => mocks.onEntriesReorder?.({ oldIndex: 3, newIndex: 0 }))
 
     expect(mocks.setSidebarFavorites).toHaveBeenCalledWith([
       appFavorite('files'),
+      appFavorite('ai_pipeline'),
       appFavorite('assistants'),
       appFavorite('knowledge'),
       miniAppFavorite('calculator')
@@ -499,10 +506,11 @@ describe('app Sidebar', () => {
     configureMiniApps(['calculator', 'weather'], [calculatorMiniApp, weatherMiniApp])
 
     render(<Sidebar />)
-    // Mixed list is [assistants, mini_app, calculator, weather]; drag weather above calculator.
-    act(() => mocks.onEntriesReorder?.({ oldIndex: 3, newIndex: 2 }))
+    // Mixed list is [ai_pipeline, assistants, mini_app, calculator, weather]; drag weather above calculator.
+    act(() => mocks.onEntriesReorder?.({ oldIndex: 4, newIndex: 3 }))
 
     expect(mocks.setSidebarFavorites).toHaveBeenCalledWith([
+      appFavorite('ai_pipeline'),
       appFavorite('assistants'),
       appFavorite('mini_app'),
       miniAppFavorite('weather'),
@@ -517,11 +525,12 @@ describe('app Sidebar', () => {
     configureMiniApps(['calculator'])
 
     render(<Sidebar />)
-    // Mixed list is [assistants, mini_app, calculator]; drag calculator to the very top.
-    act(() => mocks.onEntriesReorder?.({ oldIndex: 2, newIndex: 0 }))
+    // Mixed list is [ai_pipeline, assistants, mini_app, calculator]; drag calculator to the very top.
+    act(() => mocks.onEntriesReorder?.({ oldIndex: 3, newIndex: 0 }))
 
     expect(mocks.setSidebarFavorites).toHaveBeenCalledWith([
       miniAppFavorite('calculator'),
+      appFavorite('ai_pipeline'),
       appFavorite('assistants'),
       appFavorite('mini_app')
     ])

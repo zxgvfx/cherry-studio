@@ -795,6 +795,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'ui.sidebar.favorites': [
       { id: 'assistants', type: 'app' },
       { id: 'agents', type: 'app' },
+      { id: 'ai_pipeline', type: 'app' },
       { id: 'translate', type: 'app' },
       { id: 'paintings', type: 'app' },
       { id: 'knowledge', type: 'app' }

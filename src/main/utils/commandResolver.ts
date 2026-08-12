@@ -412,7 +412,16 @@ export function findGitBash(customPath?: string | null): string | null {
     logger.warn('CLAUDE_CODE_GIT_BASH_PATH provided but path is invalid', { path: envOverride })
   }
 
-  // 3. Find git.exe via findExecutable (checks PATH + common Git install paths)
+  // 3. Self-contained headless deployments bundle Git for Windows beside
+  // app.asar. Render/worker machines intentionally have no system Git install,
+  // but Claude Code requires Git Bash even for a turn that runs no shell tool.
+  const bundledBashPath = path.join(process.resourcesPath, 'git-runtime', 'bin', 'bash.exe')
+  if (fs.existsSync(bundledBashPath)) {
+    logger.debug('Using bundled Git Bash', { path: bundledBashPath })
+    return bundledBashPath
+  }
+
+  // 4. Find git.exe via findExecutable (checks PATH + common Git install paths)
   const gitPath = findExecutable('git')
   if (gitPath) {
     // Derive bash.exe from git.exe location
@@ -437,7 +446,7 @@ export function findGitBash(customPath?: string | null): string | null {
     })
   }
 
-  // 4. Fallback: check common Git installation paths directly
+  // 5. Fallback: check common Git installation paths directly
   for (const root of getCommonGitRoots()) {
     const fullPath = path.join(root, 'bin', 'bash.exe')
     if (fs.existsSync(fullPath)) {

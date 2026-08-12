@@ -56,6 +56,7 @@ export class ProxyService extends BaseService {
   private systemProxyInterval: Disposable | null = null
   private appliedKey: string | null = null
   private nodeProxyController: NodeProxyController | null = null
+  private managedProxyConfig: ProxyConfig | null = null
 
   // Latest-wins reconciler: rapid proxy-preference toggles (or system-proxy changes) collapse
   // into a single re-read + re-apply — single-flight and level-triggered, so a change landing
@@ -101,6 +102,10 @@ export class ProxyService extends BaseService {
 
   /** Latest intent from preferences, resolving the concrete OS proxy for `system` mode. */
   private async snapshotProxyConfig(): Promise<ProxyConfig> {
+    if (this.managedProxyConfig) {
+      return { ...this.managedProxyConfig }
+    }
+
     const preferenceService = application.get('PreferenceService')
     const config = resolveProxyConfig({
       mode: preferenceService.get('app.proxy.mode'),
@@ -124,13 +129,36 @@ export class ProxyService extends BaseService {
   }
 
   private async applyProxyConfig(config: ProxyConfig): Promise<void> {
-    logger.info(`apply proxy: ${config.mode} ${config.proxyRules ?? ''} ${config.proxyBypassRules ?? ''}`)
+    // A managed proxy URL is confidential deployment configuration. Never put
+    // it or its bypass list in renderer-visible state or application logs.
+    logger.info(this.managedProxyConfig ? `apply proxy: ${config.mode} [managed]` : `apply proxy: ${config.mode}`)
     // In system mode, poll the OS proxy so external changes re-converge through the reconciler.
     if (config.mode === 'system') this.ensureSystemProxyMonitor()
     else this.clearSystemProxyMonitor()
 
     await this.setGlobalProxy(config)
     this.appliedKey = proxyConfigKey(config)
+  }
+
+  /**
+   * Apply a deployment-managed proxy to every Electron and Node network stack.
+   * The URL enters through a main-process-only control channel; preferences
+   * and renderer APIs never receive it. Preference changes cannot override it.
+   */
+  async setManagedProxy(proxyRules: string, proxyBypassRules: string): Promise<void> {
+    const normalizedProxyRules = proxyRules.trim()
+    if (!normalizedProxyRules) {
+      throw new Error('Managed proxy URL is required')
+    }
+    this.managedProxyConfig = {
+      mode: 'fixed_servers',
+      proxyRules: normalizedProxyRules,
+      proxyBypassRules: proxyBypassRules.trim() || undefined
+    }
+    this.proxyReconciler.request()
+    await this.proxyReconciler.flush()
+    const error = this.proxyReconciler.getLastError()
+    if (error) throw error
   }
 
   private ensureSystemProxyMonitor(): void {

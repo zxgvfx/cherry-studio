@@ -39,7 +39,11 @@ export type {
   ReadResult
 } from './FileManager'
 export { FileManager } from './FileManager'
-export { ContentCommittedMetadataPendingError, StaleVersionError } from './FileManager'
+export {
+  ContentCommittedMetadataPendingError,
+  EnsureExternalEntryIpcSchema,
+  StaleVersionError
+} from './FileManager'
 export { DirectoryTreeManager } from './tree/DirectoryTreeManager'
 
 // DanglingCache: interface and singleton are both exported for in-process

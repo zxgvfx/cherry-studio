@@ -86,6 +86,10 @@ const SIDEBAR_APP_DEFINITIONS = [
     }
   },
   {
+    id: 'ai_pipeline',
+    routePrefix: '/app/ai-pipeline'
+  },
+  {
     id: 'paintings',
     routePrefix: '/app/paintings',
     resolveUrl: ({ defaultPaintingProvider }) => `/app/paintings/${defaultPaintingProvider}`
@@ -189,7 +193,7 @@ export const SIDEBAR_FAVORITE_ORDER: SidebarAppId[] = SIDEBAR_APPS.map((app) => 
  * 这些收藏项必须始终在侧边栏中可见
  * 抽取为参数方便未来扩展
  */
-export const REQUIRED_SIDEBAR_FAVORITES: SidebarAppId[] = ['assistants']
+export const REQUIRED_SIDEBAR_FAVORITES: SidebarAppId[] = ['assistants', 'ai_pipeline']
 
 const sidebarFavoriteSet = new Set<SidebarAppId>(SIDEBAR_FAVORITE_ORDER)
 

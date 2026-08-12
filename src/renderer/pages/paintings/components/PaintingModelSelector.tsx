@@ -50,6 +50,8 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ className, pain
   )
 
   const selectedName = selectedModel?.name ?? painting.model
+  const selectedIdentifier =
+    selectedModel?.apiModelId && selectedModel.apiModelId !== selectedName ? selectedModel.apiModelId : undefined
   const selectedProviderName = selectedProvider ? getProviderDisplayName(selectedProvider) : undefined
   const selectedIconRef = useMemo(
     () =>
@@ -105,10 +107,15 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ className, pain
                   </Avatar>
                 )
               ) : null}
-              <span className="min-w-0 truncate text-foreground">
+              <span
+                className="min-w-0 truncate text-foreground"
+                title={[selectedName, selectedIdentifier, selectedProviderName].filter(Boolean).join(' · ')}>
                 {selectedName ? (
                   <>
                     {selectedName}
+                    {selectedIdentifier && (
+                      <span className="font-mono text-muted-foreground"> {selectedIdentifier}</span>
+                    )}
                     {selectedProviderName && <span className="text-muted-foreground"> | {selectedProviderName}</span>}
                   </>
                 ) : (

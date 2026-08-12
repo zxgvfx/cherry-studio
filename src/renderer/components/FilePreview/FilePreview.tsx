@@ -7,13 +7,14 @@ import { getFilePreviewFileName, normalizeFilePreviewPath } from '@renderer/util
 import type { AbsoluteFilePath } from '@shared/types/file'
 import { createFilePathHandle } from '@shared/utils/file'
 import { FileQuestion, FileWarning, FileX2, FolderOpen, LoaderCircle } from 'lucide-react'
-import { lazy, type ReactNode, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, type ReactNode, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { useTranslation } from 'react-i18next'
 
 import { FilePreviewLayout } from './FilePreviewLayout'
 import { filePreviewRegistry, resolveExtensionPlugin } from './filePreviewRegistry'
 import { FilePreviewToolbarPortalHost, FilePreviewToolbarPortalProvider } from './FilePreviewToolbar'
+import { FilePreviewToolbarButton } from './FilePreviewToolbarButton'
 import { textFilePreviewPlugin } from './plugins/text/textFilePreviewPlugin'
 import type { FilePreviewFileMetadata, FilePreviewPlugin, FilePreviewType } from './types'
 
@@ -116,10 +117,35 @@ interface FilePreviewPluginRendererProps {
 
 interface FilePreviewShellProps {
   children: ReactNode
+  filePath?: AbsoluteFilePath
   header?: ReactNode
 }
 
-function FilePreviewShell({ children, header }: FilePreviewShellProps) {
+/** Houdini/fork customization: lets users get any previewed file (video/pdf/3d/
+ * word/etc., not just images) out of the app onto the desktop. True in-app
+ * drag-to-desktop isn't reliable across the Qt WebEngine embedding this app
+ * runs in, so we expose the OS's native "reveal in file manager" instead —
+ * from there the user can drag/copy the file wherever they like. Rendered
+ * once here (rather than per plugin toolbar) so every preview type gets it
+ * for free. */
+function RevealInFolderButton({ filePath }: { filePath: AbsoluteFilePath }) {
+  const { t } = useTranslation()
+
+  const handleReveal = useCallback(() => {
+    void window.api.file.showInFolder(filePath).catch((error) => {
+      logger.error(`Failed to reveal file in folder: ${filePath}`, error as Error)
+      toast.error(t('file_preview.reveal_in_folder_error'))
+    })
+  }, [filePath, t])
+
+  return (
+    <FilePreviewToolbarButton disabled={false} label={t('file_preview.reveal_in_folder')} onClick={handleReveal}>
+      <FolderOpen className="size-4" aria-hidden />
+    </FilePreviewToolbarButton>
+  )
+}
+
+function FilePreviewShell({ children, filePath, header }: FilePreviewShellProps) {
   if (header === undefined) return children
 
   return (
@@ -129,6 +155,7 @@ function FilePreviewShell({ children, header }: FilePreviewShellProps) {
           data-testid="file-preview-header"
           className="relative flex h-11 min-h-11 shrink-0 items-center px-3 after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-3 after:border-border after:border-b after:content-['']">
           <div className="flex min-w-0 flex-1 items-center gap-2">{header}</div>
+          {filePath && <RevealInFolderButton filePath={filePath} />}
           <FilePreviewToolbarPortalHost />
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
@@ -268,5 +295,9 @@ export function FilePreview({ filePath, header, refreshKey = 0, type = 'file' }:
     preview = <FilePreviewState kind="unsupported" filePath={resolution.file.filePath} />
   }
 
-  return <FilePreviewShell header={header}>{preview}</FilePreviewShell>
+  return (
+    <FilePreviewShell header={header} filePath={file?.filePath}>
+      {preview}
+    </FilePreviewShell>
+  )
 }

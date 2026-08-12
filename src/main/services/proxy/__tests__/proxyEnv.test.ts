@@ -14,8 +14,8 @@ describe('proxyEnv', () => {
     expect(env.http_proxy).toBe('http://127.0.0.1:7890')
     expect(env.https_proxy).toBe('http://127.0.0.1:7890')
     expect(env.ALL_PROXY).toBe('http://127.0.0.1:7890')
-    expect(env.NO_PROXY).toBe('localhost,*.local')
-    expect(env.no_proxy).toBe('localhost,*.local')
+    expect(env.NO_PROXY).toBe('localhost,*.local,.local')
+    expect(env.no_proxy).toBe('localhost,*.local,.local')
   })
 
   it('exports only socks-compatible env vars for socks proxies', () => {
@@ -32,8 +32,8 @@ describe('proxyEnv', () => {
     expect(env.HTTPS_PROXY).toBeUndefined()
     expect(env.http_proxy).toBeUndefined()
     expect(env.https_proxy).toBeUndefined()
-    expect(env.NO_PROXY).toBe('localhost,*.local')
-    expect(env.no_proxy).toBe('localhost,*.local')
+    expect(env.NO_PROXY).toBe('localhost,*.local,.local')
+    expect(env.no_proxy).toBe('localhost,*.local,.local')
   })
 
   it('returns empty env when proxy rules are missing', () => {

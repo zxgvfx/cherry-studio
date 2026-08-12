@@ -39,7 +39,9 @@ function getDuplicateModelNames<T extends Pick<Model, 'name'>>(models: T[]): Set
   const nameCounts = new Map<string, number>()
 
   for (const model of models) {
-    nameCounts.set(model.name, (nameCounts.get(model.name) ?? 0) + 1)
+    const name = model.name?.trim()
+    if (!name) continue
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1)
   }
 
   return new Set([...nameCounts.entries()].filter(([, count]) => count > 1).map(([name]) => name))
@@ -248,6 +250,11 @@ export function useModelSelectorData({
         getDuplicateModelNames(tagFilteredModelsByProvider.get(provider.id) ?? [])
       ])
     )
+    // Cross-provider same display name (e.g. gpt-image-2 on coco-vapi / coco-rightcode)
+    // must also show apiModelId — per-provider duplicate detection alone misses this.
+    const globalDuplicateNames = getDuplicateModelNames(
+      sortedProviders.flatMap((provider) => tagFilteredModelsByProvider.get(provider.id) ?? [])
+    )
 
     if (searchText.length === 0 && showPinnedModels && pinnedIdSet.size > 0) {
       const pinnedItems = pinnedIds.flatMap((modelId) => {
@@ -258,7 +265,13 @@ export function useModelSelectorData({
         }
 
         return [
-          createModelItem(model, provider, true, duplicateNamesByProvider.get(provider.id)?.has(model.name) ?? false)
+          createModelItem(
+            model,
+            provider,
+            true,
+            (duplicateNamesByProvider.get(provider.id)?.has(model.name) ?? false) ||
+              globalDuplicateNames.has(model.name)
+          )
         ]
       })
 
@@ -297,7 +310,8 @@ export function useModelSelectorData({
             model,
             provider,
             showPinnedModels && pinnedIdSet.has(model.id),
-            duplicateNamesByProvider.get(provider.id)?.has(model.name) ?? false
+            (duplicateNamesByProvider.get(provider.id)?.has(model.name) ?? false) ||
+              globalDuplicateNames.has(model.name)
           )
         )
       )

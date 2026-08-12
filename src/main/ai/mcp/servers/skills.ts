@@ -171,10 +171,10 @@ class SkillsServer {
         "'install_source' is required — use the value from a search_skills result"
       )
     }
-    if (!this.issuedInstallSources.has(installSource)) {
+    if (!(await this.isIssuedOrRevalidatedInstallSource(installSource))) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        "'install_source' was not returned by search_skills in this session; search again and use the exact result"
+        "'install_source' was not returned by search_skills in this session and could not be revalidated from a supported marketplace"
       )
     }
 
@@ -196,6 +196,48 @@ class SkillsServer {
           text: `Skill installed${enabled?.isEnabled ? ' and enabled for this agent' : ' (warning: failed to enable)'}:\n  Name: ${installed.name}\n  Description: ${installed.description ?? 'N/A'}\n  Folder: ${installed.folderName}`
         }
       ]
+    }
+  }
+
+  /**
+   * A Claude runtime connection may be rebuilt between the model's
+   * `search_skills` call and a user-confirmed `install_skill` call (for
+   * example after the host/client restarts). The old connection-local Set
+   * then disappears even though the exact source is visible in the persisted
+   * conversation and was already user-approved. Re-query its skill-name hint
+   * and accept it only if a supported marketplace returns the exact opaque
+   * source again; this preserves the no-invented-source guard without making
+   * a valid confirmation impossible after reconnect.
+   */
+  private async isIssuedOrRevalidatedInstallSource(installSource: string): Promise<boolean> {
+    if (this.issuedInstallSources.has(installSource)) return true
+
+    const identifier = installSource.slice(installSource.indexOf(':') + 1)
+    const hint = identifier.split('/').at(-1)?.replace(/[-_]+/g, ' ').trim()
+    if (!hint) return false
+
+    try {
+      const candidates = await searchSkillMarketplaces(
+        hint,
+        (url) => this.fetchMarketplaceJson(url),
+        (source, error) => {
+          logger.warn('Skill marketplace revalidation source failed', {
+            agentId: this.agentId,
+            source,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      )
+      if (!candidates.some((candidate) => candidate.installSource === installSource)) return false
+      this.issuedInstallSources.add(installSource)
+      return true
+    } catch (error) {
+      logger.warn('Skill install source revalidation failed', {
+        agentId: this.agentId,
+        installSource,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return false
     }
   }
 }

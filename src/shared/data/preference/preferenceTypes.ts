@@ -93,6 +93,7 @@ export type AgentSessionDisplayMode = 'time' | 'agent' | 'workdir'
 export const SIDEBAR_FAVORITES = [
   'assistants',
   'agents',
+  'ai_pipeline',
   'paintings',
   'translate',
   'mini_app',
