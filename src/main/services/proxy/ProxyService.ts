@@ -9,6 +9,7 @@ import { app, session } from 'electron'
 import { getSystemProxy } from 'os-proxy-config'
 
 import { NodeProxyController } from './NodeProxyController'
+import type { ProxyRoutingSnapshot } from './proxyRouting'
 
 const logger = loggerService.withContext('ProxyService')
 
@@ -75,6 +76,12 @@ export class ProxyService extends BaseService {
    */
   get appliedProxyKey(): string | null {
     return this.appliedKey
+  }
+
+  /** Routing policy for isolated runtimes. All proxy/bypass semantics stay in main. */
+  async getRoutingSnapshot(): Promise<ProxyRoutingSnapshot> {
+    await this.proxyReconciler.flush()
+    return this.getNodeProxyController().getRoutingSnapshot()
   }
 
   /**
@@ -174,7 +181,7 @@ export class ProxyService extends BaseService {
   }
 
   private async setGlobalProxy(config: ProxyConfig): Promise<void> {
-    this.getNodeProxyController().configure({
+    await this.getNodeProxyController().configure({
       proxyRules: config.mode === 'direct' ? undefined : config.proxyRules,
       proxyBypassRules: config.proxyBypassRules
     })

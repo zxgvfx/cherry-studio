@@ -42,7 +42,6 @@ import type { Assistant } from '@renderer/types/assistant'
 import type { Topic } from '@renderer/types/topic'
 import { formatErrorMessageWithPrefix, isAbortError } from '@renderer/utils/error'
 import type { DiagnosisResult } from '@renderer/utils/errorDiagnosis'
-import { updateCodeBlock } from '@renderer/utils/markdown'
 import { createComposerRichClipboardContentFromParts } from '@renderer/utils/message/composerClipboard'
 import { getComposerTextFromParts } from '@renderer/utils/message/composerTokens'
 import { isVisionModel } from '@renderer/utils/model'
@@ -465,6 +464,7 @@ export function useHomeMessageListProviderValue({
         const resolved = resolvePartFromParts(partsByMessageIdRef.current, msgBlockId)
         if (resolved && resolved.part.type === 'text') {
           const textPart = resolved.part as { text?: string }
+          const { updateCodeBlock } = await import('@renderer/utils/markdown')
           const updatedText = updateCodeBlock(textPart.text || '', codeBlockId, newContent)
           const allParts = [...(partsByMessageIdRef.current[resolved.messageId] || [])]
           allParts[resolved.index] = {
@@ -496,9 +496,14 @@ export function useHomeMessageListProviderValue({
     return window.api.file.showInFolder(path)
   }, [])
 
-  const abortTool = useCallback((toolId: string) => {
-    return ipcApi.request('mcp.tool.abort_call', { callId: toolId })
-  }, [])
+  const abortTool = useCallback(
+    (toolId: string) => {
+      // Scope must match the registration in mcpTools.ts — provider call ids can
+      // collide across topics, and an unscoped abort must not hit another topic's call.
+      return ipcApi.request('mcp.tool.abort_call', { callId: toolId, scope: topicId })
+    },
+    [topicId]
+  )
 
   const navigateToRoute = useCallback<NonNullable<MessageListActions['navigateToRoute']>>(
     ({ path, query }) => openRoute(path, query),
@@ -700,12 +705,12 @@ export function useHomeMessageListProviderValue({
   )
 
   const deleteMessageGroup = useCallback<NonNullable<MessageListActions['deleteMessageGroup']>>(
-    (parentId) => requireChatWrite('deleteMessageGroup').deleteMessageGroup(parentId),
+    (messageIds) => requireChatWrite('deleteMessageGroup').deleteMessageGroup(messageIds),
     [requireChatWrite]
   )
 
   const deleteMessageGroupWithConfirm = useCallback<NonNullable<MessageListActions['deleteMessageGroupWithConfirm']>>(
-    async (parentId) => {
+    async (messageIds) => {
       const confirmed = await popup.confirm({
         title: t('message.group.delete.title'),
         content: t('message.group.delete.content'),
@@ -718,7 +723,7 @@ export function useHomeMessageListProviderValue({
       if (!confirmed) return
 
       try {
-        await deleteMessageGroup(parentId)
+        await deleteMessageGroup(messageIds)
       } catch (error) {
         logger.error('Failed to delete message group:', error as Error)
         toast.error(formatErrorMessageWithPrefix(error, t('message.delete.failed')))
@@ -914,9 +919,10 @@ export function useHomeMessageListProviderValue({
     () => ({
       selectionLayer: true,
       userProfile: headerCapabilities.userProfile,
+      assistantProfile: assistant ? { name: assistant.name, avatar: assistant.emoji } : undefined,
       imageExportFileName: topic.name
     }),
-    [headerCapabilities.userProfile, topic.name]
+    [assistant, headerCapabilities.userProfile, topic.name]
   )
 
   return useMemo(() => ({ state, actions, meta }), [actions, meta, state])

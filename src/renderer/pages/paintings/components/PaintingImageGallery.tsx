@@ -13,7 +13,7 @@ import { getPaintingFileUrl } from '../utils/paintingFileUrl'
 function imagePreviewUrl(path: AbsoluteFilePath, ext: string): string {
   // Qt WebEngine blocks http(s) → file:// image loads. Prefer the same
   // backend raw-image bridge used by Artboard when __CHERRY_BACKEND_URL is set.
-  return getPaintingFileUrl({ path, ext: ext.replace(/^\./, '').toLowerCase() || null }) ?? ''
+  return getPaintingFileUrl({ path, ext: ext.replace(/^\./, '').toLowerCase() }) ?? ''
 }
 
 // Stop button clicks from bubbling to the tile (which would open the viewer) or the input frame.

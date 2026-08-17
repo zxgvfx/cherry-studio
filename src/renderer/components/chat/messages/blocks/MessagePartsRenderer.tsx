@@ -15,6 +15,7 @@
  */
 
 import { loggerService } from '@logger'
+import { HtmlArtifactPopupHost } from '@renderer/components/chat/HtmlArtifactPopupContext'
 import type { ReadOnlyComposerFileTokenPreview } from '@renderer/components/composer/tokenView'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useIsActiveTurnTarget } from '@renderer/hooks/useIsActiveTurnTarget'
@@ -37,14 +38,13 @@ import {
 import type { CompactionAnchorData } from '@shared/ai/compaction'
 import { classifyTurn } from '@shared/ai/transport'
 import type { CherryMessagePart, ContentReference, ReasoningUIPart } from '@shared/data/types/message'
-import type { CherryProviderMetadata, ComposerMessageToken } from '@shared/data/types/uiParts'
+import type { CherryProviderMetadata, ComposerMessageSnapshot, ComposerMessageToken } from '@shared/data/types/uiParts'
 import { readCherryMeta } from '@shared/data/types/uiParts'
 import { getToolName, isDataUIPart, isFileUIPart, isToolUIPart } from 'ai'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import React, { useMemo } from 'react'
 
 import MessageAttachments from '../frame/MessageAttachments'
-import MessageVideo from '../frame/MessageVideo'
 import ChatMarkdown, { type InlineHtmlPreviewMode } from '../markdown/ChatMarkdown'
 import { useMessageListActiveTurnStatus, useMessageRenderConfig } from '../MessageListProvider'
 import { isReportArtifactsToolResponse, MessageReportArtifacts } from '../tools/agent'
@@ -74,6 +74,7 @@ import {
 import { useMessageParts, useTranslationOverlayEntry } from './MessagePartsContext'
 import MessageProcessGroup from './MessageProcessGroup'
 import PlaceholderBlock, { type PlaceholderStatus } from './PlaceholderBlock'
+import RetryStatusBlock from './RetryStatusBlock'
 import ThinkingBlock, { ThinkingBlockContent } from './ThinkingBlock'
 import { ToolBlockGroup, ToolBlockGroupContent } from './ToolBlockGroup'
 import TranslationBlock from './TranslationBlock'
@@ -88,6 +89,8 @@ const referenceCitationsCache = new WeakMap<
   ContentReference[],
   { citations: Citation[]; citationReferences?: CitationReferenceView[] }
 >()
+
+const MessageVideo = React.lazy(() => import('../frame/MessageVideo'))
 
 // ============================================================================
 // Animation shared by message block renderers.
@@ -284,12 +287,13 @@ function getComposerTokenDisplayText(
   part: CherryMessagePart,
   message: MessageListItem,
   partId: string,
-  expandedTextPartIds: ReadonlySet<string>
+  expandedTextPartIds: ReadonlySet<string>,
+  composer: ComposerMessageSnapshot
 ): string {
   const text = (part as { text?: string }).text ?? ''
   if (message.role !== 'user' || expandedTextPartIds.has(partId)) return text
 
-  return buildUserMessagePreview(text).content
+  return buildUserMessagePreview(text, composer).content
 }
 
 function getVisibleComposerFileTokens(
@@ -302,7 +306,7 @@ function getVisibleComposerFileTokens(
     const composer = getCherryMeta(part)?.composer
     if (!composer) return []
     const partId = `${message.id}-part-${index}`
-    const text = getComposerTokenDisplayText(part, message, partId, expandedTextPartIds)
+    const text = getComposerTokenDisplayText(part, message, partId, expandedTextPartIds, composer)
 
     return getDisplayComposerTokens(composer).flatMap((token) => {
       if (token.kind !== 'file' || !isComposerTokenVisibleInText(token, text)) return []
@@ -615,7 +619,17 @@ function renderPart(
     case 'data-video': {
       const rawData = 'data' in part ? part.data : undefined
       if (!rawData) return null
-      return <MessageVideo key={partId} url={rawData.url} filePath={rawData.filePath} />
+      return (
+        <React.Suspense key={partId} fallback={null}>
+          <MessageVideo url={rawData.url} filePath={rawData.filePath} />
+        </React.Suspense>
+      )
+    }
+
+    case 'data-retry': {
+      const rawData = 'data' in part ? part.data : undefined
+      if (!rawData) return null
+      return <RetryStatusBlock key={partId} data={rawData} />
     }
 
     case 'data-agent-task-event':
@@ -1508,14 +1522,16 @@ const MessagePartsRenderer: React.FC<Props> = ({ message }) => {
   const { collapseCompletedToolHistory } = useMessageRenderConfig()
 
   return (
-    <MessagePartsRendererContent
-      collapseCompletedToolHistory={collapseCompletedToolHistory}
-      isActiveTurnProcessing={isActiveTurnProcessing}
-      isStreamLive={isStreamLive}
-      isTranslationOverlayActive={isTranslationOverlayActive}
-      message={message}
-      messageParts={messageParts}
-    />
+    <HtmlArtifactPopupHost>
+      <MessagePartsRendererContent
+        collapseCompletedToolHistory={collapseCompletedToolHistory}
+        isActiveTurnProcessing={isActiveTurnProcessing}
+        isStreamLive={isStreamLive}
+        isTranslationOverlayActive={isTranslationOverlayActive}
+        message={message}
+        messageParts={messageParts}
+      />
+    </HtmlArtifactPopupHost>
   )
 }
 

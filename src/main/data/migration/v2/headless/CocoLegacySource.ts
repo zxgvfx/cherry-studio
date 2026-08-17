@@ -2,7 +2,11 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
-import type { StartMigrationPayload } from '@shared/data/migration/v2/types'
+export interface CocoLegacyMigrationPayload {
+  reduxData: Record<string, unknown>
+  dexieExportPath: string
+  localStorageExportPath: string
+}
 
 const REDUX_PERSIST_KEY = 'persist:cherry-studio'
 
@@ -58,7 +62,7 @@ function extractReduxData(localStorage: Record<string, unknown>): Record<string,
 export async function prepareCocoLegacyMigrationPayload(
   source: CocoLegacySource,
   userDataPath: string
-): Promise<StartMigrationPayload> {
+): Promise<CocoLegacyMigrationPayload> {
   const [localStorageRaw, indexedDbRaw] = await Promise.all([
     fsp.readFile(source.localStorageFile, 'utf-8'),
     fsp.readFile(source.indexedDbFile, 'utf-8')

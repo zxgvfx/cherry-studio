@@ -156,6 +156,7 @@ function SessionInspector() {
         {tabs.map((tab) => `${tab.id}:${tab.isDormant ? 'dormant' : 'awake'}`).join(',')}
       </div>
       <div data-testid="session-ids">{tabs.map((tab) => tab.id).join(',')}</div>
+      <div data-testid="session-urls">{tabs.map((tab) => `${tab.id}=${tab.url}`).join(',')}</div>
     </div>
   )
 }
@@ -291,6 +292,29 @@ function PinnedTabMaterializer() {
   }, [openTab])
 
   return <div data-testid="detached-pinned">{String(tabs.find((tab) => tab.id === 'detached')?.isPinned)}</div>
+}
+
+function PinnedOverflowSeeder() {
+  const { addTab } = useTabsContext()
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        for (let i = 0; i <= TAB_LIMITS.hardCap; i++) {
+          addTab({
+            id: `pinned-${i}`,
+            type: 'route',
+            url: `/app/chat?topicId=pinned-${i}`,
+            title: `Pinned ${i}`,
+            lastAccessTime: i,
+            isDormant: false,
+            isPinned: true
+          })
+        }
+      }}>
+      Seed pinned overflow
+    </button>
+  )
 }
 
 beforeEach(() => {
@@ -701,8 +725,8 @@ describe('TabsProvider session restore', () => {
     expect(ids).not.toContain('a')
   })
 
-  it('preserves dormant tabs beyond the active-tab LRU hard cap', async () => {
-    const overflow = TAB_LIMITS.hardCap + 5
+  it('preserves dormant tabs beyond the active-tab LRU budget', async () => {
+    const overflow = TAB_LIMITS.softCap + 5
     const many: Tab[] = Array.from({ length: overflow }, (_, i) => ({
       id: `n${i}`,
       type: 'route',
@@ -728,6 +752,22 @@ describe('TabsProvider session restore', () => {
     expect(ids).toContain(`n${overflow - 1}`)
     const dump = screen.getByTestId('session-tabs').textContent ?? ''
     expect(dump.split(',').filter((tab) => tab.endsWith(':awake'))).toEqual(['n0:awake'])
+  })
+
+  it('applies the hard fuse across a batch of pinned additions', () => {
+    render(
+      <TabsProvider>
+        <PinnedOverflowSeeder />
+      </TabsProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seed pinned overflow' }))
+
+    const updaters = setPinnedTabsMock.mock.calls.map(([arg]) => arg).filter((arg) => typeof arg === 'function')
+    const persisted = updaters.reduce<Tab[]>((tabs, update) => update(tabs), [{ ...PINNED_FILES_TAB, isDormant: true }])
+    expect(persisted.some((tab) => tab.isDormant)).toBe(true)
+    expect(persisted.filter((tab) => !tab.isDormant)).toHaveLength(TAB_LIMITS.softCap)
+    expect(persisted.find((tab) => tab.id === `pinned-${TAB_LIMITS.hardCap}`)?.isDormant).toBe(false)
   })
 })
 

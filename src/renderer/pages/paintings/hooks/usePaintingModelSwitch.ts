@@ -79,7 +79,7 @@ export function usePaintingModelSwitch({
         presentPaintingGenerateError(error)
         return
       }
-      const targetPainting = createDefaultPainting(providerId)
+      const targetPainting = createDefaultPainting({ providerId })
       const nextOption = catalog.find((option) => String(option.value || '').trim() === modelId)
       const nextModel = nextOption?.raw as Model | undefined
       const keepInputFiles = nextModel ? isEditImageModel(nextModel) : false

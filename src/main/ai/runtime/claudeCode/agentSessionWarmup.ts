@@ -17,6 +17,7 @@ import { resolveKnowledgeBaseScope } from '@main/ai/utils/knowledgeScope'
 import { encodeReasoningInvocation, resolveReasoningInvocation } from '@main/ai/utils/reasoningSerializers'
 import { createAiUsagePricingSnapshot } from '@main/ai/utils/usageCapture'
 import { getAppLanguage } from '@main/i18n'
+import { getProxyEnvironment } from '@main/services/proxy/proxyEnv'
 import { defaultAppHeaders } from '@main/utils/http'
 import type { AgentEntity } from '@shared/data/api/schemas/agents'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
@@ -25,6 +26,7 @@ import type { Model, UniqueModelId } from '@shared/data/types/model'
 import { ENDPOINT_TYPE, parseUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import type { ReasoningEffortOption } from '@shared/types/aiSdk'
+import { API_GATEWAY_REQUIRED_I18N_KEY } from '@shared/types/apiGateway'
 import { formatApiHost, withoutTrailingApiVersion } from '@shared/utils/api'
 import { formatGatewayModelId } from '@shared/utils/apiGateway'
 import {
@@ -37,10 +39,20 @@ import {
 import { resolveEffectiveEndpoint } from '../../provider/endpoint'
 import { getExtraHeaders } from '../../utils/provider'
 import type { AgentSessionUsageCapture } from '../types'
+import {
+  createAgentProxyEnvironmentFingerprint,
+  isAgentProxyEnvironmentKey,
+  mergeAgentLoopbackProxyBypass
+} from './agentProxyEnvironment'
 import type { WarmQueryRequest } from './ClaudeCodeWarmQueryManager'
 import { isAnthropicOfficialHost, with1mSuffix } from './contextWindowSuffix'
 import { createClaudeCodeQueryOptions } from './queryOptions'
-import { buildClaudeCodeSessionSettings, buildSkillWhitelist, type McpServerSnapshotMap } from './settingsBuilder'
+import {
+  buildClaudeCodeSessionSettings,
+  buildSkillWhitelist,
+  getClaudeCodeLoginShellEnvironment,
+  type McpServerSnapshotMap
+} from './settingsBuilder'
 import type { ClaudeCodeSettings } from './types'
 
 const logger = loggerService.withContext('agentSessionWarmup')
@@ -83,12 +95,25 @@ interface ClaudeCodeRuntimeRoute extends ClaudeCodeRouteFacts {
   internalRequestToken?: string
 }
 
+/** The gateway is local even when it binds a non-default loopback address such as 127.0.0.2. */
+function gatewayBypassRule(route: Pick<ClaudeCodeRouteFacts, 'branch' | 'baseUrl'>): string | undefined {
+  if (route.branch !== 'gateway' || !route.baseUrl) return undefined
+
+  try {
+    return new URL(route.baseUrl).hostname
+  } catch {
+    return undefined
+  }
+}
+
 interface ConnectionMaterializationFacts {
   route: ClaudeCodeRouteFacts
   mcp: unknown[]
   skills: string[]
   linkedChannelId: string | null
   contextWindow: number | null
+  maxOutputTokens: number | null
+  proxyEnvironmentFingerprint: string
 }
 
 /**
@@ -285,6 +310,21 @@ export async function deriveConnectionConfig(
   }
 }
 
+async function deriveAgentProxyEnvironmentFingerprint(
+  agent: AgentEntity,
+  route: ClaudeCodeRouteFacts
+): Promise<string> {
+  const proxyEnvironment = getProxyEnvironment(process.env)
+  return createAgentProxyEnvironmentFingerprint(
+    {
+      ...(await getClaudeCodeLoginShellEnvironment(proxyEnvironment)),
+      ...proxyEnvironment,
+      ...agent.configuration?.env_vars
+    },
+    { additionalBypassRule: gatewayBypassRule(route) }
+  )
+}
+
 async function deriveConnectionConfigFromSnapshot(
   session: AgentSessionEntity,
   agent: AgentEntity,
@@ -300,6 +340,7 @@ async function deriveConnectionConfigFromSnapshot(
   const provider = providerService.getByProviderId(providerId)
   const model = modelService.getByKey(providerId, modelId)
   const contextWindow = materialized ? materialized.contextWindow : (model.contextWindow ?? null)
+  const maxOutputTokens = materialized ? materialized.maxOutputTokens : (model.maxOutputTokens ?? null)
   const effectiveFastMode = fastMode && isSupportFastMode(provider, model)
   let routeFacts = materialized?.route
   if (!routeFacts) {
@@ -320,20 +361,30 @@ async function deriveConnectionConfigFromSnapshot(
   const linkedChannelId = materialized
     ? materialized.linkedChannelId
     : (agentChannelService.findBySessionId(session.id)?.id ?? null)
+  const proxyEnvironmentFingerprint =
+    materialized?.proxyEnvironmentFingerprint ?? (await deriveAgentProxyEnvironmentFingerprint(agent, routeFacts))
   const rebuildFacts = {
     modelId: uniqueModelId,
     contextWindow,
+    maxOutputTokens,
     reasoningEffort,
     fastMode: effectiveFastMode,
     route: buildRebuildRouteFacts(routeFacts),
     cwd,
     language: getAppLanguage(),
     instructions: agent.instructions ?? null,
+    // Persistent variable inputs rebuild the connection. Date/time variables intentionally remain
+    // connection snapshots instead of invalidating this signature every turn.
+    promptUserName: application.get('PreferenceService').get('app.user.name') || 'Unknown Username',
+    promptModelName: agent.modelName || null,
     builtinRole: agent.configuration?.builtin_role ?? null,
     bootstrapCompleted: agent.configuration?.bootstrap_completed ?? null,
     skills: [...skills].sort(),
     maxTurns: agent.configuration?.max_turns ?? null,
-    envVars: Object.entries(agent.configuration?.env_vars ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+    envVars: Object.entries(agent.configuration?.env_vars ?? {})
+      .filter(([key]) => !isAgentProxyEnvironmentKey(key))
+      .sort(([a], [b]) => a.localeCompare(b)),
+    proxyEnvironment: proxyEnvironmentFingerprint,
     disabledTools: [...(agent.disabledTools ?? [])].sort(),
     knowledgeBaseIds: resolveKnowledgeBaseScope(agent.knowledgeBaseIds, selectedKnowledgeBaseIds),
     mcp: materialized?.mcp ?? deriveMcpDefinitionFacts(agent.mcps),
@@ -418,6 +469,7 @@ export async function buildClaudeCodeQueryRequestForAgentSession(
   // settings, and skill materialization can otherwise make the baseline describe a different
   // compaction window from the one actually passed to Claude Code.
   const contextWindow = model.contextWindow
+  const maxOutputTokens = model.maxOutputTokens
   const fastModeTransport = fastMode && isSupportFastMode(provider, model) ? provider.fastMode.transport : undefined
   const thinkingOptions = resolveClaudeCodeThinkingOptions(model, reasoningEffort)
   const { baseUrl } = resolveEffectiveEndpoint(provider, model)
@@ -454,6 +506,7 @@ export async function buildClaudeCodeQueryRequestForAgentSession(
       provider,
       {
         contextWindow,
+        maxOutputTokens,
         lastAgentSessionId: resumeSessionId,
         mcpServerSnapshots,
         linkedChannelSnapshot,
@@ -481,7 +534,11 @@ export async function buildClaudeCodeQueryRequestForAgentSession(
       mcp: deriveMcpDefinitionFacts(agent.mcps, mcpServerSnapshots),
       skills: settings.skills ?? [],
       linkedChannelId: linkedChannelSnapshot?.id ?? null,
-      contextWindow: contextWindow ?? null
+      contextWindow: contextWindow ?? null,
+      maxOutputTokens: maxOutputTokens ?? null,
+      proxyEnvironmentFingerprint: createAgentProxyEnvironmentFingerprint(settings.env ?? {}, {
+        additionalBypassRule: gatewayBypassRule(route)
+      })
     }
   )
   const sdkModelId = route.modelIds.primary
@@ -613,7 +670,8 @@ function deriveRouteFacts(
   )
 
   if (shouldUseGateway) {
-    const config = application.get('ApiGatewayService').getCurrentConfig()
+    const apiGatewayService = application.get('ApiGatewayService')
+    const config = apiGatewayService.getCurrentConfig()
     const host = config.host || '127.0.0.1'
     const port = config.port || 23333
     // Fingerprint the persisted gateway key WITHOUT `ensureValidApiKey` (which would generate and
@@ -623,7 +681,10 @@ function deriveRouteFacts(
     return {
       branch: 'gateway',
       baseUrl: `http://${host}:${port}`,
-      credentialsFingerprint: fingerprintCredentials([typeof gatewayKey === 'string' ? gatewayKey : '']),
+      credentialsFingerprint: fingerprintCredentials([
+        typeof gatewayKey === 'string' ? gatewayKey : '',
+        gatewayStateTag(config.enabled, apiGatewayService.isRunning())
+      ]),
       modelIds: {
         primary: toGatewayModelId(primaryRef),
         opus: toGatewayModelId(opusRef),
@@ -702,7 +763,7 @@ async function resolveClaudeCodeRuntimeRoute(
         customHeaders: gateway.usageHeaders,
         usageCapture: { owner: 'provider-calls' },
         internalRequestToken: gateway.internalRequestToken,
-        credentialsFingerprint: fingerprintCredentials([gateway.apiKey])
+        credentialsFingerprint: fingerprintCredentials([gateway.apiKey, gateway.stateTag])
       }
     }
     case 'direct': {
@@ -771,28 +832,72 @@ function resolveRuntimeModelRef(
   }
 }
 
+/**
+ * The Claude Agent SDK only ever speaks Anthropic Messages, so the direct route asks the shared
+ * resolver for that dialect instead of taking the in-app-chat default (`endpointTypes[0]`). A model
+ * that declares `anthropic-messages` behind another dialect — DeepSeek V4 Flash lists it third — would
+ * otherwise be pushed onto the gateway, which re-serializes the SDK's native thinking blocks into a
+ * dialect that cannot carry them back. The resolver declines the preference when the model does not
+ * declare the endpoint or the provider configures no base URL for it, which this comparison detects.
+ */
 function usesAnthropicMessagesEndpoint(ref: RuntimeModelRef): boolean {
   if (!ref.provider || !ref.model) return false
-  return resolveEffectiveEndpoint(ref.provider, ref.model).endpointType === ENDPOINT_TYPE.ANTHROPIC_MESSAGES
+  return (
+    resolveEffectiveEndpoint(ref.provider, ref.model, ENDPOINT_TYPE.ANTHROPIC_MESSAGES).endpointType ===
+    ENDPOINT_TYPE.ANTHROPIC_MESSAGES
+  )
+}
+
+/**
+ * Gateway state a materialized connection is pinned to. It is part of the credentials fingerprint,
+ * so disabling (or losing) the gateway makes the next turn rebuild instead of quietly posting to a
+ * closed port. Derived and materialized routes MUST build it the same way or every turn rebuilds.
+ */
+function gatewayStateTag(enabled: boolean, running: boolean): string {
+  return `gateway-state:${enabled}:${running}`
+}
+
+/**
+ * The route needs Cherry's local gateway to bridge the model, but the user keeps the gateway
+ * disabled. Raised on the persisted intent only — a gateway that is enabled but not yet listening
+ * is a convergence problem, not a consent one, and surfaces its own bind error. `i18nKey` survives
+ * `serializeError`, so the turn's error block renders localized copy; the connection driver
+ * additionally turns this into a prompt offering to enable it.
+ */
+export class ApiGatewayNotRunningError extends Error {
+  readonly i18nKey = API_GATEWAY_REQUIRED_I18N_KEY
+  constructor() {
+    super('API Gateway is disabled')
+    this.name = 'ApiGatewayNotRunningError'
+  }
 }
 
 async function resolveApiGatewayRuntime(sessionId: string): Promise<{
   baseUrl: string
   apiKey: string
+  stateTag: string
   usageHeaders: Record<string, string>
   internalRequestToken: string
 }> {
   const apiGatewayService = application.get('ApiGatewayService')
-  const apiKey = await apiGatewayService.ensureValidApiKey()
-  if (!apiGatewayService.isRunning()) {
-    await apiGatewayService.start()
-  }
   const config = apiGatewayService.getCurrentConfig()
+  // Ask for consent on the PERSISTED intent, never on `isRunning()`: the gateway is also briefly
+  // down while binding at boot, mid-restart, or after a failed activation, and prompting the user
+  // to enable a service they already enabled would be nonsense.
+  if (!config.enabled) throw new ApiGatewayNotRunningError()
+  // Consent already given, so converging is not an implicit start. `ensureRunning()` goes through
+  // the same reconciler (serializing behind an in-flight transition) and throws the real bind
+  // error; unlike `start()` it cannot re-persist an intent, so it can never re-enable the gateway.
+  if (!apiGatewayService.isRunning()) await apiGatewayService.ensureRunning()
+  // Only after the checks above: this persists a freshly generated key on first use, and a failing
+  // route must not leave that side effect behind.
+  const apiKey = await apiGatewayService.ensureValidApiKey()
   const host = config.host || '127.0.0.1'
   const port = config.port || 23333
   return {
     baseUrl: `http://${host}:${port}`,
     apiKey,
+    stateTag: gatewayStateTag(config.enabled, apiGatewayService.isRunning()),
     usageHeaders: apiGatewayService.getAgentSessionUsageHeaders(sessionId),
     internalRequestToken: apiGatewayService.getInternalRequestToken()
   }
@@ -823,9 +928,8 @@ function mergeRuntimeSettings(
     route.customHeaders,
     fastModeHeaders
   )
-  return {
-    ...settings,
-    env: {
+  const env = mergeAgentLoopbackProxyBypass(
+    {
       ...settings.env,
       ANTHROPIC_MODEL: route.modelIds.primary,
       ANTHROPIC_DEFAULT_OPUS_MODEL: route.modelIds.opus,
@@ -834,7 +938,12 @@ function mergeRuntimeSettings(
       ...(route.apiKey ? { ANTHROPIC_API_KEY: route.apiKey, ANTHROPIC_AUTH_TOKEN: route.apiKey } : {}),
       ...(route.baseUrl ? { ANTHROPIC_BASE_URL: route.baseUrl } : {}),
       ...(customHeaders ? { ANTHROPIC_CUSTOM_HEADERS: customHeaders } : {})
-    }
+    },
+    { additionalBypassRule: gatewayBypassRule(route) }
+  )
+  return {
+    ...settings,
+    env
   }
 }
 

@@ -21,8 +21,8 @@
 
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { projectStreamChunkForRenderer } from '@main/utils/messageOutputProjection'
 import type { AiStreamAbortRequest, AiStreamOpenRequest } from '@shared/ai/transport'
-import { projectStreamChunkForRenderer } from '@shared/ai/transport'
 import type { DataRequest } from '@shared/data/api/types'
 import { IpcError } from '@shared/ipc/errors/IpcError'
 import { createInternalEntryInputSchema } from '@shared/ipc/schemas/file'

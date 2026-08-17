@@ -554,6 +554,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
                 onPointerDown={onImagePointerDown}
                 onPointerMove={onImagePointerMove}
                 onPointerUp={stopImageDrag}
+                contextMenuTransform={{ rotation: imageRotation }}
                 preview={false}
                 src={currentImageUrl}
                 style={{

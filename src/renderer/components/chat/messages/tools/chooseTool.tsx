@@ -1,10 +1,13 @@
 import type { NormalToolResponse } from '@renderer/types/mcpTool'
+import { AGENT_RUNTIME_CAPABILITIES } from '@shared/ai/agentRuntimeCapabilities'
 import {
   GENERATE_IMAGE_TOOL_NAME,
   KB_LIST_TOOL_NAME,
   KB_MANAGE_TOOL_NAME,
   KB_READ_TOOL_NAME,
-  KB_SEARCH_TOOL_NAME
+  KB_SEARCH_TOOL_NAME,
+  PROVIDER_WEB_SEARCH_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME
 } from '@shared/ai/builtinTools'
 
 import { AgentExecutionTimeline } from './agent'
@@ -27,6 +30,9 @@ const CHERRY_AGENT_TOOL_NAMES = new Set([
   KB_MANAGE_TOOL_NAME,
   'memory'
 ])
+const CHERRY_RUNTIME_BUILTIN_TOOL_NAMES = new Set(
+  Object.values(AGENT_RUNTIME_CAPABILITIES).flatMap((caps) => caps.builtinTools().map((tool) => tool.id))
+)
 
 const isAgentTool = (toolName: string) => {
   if (agentTools.has(toolName) || toolName.startsWith(agentMcpToolsPrefix)) {
@@ -37,7 +43,6 @@ const isAgentTool = (toolName: string) => {
 
 export function chooseTool(toolResponse: NormalToolResponse): React.ReactNode | null {
   const toolName = toolResponse.tool.name
-  const toolType = toolResponse.tool.type
   if (isMetaToolName(toolName)) {
     return <MessageMetaTool toolResponse={toolResponse} />
   }
@@ -46,8 +51,8 @@ export function chooseTool(toolResponse: NormalToolResponse): React.ReactNode | 
   if (toolName === KB_SEARCH_TOOL_NAME) {
     return <MessageKnowledgeSearchToolTitle toolResponse={toolResponse} />
   }
-  if (toolName === 'web_search') {
-    return toolType === 'provider' ? null : <MessageWebSearchToolTitle toolResponse={toolResponse} />
+  if (toolName === WEB_SEARCH_TOOL_NAME || toolName === PROVIDER_WEB_SEARCH_TOOL_NAME) {
+    return <MessageWebSearchToolTitle toolResponse={toolResponse} />
   }
   if (toolName === GENERATE_IMAGE_TOOL_NAME || toolName === agentGenerateImageToolName) {
     return <MessageGenerateImageToolTitle toolResponse={toolResponse} />
@@ -67,7 +72,7 @@ export function chooseTool(toolResponse: NormalToolResponse): React.ReactNode | 
     switch (suffix) {
       case 'web_search':
       case 'web_search_preview':
-        return toolType === 'provider' ? null : <MessageWebSearchToolTitle toolResponse={toolResponse} />
+        return <MessageWebSearchToolTitle toolResponse={toolResponse} />
       case 'knowledge_search':
         return <MessageKnowledgeSearchToolTitle toolResponse={toolResponse} />
       default:
@@ -75,7 +80,10 @@ export function chooseTool(toolResponse: NormalToolResponse): React.ReactNode | 
     }
   }
 
-  if (isAgentTool(toolName)) {
+  if (
+    isAgentTool(toolName) ||
+    (toolResponse.tool.type === 'provider' && CHERRY_RUNTIME_BUILTIN_TOOL_NAMES.has(toolName))
+  ) {
     return <AgentExecutionTimeline toolResponse={toolResponse} />
   }
   return null

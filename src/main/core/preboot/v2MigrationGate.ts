@@ -246,7 +246,7 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
       // to write the completed status. Set the initial stage so the
       // renderer picks it up via GetProgress on mount.
       setVersionIncompatible(versionCheck.reason, versionCheck.details)
-      registerMigrationIpcHandlers(paths.userData)
+      registerMigrationIpcHandlers(paths)
 
       try {
         await app.whenReady()
@@ -275,7 +275,7 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
     }
 
     logger.info('Data Migration v2 needed, starting migration process')
-    registerMigrationIpcHandlers(paths.userData)
+    registerMigrationIpcHandlers(paths)
 
     try {
       await app.whenReady()
