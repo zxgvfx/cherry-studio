@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   appGetMock,
   assertOutsideManagedStorageMutationMock,
+  createDirectoryTreeMock,
   getMetadataByPathMock,
   readByPathMock,
   readChunkByPathMock,
@@ -15,6 +16,7 @@ const {
 } = vi.hoisted(() => ({
   appGetMock: vi.fn(),
   assertOutsideManagedStorageMutationMock: vi.fn(),
+  createDirectoryTreeMock: vi.fn(),
   getMetadataByPathMock: vi.fn(),
   readByPathMock: vi.fn(),
   readChunkByPathMock: vi.fn(),
@@ -23,6 +25,9 @@ const {
   writeIfUnchangedByPathMock: vi.fn()
 }))
 vi.mock('@application', () => ({ application: { get: appGetMock } }))
+vi.mock('@main/services/file/tree/builder', () => ({
+  createDirectoryTree: createDirectoryTreeMock
+}))
 vi.mock('@main/services/file', async () => {
   // dispatchHandle is exercised for real so these tests cover handle routing.
   const { dispatchHandle } = await vi.importActual<typeof FileDispatchModule>('@main/services/file/internal/dispatch')
@@ -408,6 +413,31 @@ describe('fileHandlers', () => {
       fileHandlers['file.tree.create']({ rootPath: '/tmp/ws' as AbsoluteFilePath, options: undefined }, ctx)
     ).rejects.toThrow('managed window sender')
     expect(directoryTreeManager.create).not.toHaveBeenCalled()
+  })
+
+  it('returns a one-shot snapshot in the headless Qt bridge without a window', async () => {
+    vi.stubEnv('CHERRY_HEADLESS', '1')
+    const snapshot = { kind: 'directory', path: '/tmp/ws', basename: 'ws' }
+    const dispose = vi.fn()
+    createDirectoryTreeMock.mockResolvedValueOnce({
+      snapshot: () => snapshot,
+      dispose
+    })
+
+    try {
+      await expect(
+        fileHandlers['file.tree.create']({ rootPath: '/tmp/ws' as AbsoluteFilePath, options: undefined }, ctx)
+      ).resolves.toEqual({
+        treeId: expect.stringMatching(/^headless:/),
+        revision: 0,
+        snapshot
+      })
+      expect(directoryTreeManager.create).not.toHaveBeenCalled()
+      expect(dispose).toHaveBeenCalledTimes(1)
+      await expect(fileHandlers['file.tree.activate']({ treeId: 'headless:t-1', revision: 0 }, ctx)).resolves.toBe(true)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('maps a shutdown-in-flight create to the DIRECTORY_TREE_STOPPED code', async () => {

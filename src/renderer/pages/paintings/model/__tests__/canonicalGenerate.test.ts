@@ -22,6 +22,7 @@ vi.mock('../../utils/checkProviderEnabled', () => ({
 interface CapturedGenerate {
   paramValues: Record<string, unknown>
   inputImages?: string[]
+  inputFileIds?: string[]
 }
 
 function lastGenerateCall(): CapturedGenerate {
@@ -100,78 +101,17 @@ describe('canonicalGenerate', () => {
     expect(lastGenerateCall().paramValues).toEqual({})
   })
 
-  it('prefetches attached input images as data URLs, carried separately from paramValues', async () => {
-    const binaryImage = vi.fn(async () => ({ data: [1, 2, 3], mime: 'image/png' }))
-    ;(window as unknown as { api: unknown }).api = {
-      file: { binaryImage, getPhysicalPath: vi.fn() }
-    }
-
-    const inputFiles = [{ id: 'file-1', ext: 'png' }] as unknown as FileEntry[]
+  it('ships attached input images as FileEntry ids, not renderer-encoded data URLs', async () => {
+    const inputFiles = [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', ext: 'png' }] as unknown as FileEntry[]
     await canonicalGenerate(makeInput({}, { inputFiles }))
 
-    expect(binaryImage).toHaveBeenCalledWith('file-1.png')
     const call = lastGenerateCall()
-    // Encoded to a `data:` URL (`base64('\x01\x02\x03') === 'AQID'`); not in paramValues.
-    expect(call.inputImages).toEqual(['data:image/png;base64,AQID'])
+    expect(call.inputFileIds).toEqual(['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'])
+    expect(call.inputImages).toBeUndefined()
     expect(call.paramValues).toEqual({})
   })
 
-  it('accepts Qt-style binaryImage payloads that return a data-URL string in data', async () => {
-    // Qt's JSON bridge used to put `data:image/...;base64,...` in `data`. Treating
-    // that string as byte indices OOMs the renderer; the loader must pass it through.
-    const binaryImage = vi.fn(async () => ({
-      data: 'data:image/png;base64,AQID',
-      mime: 'image/png'
-    }))
-    ;(window as unknown as { api: unknown }).api = {
-      file: { binaryImage, getPhysicalPath: vi.fn() }
-    }
-
-    const inputFiles = [{ id: 'file-1', ext: 'png' }] as unknown as FileEntry[]
-    await canonicalGenerate(makeInput({}, { inputFiles }))
-
-    expect(lastGenerateCall().inputImages).toEqual(['data:image/png;base64,AQID'])
-  })
-
-  it('loads input images via raw-image when a Qt backend URL is present', async () => {
-    const getPhysicalPath = vi.fn(async () => 'C:/data/file-1.png')
-    const binaryImage = vi.fn()
-    ;(window as unknown as { api: unknown; __CHERRY_BACKEND_URL?: string }).api = {
-      file: { binaryImage, getPhysicalPath }
-    }
-    ;(window as unknown as { __CHERRY_BACKEND_URL?: string }).__CHERRY_BACKEND_URL = 'http://127.0.0.1:9876'
-
-    const bytes = Uint8Array.from([1, 2, 3])
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      blob: async () => ({
-        type: 'image/png',
-        arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-      })
-    }))
-    vi.stubGlobal('fetch', fetchMock)
-
-    try {
-      const inputFiles = [{ id: 'file-1', ext: 'png' }] as unknown as FileEntry[]
-      await canonicalGenerate(makeInput({}, { inputFiles }))
-
-      expect(binaryImage).not.toHaveBeenCalled()
-      expect(getPhysicalPath).toHaveBeenCalledWith({ id: 'file-1' })
-      expect(fetchMock).toHaveBeenCalledWith(
-        'http://127.0.0.1:9876/api/v1/files/raw-image?path=C%3A%2Fdata%2Ffile-1.png'
-      )
-      expect(lastGenerateCall().inputImages).toEqual(['data:image/png;base64,AQID'])
-    } finally {
-      delete (window as unknown as { __CHERRY_BACKEND_URL?: string }).__CHERRY_BACKEND_URL
-      vi.unstubAllGlobals()
-    }
-  })
-
   it('rejects input images beyond the selected mode limit before reading files', async () => {
-    const binaryImage = vi.fn()
-    ;(window as unknown as { api: unknown }).api = {
-      file: { binaryImage, getPhysicalPath: vi.fn() }
-    }
     const inputFiles = [
       { id: 'file-1', ext: 'png' },
       { id: 'file-2', ext: 'png' }
@@ -184,26 +124,18 @@ describe('canonicalGenerate', () => {
       })
     ).rejects.toMatchObject({ name: 'PaintingGenerateError', code: 'INPUT_IMAGE_LIMIT_EXCEEDED' })
 
-    expect(binaryImage).not.toHaveBeenCalled()
     expect(generatePaintingMock).not.toHaveBeenCalled()
   })
 
   it('skips non-image input files (e.g. a pasted-text .txt) so they never ship as images', async () => {
-    const binaryImage = vi.fn(async () => ({ data: [1, 2, 3], mime: 'image/png' }))
-    ;(window as unknown as { api: unknown }).api = {
-      file: { binaryImage, getPhysicalPath: vi.fn() }
-    }
-
     const inputFiles = [
       { id: 'note', ext: 'txt' },
-      { id: 'pic', ext: 'png' }
+      { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', ext: 'png' }
     ] as unknown as FileEntry[]
     await canonicalGenerate(makeInput({}, { inputFiles }))
 
-    // Only the image was fetched/encoded; the .txt was filtered out.
-    expect(binaryImage).toHaveBeenCalledTimes(1)
-    expect(binaryImage).toHaveBeenCalledWith('pic.png')
-    expect(lastGenerateCall().inputImages).toEqual(['data:image/png;base64,AQID'])
+    expect(lastGenerateCall().inputFileIds).toEqual(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'])
+    expect(lastGenerateCall().inputImages).toBeUndefined()
   })
 
   it('throws EDIT_IMAGE_REQUIRED for an image-requiring mode with no image input', async () => {

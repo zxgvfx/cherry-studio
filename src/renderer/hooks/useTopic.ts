@@ -26,10 +26,11 @@ import {
 } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import { useCloseConversationTabs } from '@renderer/hooks/tab'
-import { useIpcOn } from '@renderer/ipc'
+import { ipcApi, useIpcOn } from '@renderer/ipc'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { MessageExportView } from '@renderer/types/messageExport'
 import type { Topic as RendererTopic } from '@renderer/types/topic'
+import { forgetLastUsedChatTopic } from '@renderer/utils/conversationEntry'
 import { ErrorCode } from '@shared/data/api/errors'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
 import type { CreateTopicDto, DeleteTopicsResult, UpdateTopicDto } from '@shared/data/api/schemas/topics'
@@ -423,7 +424,9 @@ export function useTopicMutations() {
 
   const deleteTopic = useCallback(
     async (topicId: string): Promise<void> => {
+      void ipcApi.request('ai.stream.abort', { topicId }).catch(() => undefined)
       await deleteTrigger({ params: { id: topicId } })
+      forgetLastUsedChatTopic([topicId])
       closeConversationTabs('assistants', [topicId])
       logger.info('Deleted topic', { id: topicId })
     },
@@ -432,7 +435,11 @@ export function useTopicMutations() {
 
   const deleteTopics = useCallback(
     async (ids: string[]): Promise<DeleteTopicsResult> => {
+      for (const topicId of ids) {
+        void ipcApi.request('ai.stream.abort', { topicId }).catch(() => undefined)
+      }
       const result = await deleteManyTrigger({ query: { ids: ids.join(',') } })
+      forgetLastUsedChatTopic(result.deletedIds)
       closeConversationTabs('assistants', result.deletedIds)
       logger.info('Deleted topics', { count: result.deletedCount })
       return result
@@ -443,6 +450,7 @@ export function useTopicMutations() {
   const deleteTopicsByAssistantId = useCallback(
     async (assistantId: string): Promise<DeleteTopicsResult> => {
       const result = await deleteByAssistantTrigger({ params: { assistantId } })
+      forgetLastUsedChatTopic(result.deletedIds)
       closeConversationTabs('assistants', result.deletedIds)
       logger.info('Deleted assistant topics', { assistantId, count: result.deletedCount })
       return result

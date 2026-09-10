@@ -1,5 +1,5 @@
 import type { CherryMessagePart } from '@shared/data/types/message'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   findOpenTextTailIndex,
@@ -17,6 +17,9 @@ function indexes(items: readonly PartEntry[]): number[] {
 }
 
 describe('projectLiveMessageParts', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
   it('forms one process history through intermediate text and keys it by the first visible entry', () => {
     const layout = projectLiveMessageParts(
       entries([
@@ -69,6 +72,28 @@ describe('projectLiveMessageParts', () => {
     )
 
     expect(layout.map((item) => [item.kind, item.key])).toEqual([['part', 0]])
+  })
+
+  it('keeps an unapplied COCO script proposal visible outside live process history', () => {
+    const layout = projectLiveMessageParts(
+      entries([
+        { type: 'dynamic-tool', toolCallId: 'read', toolName: 'nodes.get', state: 'output-available' },
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'proposal',
+          toolName: 'script.propose',
+          state: 'output-available',
+          output: { ok: true, applied: false, normalized_script: 'img = model_image_to_image()' }
+        },
+        { type: 'text', text: '请点击应用。' }
+      ])
+    )
+
+    expect(layout.map((item) => [item.kind, item.key])).toEqual([
+      ['process', 0],
+      ['part', 1],
+      ['part', 2]
+    ])
   })
 
   it('keeps approval-gated tools in one stable process as their state advances', () => {
@@ -258,6 +283,32 @@ describe('findOpenTextTailIndex', () => {
 })
 
 describe('projectCompletedMessageParts', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+  })
+  it('keeps an unapplied COCO script proposal beside the terminal answer', () => {
+    const layout = projectCompletedMessageParts(
+      entries([
+        { type: 'dynamic-tool', toolCallId: 'read', toolName: 'models.list', state: 'output-available' },
+        {
+          type: 'dynamic-tool',
+          toolCallId: 'proposal',
+          toolName: 'script.propose',
+          state: 'output-available',
+          output: {
+            ok: true,
+            applied: false,
+            change_set: { after_script: 'img = model_image_to_image()' }
+          }
+        },
+        { type: 'text', text: '提案已生成，请点击应用。' }
+      ])
+    )
+
+    expect(indexes(layout.historyEntries)).toEqual([0])
+    expect(indexes(layout.resultEntries)).toEqual([1, 2])
+  })
+
   it('keeps the last substantive answer and associated values outside history despite trailing tools', () => {
     const layout = projectCompletedMessageParts(
       entries([
@@ -266,13 +317,161 @@ describe('projectCompletedMessageParts', () => {
         { type: 'text', text: 'Final answer' },
         { type: 'file', mediaType: 'image/png', url: 'file:///result.png' },
         { type: 'data-video', data: { filePath: '/tmp/result.mp4' } },
+        {
+          type: 'data-pipeline-asset',
+          data: {
+            assetId: 'asset-1',
+            name: 'result.glb',
+            assetType: 'model/gltf-binary',
+            downloadUrl: 'http://pipeline/api/assets/asset-1/file'
+          }
+        },
         { type: 'reasoning', text: 'Bookkeeping', state: 'done' },
         { type: 'dynamic-tool', toolCallId: 'cleanup', toolName: 'Cleanup', state: 'output-available' }
       ])
     )
 
-    expect(indexes(layout.resultEntries)).toEqual([2, 3, 4])
-    expect(indexes(layout.historyEntries)).toEqual([0, 1, 5, 6])
+    expect(indexes(layout.resultEntries)).toEqual([2, 3, 4, 5])
+    expect(indexes(layout.historyEntries)).toEqual([0, 1, 6, 7])
+  })
+
+  it('lifts workflow products out of collapsed history when they arrive after the last prose', () => {
+    const layout = projectCompletedMessageParts(
+      entries([
+        { type: 'dynamic-tool', toolCallId: 'propose', toolName: 'script.propose', state: 'output-available' },
+        { type: 'text', text: '画布已生成并应用。现在提交运行。' },
+        { type: 'dynamic-tool', toolCallId: 'submit', toolName: 'submit.graph', state: 'output-available' },
+        {
+          type: 'data-pipeline-asset',
+          data: {
+            assetId: 'asset-1',
+            name: 'result.glb',
+            assetType: 'model/gltf-binary',
+            downloadUrl: 'http://pipeline/api/assets/asset-1/file'
+          }
+        }
+      ])
+    )
+
+    expect(indexes(layout.historyEntries)).toEqual([0, 2])
+    expect(indexes(layout.resultEntries)).toEqual([1, 3])
+  })
+
+  it('drops the one-shot review shell from history after the run finishes', () => {
+    const layout = projectCompletedMessageParts(
+      entries([
+        { type: 'dynamic-tool', toolCallId: 'propose', toolName: 'script.propose', state: 'output-available' },
+        { type: 'text', text: '画布已生成并应用。现在提交运行。' },
+        { type: 'dynamic-tool', toolCallId: 'submit', toolName: 'submit.graph', state: 'output-available' },
+        {
+          type: 'data-pipeline-run-progress',
+          data: { runId: 'run-1', status: 'success' }
+        },
+        {
+          type: 'data-pipeline-review',
+          data: { runId: 'run-1', url: 'http://pipeline/review/?run_id=run-1' }
+        },
+        {
+          type: 'data-pipeline-asset',
+          data: {
+            assetId: 'asset-1',
+            name: 'result.glb',
+            assetType: 'model/gltf-binary',
+            downloadUrl: 'http://pipeline/api/assets/asset-1/file'
+          }
+        }
+      ])
+    )
+
+    expect(indexes(layout.historyEntries)).toEqual([0, 2, 3])
+    expect(indexes(layout.resultEntries)).toEqual([1, 5])
+  })
+
+  it('keeps still-running workflow progress outside collapsed history', () => {
+    const layout = projectCompletedMessageParts(
+      entries([
+        { type: 'dynamic-tool', toolCallId: 'submit', toolName: 'submit.graph', state: 'output-available' },
+        { type: 'text', text: '仍在生成，请稍候。' },
+        {
+          type: 'data-pipeline-run-progress',
+          data: { runId: 'run-1', status: 'running', stillRunning: true, timedOut: true }
+        }
+      ])
+    )
+
+    expect(indexes(layout.historyEntries)).toEqual([0])
+    expect(indexes(layout.resultEntries)).toEqual([1, 2])
+  })
+
+  it('previews only the last producing node among leftover workflow assets', () => {
+    const layout = projectCompletedMessageParts(
+      entries([
+        { type: 'dynamic-tool', toolCallId: 'submit', toolName: 'submit.graph', state: 'output-available' },
+        { type: 'text', text: '画布已生成并应用。现在提交运行。' },
+        {
+          type: 'data-pipeline-asset',
+          data: {
+            assetId: 'img-style',
+            name: 'styled.png',
+            assetType: 'media/image',
+            downloadUrl: 'http://pipeline/api/assets/img-style/file',
+            sourceNodeId: 'model.image-to-image'
+          }
+        },
+        {
+          type: 'data-pipeline-asset',
+          data: {
+            assetId: 'glb-1',
+            name: 'result.glb',
+            assetType: 'model/gltf-binary',
+            downloadUrl: 'http://pipeline/api/assets/glb-1/file',
+            sourceNodeId: 'pixal3d-image-to-3d'
+          }
+        }
+      ])
+    )
+
+    expect(indexes(layout.historyEntries)).toEqual([0, 2])
+    expect(indexes(layout.resultEntries)).toEqual([1, 3])
+  })
+
+  it('keeps live run progress and review outside the process group', () => {
+    const layout = projectLiveMessageParts(
+      entries([
+        { type: 'dynamic-tool', toolCallId: 'submit', toolName: 'submit.graph', state: 'input-available' },
+        {
+          type: 'data-pipeline-run-progress',
+          data: { runId: 'run-1', status: 'awaiting_human' }
+        },
+        {
+          type: 'data-pipeline-review',
+          data: { runId: 'run-1', url: 'http://pipeline/review/?run_id=run-1' }
+        }
+      ])
+    )
+
+    expect(layout.map((item) => [item.kind, item.key])).toEqual([
+      ['process', 0],
+      ['part', 1],
+      ['part', 2]
+    ])
+  })
+
+  it('hides a submitted review iframe from the live layout', () => {
+    const layout = projectLiveMessageParts(
+      entries([
+        {
+          type: 'data-pipeline-run-progress',
+          data: { runId: 'run-1', status: 'running' }
+        },
+        {
+          type: 'data-pipeline-review',
+          data: { runId: 'run-1', url: '', closed: true }
+        }
+      ])
+    )
+
+    expect(layout.map((item) => [item.kind, item.key])).toEqual([['part', 0]])
   })
 
   it('keeps interleaved answer values in the same terminal result run', () => {

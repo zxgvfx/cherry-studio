@@ -120,6 +120,7 @@ function getFileExtensionLabel(file: ComposerAttachment | undefined, fallbackLab
 function getFilePreviewUrl(file: ComposerAttachment | undefined, fallbackLabel: string, previewUrl?: string) {
   if (file?.type !== FILE_TYPE.IMAGE) return undefined
   const extension = getNormalizedFileExtension(file, fallbackLabel)
+  previewUrl = previewUrl || file?.previewUrl
 
   if (previewUrl) {
     // `fileUrlToPath` (decodeURIComponent) throws URIError on malformed percent-

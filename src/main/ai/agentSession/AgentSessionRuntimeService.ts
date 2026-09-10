@@ -5,6 +5,7 @@ import { agentSessionService } from '@data/services/AgentSessionService'
 import { aiUsageRecordService, type SourceSnapshot } from '@data/services/AiUsageRecordService'
 import { loggerService } from '@logger'
 import { resolveKnowledgeBaseScope } from '@main/ai/utils/knowledgeScope'
+import { fetchNewApiLastRequestCost, isNewApiBillableProvider } from '@main/ai/utils/newApiCostLookup'
 import { serializeError } from '@main/ai/utils/serializeError'
 import { createAiUsageCaptureContext } from '@main/ai/utils/usageCapture'
 import { BaseService, DependsOn, type Disposable, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
@@ -1691,6 +1692,7 @@ export class AgentSessionRuntimeService extends BaseService {
       candidate.aliases.some((alias) => normalizeAgentSdkModelAlias(alias) === normalizedModel)
     )
     const modelId = frozenModel?.modelId ?? normalizedModel
+    const completedAt = Date.now()
     aiUsageRecordService.recordInvocation({
       requestId: invocation.requestId,
       context: createAiUsageCaptureContext({
@@ -1706,8 +1708,33 @@ export class AgentSessionRuntimeService extends BaseService {
       modality: 'language',
       usage: invocation.usage,
       metrics: invocation.metrics,
-      completedAt: Date.now()
+      completedAt
     })
+
+    // COCO drives NewAPI outside the normal AI SDK provider middleware, so its
+    // usage row needs the same post-request billing correction as assistant
+    // chat. Once NewAPI's log entry appears, patching the row rebuilds the
+    // message projection and the footer changes from "Tokens" to
+    // "Tokens · ¥cost" without waiting for another conversation turn.
+    if (isNewApiBillableProvider(capture.providerId)) {
+      const startedAtMs = completedAt - (invocation.metrics?.timeCompletionMs ?? 0)
+      fetchNewApiLastRequestCost({
+        providerId: capture.providerId,
+        modelName: modelId,
+        promptTokens: invocation.usage?.inputTokens,
+        completionTokens: invocation.usage?.outputTokens,
+        sinceTs: Math.floor(startedAtMs / 1000)
+      })
+        .then((cost) => {
+          if (!cost) return
+          aiUsageRecordService.patchInvocationCost(invocation.requestId, {
+            amount: cost.amount,
+            currency: cost.currency,
+            source: 'provider'
+          })
+        })
+        .catch(() => {})
+    }
   }
 
   private handleCompactionComplete(entry: AgentSessionRuntimeEntry, anchor?: AgentSessionCompactionAnchorData): void {

@@ -1,4 +1,5 @@
 import { dataApiService } from '@data/DataApiService'
+import { useMessageEditing } from '@renderer/components/chat/editing/MessageEditingContext'
 import { isHiddenPart } from '@renderer/components/chat/messages/blocks/messagePartLayouts'
 import { useMessageListAdapterCapabilities } from '@renderer/components/chat/messages/hooks/useMessageListAdapterCapabilities'
 import {
@@ -160,6 +161,7 @@ export function useAgentMessageListProviderValue({
   messageTail
 }: AgentMessageListParams): MessageListProviderValue {
   const { t } = useTranslation()
+  const { startEditing } = useMessageEditing()
   const sessionId = useMemo(() => extractAgentSessionIdFromTopicId(topic.id), [topic.id])
   const resolvedAgentId = assistantId ?? topic.assistantId
   const messageItemCacheRef = useRef(
@@ -321,7 +323,12 @@ export function useAgentMessageListProviderValue({
     (messageId: string, runtime: MessageRuntime) => {
       if (!normalInteractionsEnabled) return () => {}
 
-      const unsubscribes = [EventEmitter.on(EVENT_NAMES.LOCATE_MESSAGE + ':' + messageId, runtime.locateMessage)]
+      const unsubscribes = [
+        EventEmitter.on(EVENT_NAMES.LOCATE_MESSAGE + ':' + messageId, runtime.locateMessage),
+        EventEmitter.on(EVENT_NAMES.EDIT_MESSAGE, (targetId: string) => {
+          if (targetId === messageId) runtime.startEditing()
+        })
+      ]
 
       return () => unsubscribes.forEach((unsub) => unsub())
     },
@@ -346,6 +353,19 @@ export function useAgentMessageListProviderValue({
       locateAgentMessageInList(topic.id, messageId, highlight)
     },
     [topic.id]
+  )
+
+  const editMessage = useCallback<NonNullable<MessageListActions['editMessage']>>(
+    async (messageId, parts) => {
+      if (!sessionId) throw new Error('Cannot branch an Agent message without a session')
+      const branched = await ipcApi.request('ai.agent.session.branch', {
+        sessionId,
+        messageId,
+        parts
+      })
+      await openRoute('/app/agents', { sessionId: branched.id })
+    },
+    [sessionId]
   )
 
   // Replaces the live turn's placeholder with the api-retry line while retrying, otherwise the
@@ -401,6 +421,8 @@ export function useAgentMessageListProviderValue({
       loadOlder,
       bindRuntime,
       deleteMessage,
+      editMessage,
+      startEditing,
       ...exportActions,
       ...errorActions,
       ...pickMessageLeafActions(leafCapabilities),
@@ -427,6 +449,7 @@ export function useAgentMessageListProviderValue({
       bindMessageGroupRuntime,
       bindMessageRuntime,
       deleteMessage,
+      editMessage,
       errorActions,
       exportActions,
       headerCapabilities,
@@ -443,6 +466,7 @@ export function useAgentMessageListProviderValue({
       respondToolApproval,
       selectionController.actions,
       showInFolder,
+      startEditing,
       updateRenderConfig
     ]
   )

@@ -12,12 +12,14 @@ import type { DbType, ISeeder } from '../../types'
 // keeping this seed local avoids either direction crossing the Data/AI boundary.
 const CHERRY_ASSISTANT_SEED = {
   name: {
-    default: 'Cherry Assistant',
-    zh: 'Cherry 小助手'
+    default: 'COCO',
+    zh: 'COCO'
   },
   configuration: {
-    avatar: '🍒',
-    permission_mode: 'acceptEdits',
+    avatar: '🤖',
+    permission_mode: 'default',
+    coco_mode: 'agent',
+    coco_permission: 'ask',
     max_turns: 100,
     bootstrap_completed: true,
     builtin_role: 'assistant',
@@ -42,7 +44,7 @@ export class CherryAssistantSeeder implements ISeeder {
       const agentId = uuidv4()
       const row = agentService.createAgentTx(tx, agentId, {
         id: agentId,
-        type: 'claude-code',
+        type: 'coco',
         name: this.getNameForPreferredSystemLanguage(),
         description: '',
         instructions: '',

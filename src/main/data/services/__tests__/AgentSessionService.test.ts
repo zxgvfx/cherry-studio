@@ -102,6 +102,32 @@ describe('AgentSessionService', () => {
     })
   }
 
+  it('keeps Agent branches in one session-list row and returns their family', async () => {
+    const rootSession = await createSession('Root conversation')
+    const branch = await createSession('Root conversation', rootSession.workspaceId)
+    const nestedBranch = await createSession('Root conversation', rootSession.workspaceId)
+
+    agentSessionService.markAsBranch(branch.id, rootSession.id, 'edited-user-1')
+    agentSessionService.markAsBranch(nestedBranch.id, branch.id, 'edited-user-2')
+
+    expect(agentSessionService.listByCursor().items.map((session) => session.id)).toEqual([rootSession.id])
+    expect(agentSessionService.listBranchFamily(nestedBranch.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: rootSession.id }),
+        expect.objectContaining({
+          id: branch.id,
+          branchParentId: rootSession.id,
+          branchPointMessageId: 'edited-user-1'
+        }),
+        expect.objectContaining({
+          id: nestedBranch.id,
+          branchParentId: branch.id,
+          branchPointMessageId: 'edited-user-2'
+        })
+      ])
+    )
+  })
+
   it('orders matching sessions and exposes timestamps by conversation activity', async () => {
     const workspace = await createWorkspace('search')
     await dbh.db.insert(agentSessionTable).values([

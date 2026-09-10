@@ -35,7 +35,7 @@ import {
 } from '@shared/data/types/message'
 import { readCherryMeta } from '@shared/data/types/uiParts'
 import { isToolUIPart } from 'ai'
-import { and, desc, eq, inArray, isNotNull, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, lt, lte, or, sql } from 'drizzle-orm'
 import { v7 as uuidv7, validate as isUuid } from 'uuid'
 
 import { aiUsageRecordService, mergeMessageRuntimeStats } from './AiUsageRecordService'
@@ -294,6 +294,54 @@ export class AgentSessionMessageService {
     const nextCursor = hasNext && tail ? encodeCursor(tail.createdAt, tail.id) : undefined
 
     return { items, nextCursor }
+  }
+
+  /**
+   * Copies the immutable history before `messageId` into a new session.
+   * The renderer sends the edited turn after switching to that branch so the
+   * normal conversation controller can persist it and start the LLM stream.
+   */
+  branchSessionMessages(
+    sourceSessionId: string,
+    messageId: string,
+    targetSessionId: string
+  ): { messages: AgentSessionMessageEntity[]; priorUserTurns: number } {
+    const database = application.get('DbService').getDb()
+    const target = this.getSessionMessage(sourceSessionId, messageId)
+    if (target.role !== 'user') {
+      throw DataApiErrorFactory.invalidOperation('branch session', 'only user messages can be edited')
+    }
+    const targetCreatedAt = Date.parse(target.createdAt)
+    const prefix = database
+      .select()
+      .from(sessionMessagesTable)
+      .where(
+        and(
+          eq(sessionMessagesTable.sessionId, sourceSessionId),
+          or(
+            lt(sessionMessagesTable.createdAt, targetCreatedAt),
+            and(eq(sessionMessagesTable.createdAt, targetCreatedAt), lt(sessionMessagesTable.id, target.id))
+          )
+        )
+      )
+      .orderBy(asc(sessionMessagesTable.createdAt), asc(sessionMessagesTable.id))
+      .all()
+      .map((row) => this.rowToEntity(row))
+
+    const messages = this.saveMessages({
+      sessionId: targetSessionId,
+      messages: prefix.map((message) => ({
+        role: message.role,
+        data: message.data,
+        status: message.status,
+        modelId: message.modelId,
+        messageSnapshot: message.messageSnapshot
+      }))
+    })
+    return {
+      messages,
+      priorUserTurns: prefix.filter((message) => message.role === 'user').length
+    }
   }
 
   deleteSessionMessage(sessionId: string, messageId: string): void {

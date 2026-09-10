@@ -2,6 +2,7 @@ import { cacheService } from '@data/CacheService'
 import { dataApiService } from '@data/DataApiService'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
+import { MessageEditingProvider } from '@renderer/components/chat/editing/MessageEditingContext'
 import type { ResourcePaneConfig, ResourcePaneCountButtonProps } from '@renderer/components/chat/panes/Shell'
 import { AgentResourceList } from '@renderer/components/chat/resourceList/AgentResourceList'
 import type { ResourceListRevealRequest } from '@renderer/components/chat/resourceList/base'
@@ -32,7 +33,13 @@ import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { ResourceListRevealPayload } from '@renderer/services/resourceListRevealEvents'
 import { toast } from '@renderer/services/toast'
 import { buildAgentFileWorkspaceKey } from '@renderer/utils/agentSession'
+import {
+  forgetAgentSessionBranch,
+  rememberAgentSessionBranch,
+  resolveRememberedAgentSessionBranch
+} from '@renderer/utils/agentSessionBranchMemory'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { releaseInlineWebGL } from '@renderer/utils/qtWebEngineStability'
 import { findLatestActive, isUntouchedSinceCreation } from '@renderer/utils/resourceEntity'
 import { getDefaultRouteTitle } from '@renderer/utils/routeTitle'
 import { cn } from '@renderer/utils/style'
@@ -289,6 +296,7 @@ const AgentPage = () => {
     if (!routeSessionId || activeSessionId !== routeSessionId) return
     if (activeSession || isActiveSessionLoading) return
     if (!isDataApiNotFoundError(activeSessionError)) return
+    forgetAgentSessionBranch(routeSessionId)
     reenterAgentRoute()
   }, [
     activeSession,
@@ -412,6 +420,12 @@ const AgentPage = () => {
   }, [activeSession])
 
   useEffect(() => {
+    if (activeSession?.branchParentId) {
+      rememberAgentSessionBranch(activeSession.branchParentId, activeSession.id)
+    }
+  }, [activeSession])
+
+  useEffect(() => {
     // Track "last focused session" only for persisted sessions. Gated on
     // the active tab: `last_used` is a single global "what I'm looking at now",
     // so background tabs must not clobber it and switching tabs must update it.
@@ -475,6 +489,7 @@ const AgentPage = () => {
       if (agentId) {
         rememberLastUsedSession(agentId, isUserWorkspaceSession(session) ? session.workspaceId : undefined)
       }
+      releaseInlineWebGL()
       setActiveSession(session)
       closeSurface()
     },
@@ -507,11 +522,26 @@ const AgentPage = () => {
       if (isCreatingEmptySessionRef.current) return null
       isCreatingEmptySessionRef.current = true
 
-      const agentId = defaults.agentId ?? visibleSession?.agentId ?? null
+      const requestedAgentId = defaults.agentId ?? visibleSession?.agentId ?? null
+      const agentId =
+        requestedAgentId && agents.some((agent) => agent.id === requestedAgentId) ? requestedAgentId : null
       try {
+        // Drop Three.js / WebGL in the current thread before remounting.
+        // Qt WebEngine otherwise can crash the render process on 新对话.
+        releaseInlineWebGL()
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 80))
         closeSurface()
 
         if (!agentId) {
+          if (requestedAgentId && !isAgentsLoading) {
+            logger.warn('Ignoring stale agent id while creating a session', {
+              agentId: requestedAgentId
+            })
+            setLastUsedAgentId(null)
+            void invalidateCache(['/agents', '/agent-sessions']).catch((err) => {
+              logger.warn('Failed to refresh data after stale agent recovery', err as Error)
+            })
+          }
           setPendingLocateMessageId(undefined)
           clearActiveSession()
           setMissingAgentSelection(true)
@@ -569,7 +599,10 @@ const AgentPage = () => {
       deleteDuplicateEmptySystemSessions,
       getSessionReuseCandidates,
       invalidateCache,
+      agents,
+      isAgentsLoading,
       resolveCreateWorkspaceSource,
+      setLastUsedAgentId,
       t,
       visibleSession
     ]
@@ -896,7 +929,8 @@ const AgentPage = () => {
         return
       }
       setMissingAgentSelection(false)
-      selectSession(sessionId, session)
+      const rememberedSessionId = resolveRememberedAgentSessionBranch(sessionId)
+      selectSession(rememberedSessionId, rememberedSessionId === sessionId ? session : undefined)
     },
     [closeSurface, reenterAgentRoute, selectSession]
   )
@@ -1113,47 +1147,49 @@ const AgentPage = () => {
   const centerSurface = historyRecordsCenter ?? resourceCenter
 
   return (
-    <Container>
-      <div className="flex min-w-0 flex-1 shrink flex-row overflow-hidden">
-        <AgentChat
-          centerSurface={centerSurface}
-          conversationBootstrap={conversationBootstrap}
-          pane={pane}
-          paneOpen={shellPaneOpen}
-          panePosition="left"
-          onPaneCollapse={() => setShellPaneOpenManually(false)}
-          onPaneAutoCollapseChange={handlePaneAutoCollapseChange}
-          onFileNavigationRequestChange={handleFileNavigationRequestChange}
-          requestFileNavigation={requestFileNavigation}
-          paneManualToggle={paneManualToggle}
-          showResourceListControls={!isMessageOnlyView}
-          sidebarOpen={shellPaneOpen}
-          onSidebarToggle={toggleShellPane}
-          missingAgentSelection={!isMessageOnlyView && missingAgentSelection && !visibleSession}
-          onCreateEmptySession={isMessageOnlyView ? undefined : createAndActivateEmptySession}
-          onMissingAgentSelectionAgentChange={isMessageOnlyView ? undefined : handleMissingAgentSelectionAgentChange}
-          onSessionWorkspaceChange={isMessageOnlyView ? undefined : replaceSessionWorkspace}
-          onVisibleAgentChange={isMessageOnlyView ? undefined : setLastUsedAgentId}
-          onVisibleWorkspaceChange={isMessageOnlyView ? undefined : setLastUsedWorkspaceId}
-          locateMessageId={pendingLocateMessageId}
-          onLocateMessageHandled={handleLocateMessageHandled}
-          selectingMissingAgent={selectingMissingAgent}
-          replacingSessionWorkspace={replacingSessionWorkspace}
-          resourcePane={resourcePane}
-          resourcePaneCount={sessionResourcePaneCount}
-          resourcePaneRevealRequest={sessionRevealRequest}
-          sessionPaneOpen={isClassicSessionLayout ? sessionPaneOpen : undefined}
-          onSessionPaneOpenChange={isClassicSessionLayout ? setSessionPaneOpen : undefined}
-          sessionPaneUserOpenIntentSeq={sessionPaneUserOpenIntentSeq}
-          composerLaunchOptions={composerLaunchOptions}
+    <MessageEditingProvider>
+      <Container>
+        <div className="flex min-w-0 flex-1 shrink flex-row overflow-hidden">
+          <AgentChat
+            centerSurface={centerSurface}
+            conversationBootstrap={conversationBootstrap}
+            pane={pane}
+            paneOpen={shellPaneOpen}
+            panePosition="left"
+            onPaneCollapse={() => setShellPaneOpenManually(false)}
+            onPaneAutoCollapseChange={handlePaneAutoCollapseChange}
+            onFileNavigationRequestChange={handleFileNavigationRequestChange}
+            requestFileNavigation={requestFileNavigation}
+            paneManualToggle={paneManualToggle}
+            showResourceListControls={!isMessageOnlyView}
+            sidebarOpen={shellPaneOpen}
+            onSidebarToggle={toggleShellPane}
+            missingAgentSelection={!isMessageOnlyView && missingAgentSelection && !visibleSession}
+            onCreateEmptySession={isMessageOnlyView ? undefined : createAndActivateEmptySession}
+            onMissingAgentSelectionAgentChange={isMessageOnlyView ? undefined : handleMissingAgentSelectionAgentChange}
+            onSessionWorkspaceChange={isMessageOnlyView ? undefined : replaceSessionWorkspace}
+            onVisibleAgentChange={isMessageOnlyView ? undefined : setLastUsedAgentId}
+            onVisibleWorkspaceChange={isMessageOnlyView ? undefined : setLastUsedWorkspaceId}
+            locateMessageId={pendingLocateMessageId}
+            onLocateMessageHandled={handleLocateMessageHandled}
+            selectingMissingAgent={selectingMissingAgent}
+            replacingSessionWorkspace={replacingSessionWorkspace}
+            resourcePane={resourcePane}
+            resourcePaneCount={sessionResourcePaneCount}
+            resourcePaneRevealRequest={sessionRevealRequest}
+            sessionPaneOpen={isClassicSessionLayout ? sessionPaneOpen : undefined}
+            onSessionPaneOpenChange={isClassicSessionLayout ? setSessionPaneOpen : undefined}
+            sessionPaneUserOpenIntentSeq={sessionPaneUserOpenIntentSeq}
+            composerLaunchOptions={composerLaunchOptions}
+          />
+        </div>
+        <AgentCreateDialog
+          open={agentCreateOpen}
+          onOpenChange={setAgentCreateOpen}
+          onCreated={handleAgentConversationSelect}
         />
-      </div>
-      <AgentCreateDialog
-        open={agentCreateOpen}
-        onOpenChange={setAgentCreateOpen}
-        onCreated={handleAgentConversationSelect}
-      />
-    </Container>
+      </Container>
+    </MessageEditingProvider>
   )
 }
 

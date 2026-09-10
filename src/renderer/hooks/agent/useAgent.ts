@@ -6,7 +6,7 @@
  * configuration) lives here, not on sessions.
  */
 
-import { useInvalidateCache, useMutation, useQuery } from '@renderer/data/hooks/useDataApi'
+import { useDataChange, useInvalidateCache, useMutation, useQuery } from '@renderer/data/hooks/useDataApi'
 import { createAgentAndRefresh } from '@renderer/services/createAgent'
 import { toast } from '@renderer/services/toast'
 import type { AddAgentForm, UpdateAgentBaseOptions, UpdateAgentForm, UpdateAgentFunction } from '@renderer/types/agent'
@@ -45,6 +45,13 @@ export const useAgent = (id: string | null) => {
       keepPreviousData: false
     }
   })
+  useDataChange(
+    '/agents/:agentId',
+    () => {
+      void refetch()
+    },
+    { routeParams: id ? { agentId: id } : undefined }
+  )
   const agent = useMemo((): AgentEntity | undefined => {
     if (!data) return undefined
     return {

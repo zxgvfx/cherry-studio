@@ -17,6 +17,15 @@ export function useLanguageSync(): void {
   const [language] = usePreference('app.language')
 
   useEffect(() => {
-    void i18n.changeLanguage(language || navigator.language || defaultLanguage)
+    const apply = () => {
+      if (!i18n.isInitialized) return
+      void i18n.changeLanguage(language || navigator.language || defaultLanguage)
+    }
+    apply()
+    if (i18n.isInitialized) return
+    i18n.on('initialized', apply)
+    return () => {
+      i18n.off('initialized', apply)
+    }
   }, [language])
 }

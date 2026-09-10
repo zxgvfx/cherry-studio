@@ -95,4 +95,5 @@ export { getMetadataByPath } from './utils/metadata'
 
 // Directory listing primitives. Consumed by legacy IPC directory routes
 // (pending IpcApi migration).
+export { createDirectoryTree } from './tree/builder'
 export { listDirectory, listDirectoryEntries } from './tree/search'

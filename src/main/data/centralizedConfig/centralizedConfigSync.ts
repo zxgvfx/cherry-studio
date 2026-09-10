@@ -60,6 +60,8 @@ interface CentralizedModelDef {
   modality?: string
   protocol?: string
   endpoint_type?: string
+  /** Temporary disable without deleting the catalog entry. Default true. */
+  enabled?: boolean
 }
 
 interface CentralizedProviderDef {
@@ -69,6 +71,8 @@ interface CentralizedProviderDef {
   apiHost: string
   apiKey?: string
   apiKeyMode?: string
+  /** Temporary disable of the whole provider. Default true. */
+  enabled?: boolean
   anthropicCacheControl?: {
     tokenThreshold?: number
     cacheSystemMessage?: boolean
@@ -291,6 +295,20 @@ function normalizeBaseUrl(apiHost: string, endpointType: EndpointType): string {
   return /\/v1$/.test(trimmed) ? trimmed : `${trimmed}/v1`
 }
 
+export function isCentralizedEntryEnabled(value: unknown, defaultValue = true): boolean {
+  if (value === false) return false
+  if (value === true) return true
+  return defaultValue
+}
+
+function centralizedModelStatusPatch(
+  enabled: boolean
+): Pick<UpdateModelDto, 'isEnabled' | 'isHidden' | 'isDeprecated'> {
+  return enabled
+    ? { isEnabled: true, isHidden: false, isDeprecated: false }
+    : { isEnabled: false, isHidden: true, isDeprecated: true }
+}
+
 function buildProviderSettings(provider: CentralizedProviderDef): Partial<ProviderSettings> {
   const settings: Partial<ProviderSettings> = { isCentralized: true }
   if (provider.anthropicCacheControl) {
@@ -356,8 +374,9 @@ function upsertProvider(provider: CentralizedProviderDef, apiKey: string | undef
     }
     providerService.create(dto)
     // create() always persists isEnabled=false; a centralized provider should
-    // be usable immediately without the user visiting settings.
-    providerService.update(provider.id, { isEnabled: true })
+    // be usable immediately without the user visiting settings — unless the
+    // catalog explicitly sets enabled:false (temporary outage / unpaid).
+    providerService.update(provider.id, { isEnabled: isCentralizedEntryEnabled(provider.enabled) })
     logger.info('Created centralized provider', { providerId: provider.id, hasApiKey: Boolean(apiKey) })
     return
   }
@@ -368,7 +387,7 @@ function upsertProvider(provider: CentralizedProviderDef, apiKey: string | undef
     defaultChatEndpoint,
     authConfig: { type: 'api-key' },
     providerSettings,
-    isEnabled: true,
+    isEnabled: isCentralizedEntryEnabled(provider.enabled),
     ...(apiKey ? { apiKeys } : {})
   }
   providerService.update(provider.id, dto)
@@ -379,6 +398,8 @@ function upsertModel(providerId: string, model: CentralizedModelDef): void {
   const modelId = model.modelId || model.id
   const mapping = mapCapabilities(model)
   const endpointTypes = [endpointTypeForModel(model)]
+  const enabled = isCentralizedEntryEnabled(model.enabled)
+  const status = centralizedModelStatusPatch(enabled)
 
   if (!modelExists(providerId, modelId)) {
     const dto: CreateModelDto = {
@@ -392,6 +413,9 @@ function upsertModel(providerId: string, model: CentralizedModelDef): void {
       supportsStreaming: mapping.supportsStreaming
     }
     modelService.create([{ dto }])
+    if (!enabled) {
+      modelService.update(providerId, modelId, status)
+    }
     return
   }
 
@@ -402,9 +426,74 @@ function upsertModel(providerId: string, model: CentralizedModelDef): void {
     outputModalities: mapping.outputModalities,
     endpointTypes,
     supportsStreaming: mapping.supportsStreaming,
-    isEnabled: true
+    ...status
   }
   modelService.update(providerId, modelId, dto)
+}
+
+export function reconcileCentralizedProviderModels(provider: CentralizedProviderDef): void {
+  const configuredModelIds = new Set((provider.models ?? []).map((model) => model.modelId || model.id))
+  const staleModelIds = modelService
+    .list({ providerId: provider.id })
+    .map((model) => model.apiModelId)
+    .filter((modelId): modelId is string => typeof modelId === 'string' && !configuredModelIds.has(modelId))
+
+  for (const modelId of staleModelIds) {
+    try {
+      modelService.delete(provider.id, modelId)
+      logger.info('Deleted stale centralized model', { providerId: provider.id, modelId })
+    } catch (error) {
+      // A model referenced as a default or by another entity cannot be deleted.
+      // Hide it immediately so the authoritative centralized catalog is still
+      // reflected by every model picker, while preserving referential integrity.
+      try {
+        modelService.update(provider.id, modelId, {
+          isEnabled: false,
+          isHidden: true,
+          isDeprecated: true
+        })
+        logger.warn('Disabled stale centralized model because deletion was blocked', {
+          providerId: provider.id,
+          modelId,
+          error
+        })
+      } catch (disableError) {
+        logger.error('Failed to reconcile stale centralized model', {
+          providerId: provider.id,
+          modelId,
+          error,
+          disableError
+        })
+      }
+    }
+  }
+}
+
+export function reconcileRemovedCentralizedProviders(configuredProviderIds: ReadonlySet<string>): void {
+  const removedProviders = providerService
+    .list({})
+    .filter((provider) => provider.settings?.isCentralized && !configuredProviderIds.has(provider.id))
+
+  for (const provider of removedProviders) {
+    try {
+      providerService.delete(provider.id)
+      logger.info('Deleted provider removed from centralized config', { providerId: provider.id })
+    } catch (error) {
+      try {
+        providerService.update(provider.id, { isEnabled: false })
+        logger.warn('Disabled removed centralized provider because deletion was blocked', {
+          providerId: provider.id,
+          error
+        })
+      } catch (disableError) {
+        logger.error('Failed to reconcile removed centralized provider', {
+          providerId: provider.id,
+          error,
+          disableError
+        })
+      }
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -424,6 +513,7 @@ export async function syncCentralizedConfig(): Promise<void> {
   }
 
   const apiKeys = await fetchProvisionedApiKeys()
+  const configuredProviderIds = new Set(config.providers.map((provider) => provider.id))
 
   for (const provider of config.providers) {
     try {
@@ -435,10 +525,12 @@ export async function syncCentralizedConfig(): Promise<void> {
           logger.error('Failed to sync centralized model', { providerId: provider.id, modelId: model.id, error })
         }
       }
+      reconcileCentralizedProviderModels(provider)
     } catch (error) {
       logger.error('Failed to sync centralized provider', { providerId: provider.id, error })
     }
   }
+  reconcileRemovedCentralizedProviders(configuredProviderIds)
 
   logger.info('Centralized config sync complete', {
     providers: config.providers.length,

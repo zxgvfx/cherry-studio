@@ -16,9 +16,10 @@ import {
   ScheduledTaskEntitySchema,
   TimeoutMinutesAtomSchema
 } from '@shared/data/api/schemas/agents'
+import { AgentSessionEntitySchema } from '@shared/data/api/schemas/agentSessions'
 import { AgentSessionWorkspaceSourceSchema } from '@shared/data/api/schemas/agentWorkspaces'
 import { JobScheduleNameAtomSchema, TriggerSchema } from '@shared/data/api/schemas/jobs'
-import { CleanupPolicySchema, type FileEntry, FileEntrySchema } from '@shared/data/types/file'
+import { CleanupPolicySchema, type FileEntry, FileEntryIdSchema, FileEntrySchema } from '@shared/data/types/file'
 import type { CherryMessagePart } from '@shared/data/types/message'
 import { ImageGenerationModeSchema, ModelSchema, UniqueModelIdSchema } from '@shared/data/types/model'
 import { ReasoningEffortOptionSchema } from '@shared/types/aiSdk'
@@ -58,6 +59,13 @@ export const CreateAgentCommandSchema = AgentBaseSchema.extend({
   skillIds: AgentSkillIdSetSchema.optional()
 })
 export type CreateAgentCommand = z.infer<typeof CreateAgentCommandSchema>
+
+export const BranchAgentSessionCommandSchema = z.strictObject({
+  sessionId: z.string().min(1),
+  messageId: z.string().min(1),
+  parts: z.custom<CherryMessagePart[]>((value) => Array.isArray(value))
+})
+export type BranchAgentSessionCommand = z.infer<typeof BranchAgentSessionCommandSchema>
 
 /**
  * Agent scheduled-task command DTOs. The task *command* surface lives here on
@@ -128,6 +136,13 @@ const aiImagePayloadSchema = z.strictObject({
   paramValues: imageParamsSchema,
   /** Attached images / mask are encoded file bytes (data URLs), not form params. */
   inputImages: z.array(z.string()).optional(),
+  /**
+   * Painting already materialized these as FileEntries. Prefer ids over
+   * `inputImages` so the Qt renderer never round-trips PNG bytes through
+   * fetch + base64 (that path corrupts binary and Higress then returns
+   * `invalid_multipart` on `/v1/images/edits`).
+   */
+  inputFileIds: z.array(FileEntryIdSchema).optional(),
   mask: z.string().optional(),
   // Required: the calling business feature decides the cleanup intent for the
   // generated OUTPUT entries (file-entry-cleanup.md §4.1) — main never defaults it.
@@ -281,6 +296,14 @@ export const aiRequestSchemas = {
   'ai.agent.create': defineRoute({
     input: CreateAgentCommandSchema,
     output: AgentEntitySchema
+  }),
+  'ai.agent.session.branch': defineRoute({
+    input: BranchAgentSessionCommandSchema,
+    output: AgentSessionEntitySchema
+  }),
+  'ai.agent.session.branches': defineRoute({
+    input: z.strictObject({ sessionId: z.string().min(1) }),
+    output: z.array(AgentSessionEntitySchema)
   }),
   'ai.agent.support_session.create': defineRoute({
     input: z.void(),

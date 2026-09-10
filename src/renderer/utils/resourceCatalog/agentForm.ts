@@ -4,6 +4,7 @@ import {
   DEFAULT_HEARTBEAT_INTERVAL,
   normalizePermissionMode
 } from '@renderer/utils/agent/permissionMode'
+import { type CocoAgentMode, type CocoAgentPermission, readCocoMode, readCocoPermission } from '@shared/ai/cocoAgent'
 import type { AgentSkillUpdateDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'
 import type { AgentConfiguration } from '@shared/data/types/agent'
 import type { UniqueModelId } from '@shared/data/types/model'
@@ -38,6 +39,8 @@ export interface AgentFormState {
   // configuration.* derived fields we edit in the library UI.
   avatar: string
   permissionMode: string
+  cocoMode: CocoAgentMode
+  cocoPermission: CocoAgentPermission
   /** Raw multi-line `KEY=VALUE` text; parsed at save time. */
   envVarsText: string
   heartbeatEnabled: boolean
@@ -107,6 +110,8 @@ export function buildInitialAgentFormState(agent?: AgentDetail | null, skillIds:
     disabledTools: [...(agent?.disabledTools ?? [])],
     avatar: asString(cfg.avatar),
     permissionMode: asString(cfg.permission_mode),
+    cocoMode: readCocoMode(cfg),
+    cocoPermission: readCocoPermission(cfg),
     envVarsText: envVarsToText(cfg.env_vars),
     heartbeatEnabled: cfg.heartbeat_enabled ?? DEFAULT_HEARTBEAT_ENABLED,
     heartbeatInterval: asNumber(cfg.heartbeat_interval) || DEFAULT_HEARTBEAT_INTERVAL
@@ -192,6 +197,14 @@ export function diffAgentUpdate(baseline: AgentFormState, next: AgentFormState):
   }
   if (baseline.permissionMode !== next.permissionMode) {
     cfgPatch.permission_mode = normalizePermissionMode(next.permissionMode)
+    cfgDirty = true
+  }
+  if (baseline.cocoMode !== next.cocoMode) {
+    cfgPatch.coco_mode = next.cocoMode
+    cfgDirty = true
+  }
+  if (baseline.cocoPermission !== next.cocoPermission) {
+    cfgPatch.coco_permission = next.cocoPermission
     cfgDirty = true
   }
   if (baseline.envVarsText !== next.envVarsText) {

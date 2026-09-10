@@ -154,6 +154,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/renderer/windows/main/index.html'),
           quickAssistant: resolve(__dirname, 'src/renderer/windows/quickAssistant/index.html'),
+          dccPanel: resolve(__dirname, 'src/renderer/windows/dccPanel/index.html'),
           selectionToolbar: resolve(__dirname, 'src/renderer/windows/selection/toolbar/index.html'),
           selectionAction: resolve(__dirname, 'src/renderer/windows/selection/action/index.html'),
           migrationV2: resolve(__dirname, 'src/renderer/windows/migrationV2/index.html'),

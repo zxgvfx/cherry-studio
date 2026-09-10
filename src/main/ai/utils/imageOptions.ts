@@ -1,6 +1,7 @@
 import type { ParamValues } from '@cherrystudio/provider-registry'
 
 import { nativeBindingFor } from './aiSdkNativeBindings'
+import { isOpenAiGptImageModel } from './geminiImageParams'
 
 /** The structured fields + leftover vendor bag split out of a canonical `paramValues` bag. */
 export interface SplitImageParams {
@@ -37,4 +38,20 @@ export function splitParamValues(paramValues: Record<string, unknown>): SplitIma
     }
   }
   return { structured: structured as ParamValues & { n?: number }, vendorBag }
+}
+
+/**
+ * Resolve the wire `size`.
+ *
+ * Painting UI uses `'auto'` to mean "let the server pick". Doubao / Gemini-style
+ * relays reject that sentinel (and a blanket `1024x1024`), so it is omitted for
+ * those models. OpenAI `gpt-image-*` (including NewAPI/Higress `@vapi` edits)
+ * require `size` to be present as `'auto'` or `WxH` — omitting it 500s with
+ * "请传递 size 参数，支持 auto 或具体图片宽高".
+ */
+export function resolveImageRequestSize(size: string | undefined, modelId: string): string | undefined {
+  if (isOpenAiGptImageModel(modelId)) {
+    return !size || size === 'auto' ? 'auto' : size
+  }
+  return size === 'auto' ? undefined : size
 }

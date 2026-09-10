@@ -551,19 +551,28 @@ vi.mock('../components/AgentChatNavbar', () => ({
 vi.mock('@renderer/components/composer/variants/AgentComposer', () => ({
   default: ({
     compactWhenSingleLine,
+    onCreateEmptySession,
     sendDisabled,
     sessionId
   }: {
     compactWhenSingleLine?: boolean
+    onCreateEmptySession?: () => void
     sendDisabled?: boolean
     sessionId?: string
   }) => (
-    <div
-      data-testid="agent-composer"
-      data-compact-when-single-line={String(Boolean(compactWhenSingleLine))}
-      data-send-disabled={String(Boolean(sendDisabled))}
-      data-session-id={sessionId}
-    />
+    <>
+      <div
+        data-testid="agent-composer"
+        data-compact-when-single-line={String(Boolean(compactWhenSingleLine))}
+        data-send-disabled={String(Boolean(sendDisabled))}
+        data-session-id={sessionId}
+      />
+      {onCreateEmptySession ? (
+        <button type="button" onClick={onCreateEmptySession}>
+          create empty session
+        </button>
+      ) : null}
+    </>
   ),
   AgentHomeComposer: ({ sendMessage }: { sendMessage?: (message: { text: string }) => Promise<void> | void }) => (
     <button type="button" data-testid="agent-home-composer" onClick={() => void sendMessage?.({ text: 'hello' })}>
@@ -746,6 +755,37 @@ describe('AgentChat artifact pane', () => {
     expect(screen.getByTestId('artifact-right-pane')).toHaveAttribute('data-open', 'false')
     expect(document.querySelector('[data-shell-tab-shortcut="files"]')).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByTestId('session-pane')).toBeInTheDocument()
+  })
+
+  it('unmounts the canvas and closes the pane before creating a new session', () => {
+    vi.useFakeTimers()
+    const onCreateEmptySession = vi.fn()
+    const onSessionPaneOpenChange = vi.fn()
+    const onCanvasTransition = vi.fn()
+    window.addEventListener('cherry:canvas-session-transition', onCanvasTransition)
+    try {
+      renderAgentChat({
+        sessionPaneOpen: true,
+        onSessionPaneOpenChange,
+        onCreateEmptySession
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'create empty session' }))
+
+      expect(onCanvasTransition).toHaveBeenCalledTimes(1)
+      expect(onSessionPaneOpenChange).toHaveBeenCalledWith(false)
+      expect(onCreateEmptySession).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(550)
+
+      expect(onCreateEmptySession).toHaveBeenCalledWith({
+        agentId: 'agent-1',
+        workspaceId: 'workspace-1'
+      })
+    } finally {
+      window.removeEventListener('cherry:canvas-session-transition', onCanvasTransition)
+      vi.useRealTimers()
+    }
   })
 
   it('maximizes the persistent viewport without replacing its pane subtree', () => {

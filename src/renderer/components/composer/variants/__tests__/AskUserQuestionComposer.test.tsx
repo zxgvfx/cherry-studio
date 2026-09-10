@@ -15,6 +15,8 @@ vi.mock('react-i18next', async (importOriginal) => ({
           'agent.askUserQuestion.close': 'Close',
           'agent.askUserQuestion.customPlaceholder': 'Enter your answer...',
           'agent.askUserQuestion.next': 'Next',
+          'agent.askUserQuestion.other': 'Other',
+          'agent.askUserQuestion.otherDescription': 'Type your own answer',
           'agent.askUserQuestion.previous': 'Previous',
           'agent.askUserQuestion.skip': 'Skip',
           'agent.askUserQuestion.submit': 'Submit'
@@ -42,12 +44,14 @@ const questions = [
   }
 ]
 
-function makeRequest(): AskUserQuestionComposerRequest {
+function makeRequest(
+  requestQuestions: AskUserQuestionComposerRequest['input']['questions'] = questions
+): AskUserQuestionComposerRequest {
   const part = {
     type: 'tool-AskUserQuestion',
     toolCallId: 'call-1',
     state: 'approval-requested',
-    input: { questions },
+    input: { questions: requestQuestions },
     approval: { id: 'approval-1' }
   } as unknown as CherryMessagePart
 
@@ -55,14 +59,14 @@ function makeRequest(): AskUserQuestionComposerRequest {
     messageId: 'message-1',
     toolCallId: 'call-1',
     approvalId: 'approval-1',
-    input: { questions },
+    input: { questions: requestQuestions },
     match: {
       part,
       state: 'approval-requested',
       toolCallId: 'call-1',
       messageId: 'message-1',
       approvalId: 'approval-1',
-      input: { questions }
+      input: { questions: requestQuestions }
     }
   }
 }
@@ -131,6 +135,66 @@ describe('AskUserQuestionComposer', () => {
         questions,
         answers: {
           'Add context': 'Bunyan'
+        }
+      }
+    })
+  })
+
+  it('wraps the full question text instead of clamping it to one line', () => {
+    const question =
+      '你点名了 /model.text-to-image (model=gpt-image-2@rc, provider_id=coco-rightcode) ，但消息里"提示词："后面是空的。请补充提示词，或选择继续/取消。'
+    render(
+      <AskUserQuestionComposer
+        request={makeRequest([
+          {
+            question,
+            header: '请选择',
+            options: [{ label: '继续' }, { label: '取消' }],
+            multiSelect: false
+          }
+        ])}
+        onRespond={vi.fn()}
+      />
+    )
+
+    const heading = screen.getByRole('heading', { name: question })
+    expect(heading).toHaveTextContent(question)
+    expect(heading.className).not.toMatch(/line-clamp-1/)
+    expect(heading.className).toMatch(/whitespace-pre-wrap/)
+  })
+
+  it('adds a free-text option that focuses the input without auto-submitting', async () => {
+    const onRespond = vi.fn().mockResolvedValue(undefined)
+    const requestQuestions = [
+      {
+        question: '提示词为空，怎么处理？',
+        header: '请选择',
+        options: [{ label: '继续' }, { label: '取消' }],
+        multiSelect: false
+      }
+    ]
+    render(<AskUserQuestionComposer request={makeRequest(requestQuestions)} onRespond={onRespond} />)
+
+    const other = screen.getByRole('button', { name: /Other/ })
+    fireEvent.click(other)
+
+    expect(other).toHaveAttribute('aria-pressed', 'true')
+    expect(onRespond).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByPlaceholderText('Enter your answer...')).toHaveFocus())
+
+    fireEvent.change(screen.getByPlaceholderText('Enter your answer...'), {
+      target: { value: '提示词：一只红色的狐狸' }
+    })
+    fireEvent.click(screen.getByText('Submit'))
+
+    await waitFor(() => expect(onRespond).toHaveBeenCalledTimes(1))
+    expect(onRespond).toHaveBeenCalledWith({
+      match: makeRequest(requestQuestions).match,
+      approved: true,
+      updatedInput: {
+        questions: requestQuestions,
+        answers: {
+          '提示词为空，怎么处理？': '提示词：一只红色的狐狸'
         }
       }
     })

@@ -26,6 +26,10 @@ export const SessionNameEntitySchema = z.string().max(255)
 
 export const AgentSessionEntitySchema = z.strictObject({
   id: z.string(),
+  /** Parent Agent session when this row is a conversation/canvas branch. */
+  branchParentId: z.string().optional(),
+  /** Source user message replaced when this branch was created. */
+  branchPointMessageId: z.string().optional(),
   agentId: z.string().nullable(),
   /** May be empty for an untitled placeholder session, matching topic.name semantics. */
   name: SessionNameEntitySchema,

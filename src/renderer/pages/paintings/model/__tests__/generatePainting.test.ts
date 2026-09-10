@@ -19,7 +19,8 @@ import { generatePainting } from '../generatePainting'
 
 function makeOptions(
   paramValues: Record<string, unknown> = {},
-  signal: AbortSignal = new AbortController().signal
+  signal: AbortSignal = new AbortController().signal,
+  extra: Partial<GeneratePaintingOptions> = {}
 ): GeneratePaintingOptions {
   return {
     provider: {
@@ -32,7 +33,8 @@ function makeOptions(
     signal,
     modelId: 'gpt-image-1',
     prompt: 'a fox',
-    paramValues
+    paramValues,
+    ...extra
   }
 }
 
@@ -75,6 +77,18 @@ describe('generatePainting', () => {
     const payload = imagePayload()
     expect((payload as { paramValues: Record<string, unknown> }).paramValues).toEqual({ size: '1024x1024' })
     expect(payload).not.toHaveProperty('size')
+  })
+
+  it('forwards inputFileIds and omits renderer-encoded inputImages', async () => {
+    await generatePainting(
+      makeOptions({ size: '1024x1024' }, new AbortController().signal, {
+        inputFileIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']
+      })
+    )
+
+    const payload = imagePayload()
+    expect(payload.inputFileIds).toEqual(['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'])
+    expect(payload).not.toHaveProperty('inputImages')
   })
 
   // A provider failure now crosses IpcApi as an IpcError (name 'IpcError'), which no longer

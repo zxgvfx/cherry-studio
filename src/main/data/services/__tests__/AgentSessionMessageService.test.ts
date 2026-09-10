@@ -10,6 +10,7 @@ import { userProviderTable } from '@data/db/schemas/userProvider'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { aiUsageRecordService } from '@data/services/AiUsageRecordService'
 import { createAiUsageCaptureContext } from '@main/ai/utils/usageCapture'
+import type { CherryMessagePart } from '@shared/data/types/message'
 import { setupTestDatabase } from '@test-helpers/db'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,6 +72,58 @@ describe('AgentSessionMessageService', () => {
 
     expect(agentSessionMessageService.hasSessionMessages(SESSION_ID)).toBe(true)
     expect(agentSessionMessageService.hasSessionMessages('session-2')).toBe(false)
+  })
+
+  it('copies only history before an edited user message into a new branch', async () => {
+    await seedSession({ id: 'session-branch', name: 'Branch', orderKey: 'a1' })
+    const now = vi.spyOn(Date, 'now')
+    now.mockReturnValueOnce(100)
+    agentSessionMessageService.saveMessage({
+      sessionId: SESSION_ID,
+      message: {
+        id: USER_MESSAGE_ID,
+        role: 'user',
+        status: 'success',
+        data: { parts: [{ type: 'text', text: 'first request' }] }
+      }
+    })
+    now.mockReturnValueOnce(200)
+    agentSessionMessageService.saveMessage({
+      sessionId: SESSION_ID,
+      message: {
+        id: ASSISTANT_MESSAGE_ID,
+        role: 'assistant',
+        status: 'success',
+        data: { parts: [{ type: 'text', text: 'first response' }] }
+      }
+    })
+    const editedMessageId = '018f6ed6-73b8-7f40-8d0d-9bb2f8f1d004'
+    now.mockReturnValueOnce(300)
+    agentSessionMessageService.saveMessage({
+      sessionId: SESSION_ID,
+      message: {
+        id: editedMessageId,
+        role: 'user',
+        status: 'success',
+        data: { parts: [{ type: 'text', text: 'wrong request' }] }
+      }
+    })
+
+    const result = agentSessionMessageService.branchSessionMessages(SESSION_ID, editedMessageId, 'session-branch')
+
+    const branch = agentSessionMessageService.listSessionMessages('session-branch', { limit: 10 }).items.reverse()
+    expect(result.priorUserTurns).toBe(1)
+    expect(branch.map((message) => message.role)).toEqual(['user', 'assistant'])
+    expect(
+      branch.map((message) =>
+        message.data.parts?.find((part): part is Extract<CherryMessagePart, { type: 'text' }> => part.type === 'text')
+      )
+    ).toEqual([expect.objectContaining({ text: 'first request' }), expect.objectContaining({ text: 'first response' })])
+    expect(
+      agentSessionMessageService
+        .listSessionMessages(SESSION_ID, { limit: 10 })
+        .items.some((message) => message.id === editedMessageId)
+    ).toBe(true)
   })
 
   describe('findCrashOrphanedAssistantMessages + resolveCrashOrphanedMessages (boot reconcile)', () => {

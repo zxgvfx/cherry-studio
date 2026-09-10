@@ -9,69 +9,6 @@ import { generatePainting } from './generatePainting'
 import type { GenerateInput } from './types/generateInput'
 import type { PaintingData } from './types/paintingData'
 
-/** Encode raw image bytes as a `data:` URL for the main-process image IPC. */
-function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
-  let binary = ''
-  const chunkSize = 0x8000
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
-  }
-  return `data:${mime || 'image/png'};base64,${btoa(binary)}`
-}
-
-async function blobToDataUrl(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer()
-  return bytesToDataUrl(new Uint8Array(buffer), blob.type || 'image/png')
-}
-
-/**
- * Load one edit-input image as a `data:` URL.
- *
- * Qt embeds Cherry over HTTP and bridges `binaryImage` through JSON. That path
- * returns a data-URL *string* in `data` (unlike Electron's `Buffer`), and
- * `new Uint8Array(string)` allocates one byte per character — multi-image edits
- * then OOM the QWebEngine renderer (window stays open, page goes white). Prefer
- * `getPhysicalPath` + `/files/raw-image` binary fetch when a backend URL is
- * injected; only fall back to `binaryImage` with shape-tolerant decoding.
- */
-async function loadInputImageDataUrl(entry: { id: string; ext?: string | null }): Promise<string> {
-  const runtimeWindow = window as Window & { __CHERRY_BACKEND_URL?: string }
-  const backendUrl = runtimeWindow.__CHERRY_BACKEND_URL?.replace(/\/$/, '')
-  if (backendUrl) {
-    const physicalPath = await window.api.file.getPhysicalPath({ id: entry.id as never })
-    const response = await fetch(
-      `${backendUrl}/api/v1/files/raw-image?path=${encodeURIComponent(String(physicalPath))}`
-    )
-    if (!response.ok) {
-      throw createPaintingGenerateError('IMAGE_RETRY_REQUIRED')
-    }
-    return blobToDataUrl(await response.blob())
-  }
-
-  const onDiskName = `${entry.id}${entry.ext ? `.${entry.ext}` : ''}`
-  const result = await window.api.file.binaryImage(onDiskName)
-  if (!result) {
-    throw createPaintingGenerateError('IMAGE_RETRY_REQUIRED')
-  }
-
-  const mime = typeof result.mime === 'string' && result.mime ? result.mime : 'image/png'
-  const raw = result.data as unknown
-  if (typeof raw === 'string') {
-    if (raw.startsWith('data:')) return raw
-    return `data:${mime};base64,${raw}`
-  }
-  if (raw instanceof ArrayBuffer) {
-    return bytesToDataUrl(new Uint8Array(raw), mime)
-  }
-  if (ArrayBuffer.isView(raw)) {
-    return bytesToDataUrl(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength), mime)
-  }
-  if (Array.isArray(raw)) {
-    return bytesToDataUrl(Uint8Array.from(raw), mime)
-  }
-  throw createPaintingGenerateError('IMAGE_RETRY_REQUIRED')
-}
-
 export interface CanonicalGenerateOptions<T extends PaintingData> {
   /**
    * Throw a vendor-specific validation error before the generate call
@@ -174,13 +111,10 @@ export async function canonicalGenerate<T extends PaintingData>(
     }
   }
 
-  // 4. Pre-fetch attached image bytes (encoded as `data:` URLs for the IPC),
-  //    carried separately from `paramValues` — they're encoded files, not form
-  //    params. The vendor image-model adapter picks the right edit endpoint.
-  const inputImages =
-    inputImageFiles.length > 0
-      ? await Promise.all(inputImageFiles.map((entry) => loadInputImageDataUrl(entry)))
-      : undefined
+  // 4. Pass attached image FileEntry ids — main reads the bytes from disk.
+  //    Do not fetch/base64 in the Qt renderer: that round-trip corrupts PNG
+  //    and NewAPI then rejects `/v1/images/edits` as `invalid_multipart`.
+  const inputFileIds = inputImageFiles.map((entry) => entry.id)
 
   return generatePainting({
     provider,
@@ -189,6 +123,6 @@ export async function canonicalGenerate<T extends PaintingData>(
     prompt,
     ...(options.mode && { mode: options.mode }),
     paramValues,
-    ...(inputImages && { inputImages })
+    ...(inputFileIds.length > 0 && { inputFileIds })
   })
 }

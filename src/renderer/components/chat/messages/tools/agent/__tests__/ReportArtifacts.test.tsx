@@ -13,6 +13,8 @@ vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof ReactI18next>()),
   useTranslation: () => ({
     t: (key: string) => {
+      if (key === 'common.collapse') return 'Collapse'
+      if (key === 'common.loading') return 'Loading'
       if (key === 'common.preview') return 'Preview'
       if (key === 'common.copied') return 'Copied'
       if (key === 'common.copy') return 'Copy'
@@ -20,6 +22,11 @@ vi.mock('react-i18next', async (importOriginal) => ({
       if (key === 'chat.input.tools.open_file_error') return 'Failed to open file'
       if (key === 'chat.input.tools.open_with') return 'Open with'
       if (key === 'chat.input.tools.file_not_found') return 'File not found'
+      if (key === 'agent.session.artifact.drag_hint') return 'Drag to Houdini / desktop'
+      if (key === 'agent.session.artifact.drag_to_dcc') return 'Drag to DCC'
+      if (key === 'agent.session.artifact.load_3d_preview') return 'Click to load 3D preview'
+      if (key === 'agent.session.artifact.open_in_pane') return 'Open in file pane'
+      if (key === 'agent.session.artifact.preview_unsupported') return 'Preview not supported'
       if (key === 'agent.session.file_manager.finder') return 'Finder'
       return key
     }
@@ -28,6 +35,10 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@iconify/react', () => ({
   Icon: ({ icon }: { icon: string }) => <span data-icon={icon} />
+}))
+
+vi.mock('@renderer/components/FilePreview/plugins/model3d/GLBViewer', () => ({
+  default: ({ src }: { src: string }) => <div data-testid="glb-viewer" data-src={src} />
 }))
 
 vi.mock('@renderer/utils/platform', () => ({
@@ -82,9 +93,65 @@ describe('MessageReportArtifacts', () => {
     )
 
     expect(screen.getByRole('button', { name: 'Preview report.md' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Drag to DCC' })).toBeInTheDocument()
+    expect(screen.getByTestId('artifact-preview-toggle')).toHaveTextContent('Preview')
     expect(screen.getByText('report.md')).toBeInTheDocument()
     expect(screen.queryByText('Created final outputs')).toBeNull()
     expect(screen.queryByText('- Report')).toBeNull()
+  })
+
+  it('shows a logical artifact filename instead of its UUID cache filename', () => {
+    renderWithProvider(
+      <MessageReportArtifacts
+        toolResponses={[
+          {
+            id: 'tool-call-model',
+            toolCallId: 'tool-call-model',
+            tool: { id: 'report-artifacts', name: 'report_artifacts', type: 'builtin' },
+            status: 'done',
+            arguments: {
+              artifacts: [
+                {
+                  path: 'C:\\cache\\d449d79f-a38b-45f8-a242-a1b68366447f',
+                  description: 'model.glb'
+                }
+              ]
+            }
+          } as NormalToolResponse
+        ]}
+      />
+    )
+
+    expect(screen.getByText('model.glb')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Preview model.glb' })).toBeInTheDocument()
+    expect(screen.queryByText('d449d79f-a38b-45f8-a242-a1b68366447f')).toBeNull()
+  })
+
+  it('disambiguates repeated model.glb cards from the same run', () => {
+    renderWithProvider(
+      <MessageReportArtifacts
+        toolResponses={[
+          {
+            id: 'tool-call-models',
+            toolCallId: 'tool-call-models',
+            tool: { id: 'report-artifacts', name: 'report_artifacts', type: 'builtin' },
+            status: 'done',
+            arguments: {
+              artifacts: [
+                { path: 'C:\\cache\\a__model.glb', description: 'model.glb' },
+                { path: 'C:\\cache\\b__model.glb', description: 'model.glb' },
+                { path: 'C:\\cache\\c__model.glb', description: 'model.glb' }
+              ]
+            }
+          } as NormalToolResponse
+        ]}
+      />
+    )
+
+    expect(screen.getByText('几何模型.glb')).toBeInTheDocument()
+    expect(screen.getByText('贴图模型.glb')).toBeInTheDocument()
+    expect(screen.getByText('分割模型.glb')).toBeInTheDocument()
+    expect(screen.queryAllByText('model.glb')).toHaveLength(0)
   })
 
   it('uses the latest declaration for duplicate artifact paths', () => {
@@ -121,7 +188,7 @@ describe('MessageReportArtifacts', () => {
     expect(screen.queryByText('- Draft')).toBeNull()
   })
 
-  it('previews on card click and opens externally from the open-with menu', async () => {
+  it('expands an inline preview instead of opening the file', async () => {
     const openArtifactFile = vi.fn().mockResolvedValue(undefined)
     const openPath = vi.fn().mockResolvedValue(undefined)
 
@@ -134,7 +201,7 @@ describe('MessageReportArtifacts', () => {
             tool: { id: 'report-artifacts', name: 'report_artifacts', type: 'builtin' },
             status: 'done',
             arguments: {
-              artifacts: [{ path: 'dist/report.md' }]
+              artifacts: [{ path: '/tmp/style.png' }]
             }
           } as NormalToolResponse
         ]}
@@ -142,15 +209,78 @@ describe('MessageReportArtifacts', () => {
       { openArtifactFile, openPath }
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preview report.md' }))
-    await waitFor(() => {
-      expect(openArtifactFile).toHaveBeenCalledWith('dist/report.md')
-    })
+    fireEvent.click(screen.getByTestId('artifact-preview-toggle'))
+    expect(openArtifactFile).not.toHaveBeenCalled()
+    expect(openPath).not.toHaveBeenCalled()
+    expect(screen.getByTestId('artifact-inline-preview')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'style.png' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open with report.md' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open with style.png' }))
     fireEvent.click(screen.getByRole('button', { name: 'Open File' }))
     await waitFor(() => {
-      expect(openPath).toHaveBeenCalledWith('dist/report.md')
+      expect(openPath).toHaveBeenCalledWith('/tmp/style.png')
+    })
+  })
+
+  it('does not mount the GLB viewer until the user confirms 3D preview', async () => {
+    const openArtifactFile = vi.fn()
+
+    renderWithProvider(
+      <MessageReportArtifacts
+        toolResponses={[
+          {
+            id: 'tool-call-1',
+            toolCallId: 'tool-call-1',
+            tool: { id: 'report-artifacts', name: 'report_artifacts', type: 'builtin' },
+            status: 'done',
+            arguments: {
+              artifacts: [{ path: '/tmp/result.glb' }]
+            }
+          } as NormalToolResponse
+        ]}
+      />,
+      { openArtifactFile }
+    )
+
+    fireEvent.click(screen.getByTestId('artifact-preview-toggle'))
+    expect(openArtifactFile).not.toHaveBeenCalled()
+    expect(screen.getByTestId('artifact-inline-preview')).toBeInTheDocument()
+    expect(screen.queryByTestId('glb-viewer')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Click to load 3D preview' }))
+    expect(await screen.findByTestId('glb-viewer')).toBeInTheDocument()
+
+    // Collapsing must unmount the viewer so its WebGL context is released.
+    fireEvent.click(screen.getByTestId('artifact-preview-toggle'))
+    expect(screen.queryByTestId('artifact-inline-preview')).toBeNull()
+    expect(screen.queryByTestId('glb-viewer')).toBeNull()
+  })
+
+  it('unmounts a loaded GLB viewer when the host asks to release WebGL', async () => {
+    renderWithProvider(
+      <MessageReportArtifacts
+        toolResponses={[
+          {
+            id: 'tool-call-1',
+            toolCallId: 'tool-call-1',
+            tool: { id: 'report-artifacts', name: 'report_artifacts', type: 'builtin' },
+            status: 'done',
+            arguments: {
+              artifacts: [{ path: '/tmp/result.glb' }]
+            }
+          } as NormalToolResponse
+        ]}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('artifact-preview-toggle'))
+    fireEvent.click(screen.getByRole('button', { name: 'Click to load 3D preview' }))
+    expect(await screen.findByTestId('glb-viewer')).toBeInTheDocument()
+
+    window.dispatchEvent(new Event('coco:release-webgl'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('glb-viewer')).toBeNull()
+      expect(screen.queryByTestId('artifact-inline-preview')).toBeNull()
     })
   })
 
@@ -177,9 +307,8 @@ describe('MessageReportArtifacts', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Preview report.html' }))
-    await waitFor(() => {
-      expect(openArtifactFile).toHaveBeenCalledWith('/Users/alice/Desktop/report.html')
-    })
+    expect(openArtifactFile).not.toHaveBeenCalled()
+    expect(screen.getByTestId('artifact-inline-preview')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open with report.html' }))
     fireEvent.click(screen.getByRole('button', { name: 'Open File' }))
@@ -211,8 +340,7 @@ describe('MessageReportArtifacts', () => {
     )
 
     const previewButton = screen.getByRole('button', { name: 'Preview report.md' })
-    expect(previewButton).toHaveAttribute('aria-disabled', 'true')
-    expect(previewButton).not.toBeDisabled()
+    expect(previewButton).toHaveAttribute('aria-expanded', 'false')
 
     const openContextMenu = () => fireEvent.contextMenu(screen.getByText('report.md'))
     const contextMenu = () => within(screen.getByTestId('context-menu-content'))

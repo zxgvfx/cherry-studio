@@ -59,6 +59,7 @@ const headerCapabilitiesMock = vi.hoisted(() => ({
 }))
 const openRouteMock = vi.hoisted(() => vi.fn())
 const ipcApiRequest = vi.hoisted(() => vi.fn())
+const messageEditingMock = vi.hoisted(() => ({ startEditing: vi.fn() }))
 const eventMocks = vi.hoisted(() => ({
   emit: vi.fn(),
   on: vi.fn(() => vi.fn()),
@@ -68,6 +69,10 @@ const eventMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@renderer/ipc', () => ({ ipcApi: { request: ipcApiRequest } }))
+
+vi.mock('@renderer/components/chat/editing/MessageEditingContext', () => ({
+  useMessageEditing: () => messageEditingMock
+}))
 
 vi.mock('@data/hooks/useCache', () => ({
   useCache: (key: string) => {
@@ -190,7 +195,7 @@ describe('useAgentMessageListProviderValue', () => {
     })
   })
 
-  it('adapts CherryUIMessage input and injects supported agent capabilities', () => {
+  it('adapts CherryUIMessage input and injects supported agent capabilities', async () => {
     const topic = {
       id: 'agent-session-topic',
       assistantId: 'agent-1',
@@ -275,7 +280,8 @@ describe('useAgentMessageListProviderValue', () => {
     expect(value?.actions.saveSelectedMessages).toEqual(expect.any(Function))
     expect(value?.actions.deleteSelectedMessages).toEqual(expect.any(Function))
     expect(value?.actions.regenerateMessage).toBeUndefined()
-    expect(value?.actions.editMessage).toBeUndefined()
+    expect(value?.actions.editMessage).toEqual(expect.any(Function))
+    expect(value?.actions.startEditing).toBe(messageEditingMock.startEditing)
     expect(value?.actions.saveTextFile).toBe(exportActionsMock.saveTextFile)
     expect(value?.actions.saveImage).toBe(exportActionsMock.saveImage)
     expect(value?.actions.saveToKnowledge).toBe(exportActionsMock.saveToKnowledge)
@@ -318,6 +324,16 @@ describe('useAgentMessageListProviderValue', () => {
     expect(value?.actions.bindMessageRuntime).toEqual(expect.any(Function))
     expect(value?.actions.bindMessageGroupRuntime).toEqual(expect.any(Function))
     expect(value?.actions.locateMessage).toEqual(expect.any(Function))
+
+    ipcApiRequest.mockResolvedValueOnce({ id: 'session-branch-1' })
+    const editedParts = [{ type: 'text' as const, text: 'corrected request' }]
+    await value?.actions.editMessage?.('user-1', editedParts)
+    expect(ipcApiRequest).toHaveBeenCalledWith('ai.agent.session.branch', {
+      sessionId: 'agent-session-topic',
+      messageId: 'user-1',
+      parts: editedParts
+    })
+    expect(openRouteMock).toHaveBeenCalledWith('/app/agents', { sessionId: 'session-branch-1' })
 
     void value?.actions.openPath?.('dist/report.md')
     expect(window.api.file.openPath).toHaveBeenCalledWith('/tmp/workspace/dist/report.md')

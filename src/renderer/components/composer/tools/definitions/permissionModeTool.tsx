@@ -20,6 +20,7 @@ const usePermissionModeToolController = (context: PermissionModeContext) => {
   // solely by the permission mode (the per-tool allow-list was removed).
   const currentMode = agent?.configuration?.permission_mode ?? 'default'
   const permissionModeCards = useMemo(() => getPermissionModeCards(agent?.type), [agent?.type])
+  const isCocoAgent = agent?.type === 'coco'
 
   const handleSelectMode = useCallback(
     (nextMode: PermissionMode) => {
@@ -66,6 +67,7 @@ const usePermissionModeToolController = (context: PermissionModeContext) => {
   )
 
   useEffect(() => {
+    if (isCocoAgent) return undefined
     return launcher.registerLaunchers([
       {
         ...PERMISSION_MODE_TOOLBAR_MANIFEST.toolbar,
@@ -77,7 +79,7 @@ const usePermissionModeToolController = (context: PermissionModeContext) => {
         submenu: modeSubmenu
       }
     ])
-  }, [currentMode, launcher, modeSubmenu, t, tooltipTitle])
+  }, [currentMode, isCocoAgent, launcher, modeSubmenu, t, tooltipTitle])
 
   return { currentMode, tooltipTitle }
 }

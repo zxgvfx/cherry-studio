@@ -47,6 +47,7 @@ Each window declares its logger source **declaratively** in its `index.html`, no
 | `main` | `MainApp` | `components/layout/AppShell` (shared) |
 | `subWindow` | `SubWindowApp` | `SubWindowAppShell` |
 | `quickAssistant` | `QuickAssistantApp` | `HomeWindow` |
+| `dccPanel` | `DccPanelApp` | `DccPanel`（暗色轻量对话 + 画布；不挂 Cherry AgentPage） |
 | `migrationV2` | `MigrationApp` | in-component (`components/`) |
 | `userDataRelocation` | `RelocationApp` | in-component progress/recovery UI |
 | `selection/action` | `SelectionActionApp` | `ActionWindow` |

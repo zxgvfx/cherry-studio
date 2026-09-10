@@ -23,7 +23,7 @@ export default function AiPipelinePage() {
         title="AI Pipeline"
         src={src}
         className="h-full min-h-0 w-full flex-1 border-0 bg-background"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads allow-modals"
         allow="clipboard-read; clipboard-write; fullscreen"
       />
     </div>

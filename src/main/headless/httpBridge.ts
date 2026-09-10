@@ -514,11 +514,13 @@ function createHttpSseListener(res: ServerResponse, id: string, topicId: string)
   const emitChunk = (
     chunk: Parameters<StreamListener['onChunk']>[0],
     sourceModelId?: Parameters<StreamListener['onChunk']>[1],
-    anchorMessageId?: Parameters<StreamListener['onChunk']>[2]
+    anchorMessageId?: Parameters<StreamListener['onChunk']>[2],
+    attemptId?: Parameters<StreamListener['onChunk']>[3]
   ) => {
     publishHeadlessEvent('ai.stream.chunk', {
       topicId,
       executionId: sourceModelId,
+      attemptId: attemptId ?? 1,
       anchorMessageId,
       chunk: projectStreamChunkForRenderer(chunk, topicId, anchorMessageId)
     })
@@ -540,14 +542,16 @@ function createHttpSseListener(res: ServerResponse, id: string, topicId: string)
   })
   return {
     id,
-    onChunk: (chunk, sourceModelId, anchorMessageId) => {
-      if (!closed) coalescer.push(chunk, sourceModelId, anchorMessageId)
+    onChunk: (chunk, sourceModelId, anchorMessageId, attemptId) => {
+      if (!closed) coalescer.push(chunk, sourceModelId, anchorMessageId, attemptId)
     },
     onDone: (result) => {
       coalescer.flush()
       publishHeadlessEvent('ai.stream.done', {
         topicId,
         executionId: result.modelId,
+        attemptId: result.attemptId ?? 1,
+        ...(result.topicAttemptWatermark !== undefined ? { topicAttemptWatermark: result.topicAttemptWatermark } : {}),
         anchorMessageId: result.anchorMessageId,
         status: result.status,
         isTopicDone: result.isTopicDone
@@ -559,6 +563,8 @@ function createHttpSseListener(res: ServerResponse, id: string, topicId: string)
       publishHeadlessEvent('ai.stream.done', {
         topicId,
         executionId: result.modelId,
+        attemptId: result.attemptId ?? 1,
+        ...(result.topicAttemptWatermark !== undefined ? { topicAttemptWatermark: result.topicAttemptWatermark } : {}),
         anchorMessageId: result.anchorMessageId,
         status: result.status,
         isTopicDone: result.isTopicDone
@@ -570,6 +576,8 @@ function createHttpSseListener(res: ServerResponse, id: string, topicId: string)
       publishHeadlessEvent('ai.stream.error', {
         topicId,
         executionId: result.modelId,
+        attemptId: result.attemptId ?? 1,
+        ...(result.topicAttemptWatermark !== undefined ? { topicAttemptWatermark: result.topicAttemptWatermark } : {}),
         anchorMessageId: result.anchorMessageId,
         isTopicDone: result.isTopicDone,
         error: result.error

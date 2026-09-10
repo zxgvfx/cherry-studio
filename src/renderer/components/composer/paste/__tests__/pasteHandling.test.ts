@@ -168,6 +168,91 @@ describe('pasteHandling', () => {
     })
   })
 
+  // Qt/WebEngine has no webUtils.getPathForFile, so every pasted file arrives
+  // pathless — gating this branch on image/* made pdf/video/audio unpasteable.
+  it('materializes a pasted document the host exposes without a path', async () => {
+    const tempPdfFile: FileMetadata = {
+      ...selectedFile,
+      name: 'report.pdf',
+      origin_name: 'report.pdf',
+      path: '/tmp/report.pdf',
+      ext: '.pdf',
+      type: FILE_TYPE.DOCUMENT
+    }
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46])
+    const clipboardPdf = {
+      name: 'report.pdf',
+      type: 'application/pdf',
+      arrayBuffer: vi.fn().mockResolvedValue(pdfBytes.buffer)
+    } as unknown as File
+    vi.mocked(window.api.file.createTempFile).mockResolvedValue(tempPdfFile.path)
+    vi.mocked(window.api.file.get).mockResolvedValue(tempPdfFile)
+
+    let files: ComposerAttachment[] = []
+    const setFiles = vi.fn((updater: (prevFiles: ComposerAttachment[]) => ComposerAttachment[]) => {
+      files = updater(files)
+    })
+    const event = {
+      preventDefault: vi.fn(),
+      clipboardData: {
+        getData: () => '',
+        files: [clipboardPdf]
+      }
+    } as unknown as ClipboardEvent
+
+    const handled = await pasteHandling.handlePaste(event, ['.pdf'], setFiles)
+
+    expect(handled).toBe(true)
+    expect(window.api.file.createTempFile).toHaveBeenCalledWith('report.pdf')
+    expect(window.api.file.write).toHaveBeenCalledWith('/tmp/report.pdf', pdfBytes)
+    expect(files).toHaveLength(1)
+    // 扩展名必须保留：下游拿 filename 推断 MIME
+    expect(files[0]).toMatchObject({
+      path: tempPdfFile.path,
+      origin_name: 'report.pdf',
+      ext: '.pdf',
+      type: FILE_TYPE.DOCUMENT
+    })
+  })
+
+  it('keeps collecting the remaining clipboard files after a pathless document', async () => {
+    const firstPdf = {
+      name: 'a.pdf',
+      type: 'application/pdf',
+      arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1]).buffer)
+    } as unknown as File
+    const secondPdf = {
+      name: 'b.pdf',
+      type: 'application/pdf',
+      arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([2]).buffer)
+    } as unknown as File
+    vi.mocked(window.api.file.createTempFile).mockImplementation(async (name: string) => `/tmp/${name}`)
+    vi.mocked(window.api.file.get).mockImplementation(async (path: string) => ({
+      ...selectedFile,
+      name: path.split('/').pop()!,
+      origin_name: path.split('/').pop()!,
+      path,
+      ext: '.pdf',
+      type: FILE_TYPE.DOCUMENT
+    }))
+
+    let files: ComposerAttachment[] = []
+    const setFiles = vi.fn((updater: (prevFiles: ComposerAttachment[]) => ComposerAttachment[]) => {
+      files = updater(files)
+    })
+    const event = {
+      preventDefault: vi.fn(),
+      clipboardData: {
+        getData: () => '',
+        files: [firstPdf, secondPdf]
+      }
+    } as unknown as ClipboardEvent
+
+    await pasteHandling.handlePaste(event, ['.pdf'], setFiles)
+
+    expect(files.map((file) => file.path)).toEqual(['/tmp/a.pdf', '/tmp/b.pdf'])
+  })
+
   describe('handler registration and lifecycle', () => {
     it('registers a handler and allows manual unregistration', () => {
       const handler = vi.fn().mockResolvedValue(true)

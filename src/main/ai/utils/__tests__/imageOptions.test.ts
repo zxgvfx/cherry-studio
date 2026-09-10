@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { splitParamValues } from '../imageOptions'
+import { resolveImageRequestSize, splitParamValues } from '../imageOptions'
 
 describe('splitParamValues', () => {
   it('routes binding-mapped keys to structured (numImages→n) and the rest to vendorBag', () => {
@@ -41,5 +41,19 @@ describe('splitParamValues', () => {
     // already-normalized passes through (idempotent); a mismatched value is dropped
     expect(splitParamValues({ aspectRatio: '1:1' }).structured).toEqual({ aspectRatio: '1:1' })
     expect(splitParamValues({ aspectRatio: 'weird' }).structured).toEqual({})
+  })
+})
+
+describe('resolveImageRequestSize', () => {
+  it('keeps gpt-image size as auto when the UI sentinel is auto or omitted', () => {
+    expect(resolveImageRequestSize('auto', 'gpt-image-2@vapi')).toBe('auto')
+    expect(resolveImageRequestSize(undefined, 'gpt-image-2')).toBe('auto')
+    expect(resolveImageRequestSize('1024x1024', 'gpt-image-2@vapi')).toBe('1024x1024')
+  })
+
+  it('omits the auto sentinel for other models so Doubao/Gemini relays are not sent a pixel size', () => {
+    expect(resolveImageRequestSize('auto', 'test-model')).toBeUndefined()
+    expect(resolveImageRequestSize(undefined, 'doubao-seedream')).toBeUndefined()
+    expect(resolveImageRequestSize('1024x1024', 'dall-e-3')).toBe('1024x1024')
   })
 })

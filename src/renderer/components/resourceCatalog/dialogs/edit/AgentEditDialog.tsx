@@ -37,6 +37,12 @@ import {
   CLAUDE_TOOL_CATEGORIES,
   type ClaudeToolCategory
 } from '@shared/ai/claudecode/toolRegistry'
+import {
+  type CocoAgentMode,
+  type CocoAgentPermission,
+  DEFAULT_COCO_MODE,
+  DEFAULT_COCO_PERMISSION
+} from '@shared/ai/cocoAgent'
 import { AGENT_PROMPT } from '@shared/ai/prompts'
 import type { UpdateAgentDto } from '@shared/data/api/schemas/agents'
 import type { AgentType } from '@shared/data/types/agent'
@@ -48,6 +54,7 @@ import { useForm, type UseFormReturn, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 
 import { type CatalogItem, CatalogToggleGrid } from '../components/CatalogPicker'
+import { CocoSettingsFields } from '../components/CocoSettingsFields'
 import {
   AvatarField,
   CompactModelField,
@@ -85,6 +92,8 @@ type AgentEditFormValues = {
   skillIds: string[]
   disabledTools: string[]
   permissionMode: string
+  cocoMode: CocoAgentMode
+  cocoPermission: CocoAgentPermission
   envVarsText: string
   heartbeatEnabled: boolean
   heartbeatInterval: number
@@ -140,6 +149,8 @@ function defaultValuesForAgent(resource: AgentDetail): AgentEditFormValues {
     skillIds: [...form.skillIds],
     disabledTools: [...form.disabledTools],
     permissionMode: form.permissionMode,
+    cocoMode: form.cocoMode,
+    cocoPermission: form.cocoPermission,
     envVarsText: form.envVarsText,
     heartbeatEnabled: form.heartbeatEnabled,
     heartbeatInterval: form.heartbeatInterval
@@ -170,6 +181,8 @@ function buildAgentFormState(baseline: AgentFormState, values: AgentEditFormValu
     skillIds: [...values.skillIds],
     disabledTools: [...values.disabledTools],
     permissionMode: values.permissionMode,
+    cocoMode: values.cocoMode,
+    cocoPermission: values.cocoPermission,
     envVarsText: values.envVarsText,
     heartbeatEnabled: values.heartbeatEnabled,
     heartbeatInterval: values.heartbeatInterval
@@ -203,6 +216,8 @@ function advanceAgentFormBaseline(
   if (configuration) {
     if (hasOwn(configuration, 'avatar')) next.avatar = submitted.avatar
     if (hasOwn(configuration, 'permission_mode')) next.permissionMode = submitted.permissionMode
+    if (hasOwn(configuration, 'coco_mode')) next.cocoMode = submitted.cocoMode
+    if (hasOwn(configuration, 'coco_permission')) next.cocoPermission = submitted.cocoPermission
     if (hasOwn(configuration, 'env_vars')) next.envVarsText = submitted.envVarsText
     if (hasOwn(configuration, 'heartbeat_enabled')) next.heartbeatEnabled = submitted.heartbeatEnabled
     if (hasOwn(configuration, 'heartbeat_interval')) next.heartbeatInterval = submitted.heartbeatInterval
@@ -220,6 +235,8 @@ function syncAgentFormState(form: UseFormReturn<AgentEditFormValues>, next: Agen
   form.setValue('skillIds', next.skillIds, { shouldDirty: true })
   form.setValue('disabledTools', next.disabledTools, { shouldDirty: true })
   form.setValue('permissionMode', next.permissionMode, { shouldDirty: true })
+  form.setValue('cocoMode', next.cocoMode, { shouldDirty: true })
+  form.setValue('cocoPermission', next.cocoPermission, { shouldDirty: true })
   form.setValue('heartbeatEnabled', next.heartbeatEnabled, { shouldDirty: true })
   form.setValue('heartbeatInterval', next.heartbeatInterval, { shouldDirty: true })
 }
@@ -608,12 +625,27 @@ function AgentBasicFields({
           />
         </>
       ) : null}
-      <PermissionModeField
-        form={form}
-        portalContainer={portalContainer}
-        patchAgentForm={patchAgentForm}
-        permissionModeCards={getPermissionModeCards(agentType)}
-      />
+      {agentType === 'coco' ? (
+        <div className={editDialogFormRowClassName}>
+          <div className="col-span-2 flex flex-col gap-4">
+            <CocoSettingsFields
+              control={form.control}
+              mode={form.watch('cocoMode') ?? DEFAULT_COCO_MODE}
+              permission={form.watch('cocoPermission') ?? DEFAULT_COCO_PERMISSION}
+              onModeChange={(value) => patchAgentForm({ cocoMode: value })}
+              onPermissionChange={(value) => patchAgentForm({ cocoPermission: value })}
+              portalContainer={portalContainer}
+            />
+          </div>
+        </div>
+      ) : (
+        <PermissionModeField
+          form={form}
+          portalContainer={portalContainer}
+          patchAgentForm={patchAgentForm}
+          permissionModeCards={getPermissionModeCards(agentType)}
+        />
+      )}
       {caps.heartbeat ? (
         <HeartbeatSettingsField
           form={form}

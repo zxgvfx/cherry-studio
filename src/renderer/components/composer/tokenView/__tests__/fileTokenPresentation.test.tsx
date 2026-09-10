@@ -32,4 +32,15 @@ describe('getFileTokenPresentation image previewUrl', () => {
     const result = getFileTokenPresentation(imageAttachment(), 'image', 'https://example.com/a.png')
     expect(result.previewUrl).toBe('https://example.com/a.png')
   })
+
+  it('uses the attachment previewUrl when no explicit preview argument is passed', () => {
+    const result = getFileTokenPresentation(
+      imageAttachment({
+        path: undefined,
+        previewUrl: 'http://192.168.21.225:9331/api/assets/img-1/file'
+      }),
+      'shot.png'
+    )
+    expect(result.previewUrl).toBe('http://192.168.21.225:9331/api/assets/img-1/file')
+  })
 })

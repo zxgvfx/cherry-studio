@@ -173,6 +173,7 @@ const TopicMessageFlowNode = ({ data, selected }: NodeProps<TopicMessageFlowNode
   const { clearTimeoutTimer, setTimeoutTimer } = useTimer()
   const openTimerPendingRef = useRef(false)
   const hasOpenedDuringHoverRef = useRef(false)
+  const previewEnabled = !data.disablePreview && !data.isAwaitingInput && !data.isContextBoundary
 
   const clearOpenTimer = useCallback(() => {
     clearTimeoutTimer(PREVIEW_OPEN_TIMER_KEY)
@@ -235,9 +236,9 @@ const TopicMessageFlowNode = ({ data, selected }: NodeProps<TopicMessageFlowNode
           data-active={data.isActive ? 'true' : 'false'}
           data-message-id={data.messageId}
           data-on-active-path={data.isOnActivePath ? 'true' : 'false'}
-          onMouseEnter={data.isAwaitingInput || data.isContextBoundary ? undefined : scheduleOpen}
-          onMouseLeave={data.isAwaitingInput || data.isContextBoundary ? undefined : scheduleClose}
-          onMouseMove={data.isAwaitingInput || data.isContextBoundary ? undefined : scheduleOpen}>
+          onMouseEnter={previewEnabled ? scheduleOpen : undefined}
+          onMouseLeave={previewEnabled ? scheduleClose : undefined}
+          onMouseMove={previewEnabled ? scheduleOpen : undefined}>
           <Handle className="opacity-0" isConnectable={false} position={Position.Top} type="target" />
 
           <div className="flex min-w-0 items-center gap-2">

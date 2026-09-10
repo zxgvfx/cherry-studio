@@ -722,6 +722,20 @@ describe('ProviderRegistryService', () => {
       expect(result).toBeNull()
     })
 
+    it('infers Gemini-style image support for uncatalogued nano-banana New API ids', async () => {
+      mockReadModels.mockReturnValue({ version: '1.0', models: [] } as ReturnType<typeof readModelRegistry>)
+      mockReadProviderModels.mockReturnValue({ version: '1.0', overrides: [] } as ReturnType<
+        typeof readProviderModelRegistry
+      >)
+      mockReadProviders.mockReturnValue({
+        version: '1.0',
+        providers: [{ id: 'new-api', name: 'New API', defaultChatEndpoint: null, metadata: { website: {} } }]
+      } as ReturnType<typeof readProviderRegistry>)
+      const result = providerRegistryService.getImageGenerationSupport('new-api', 'nano-banana-pro@vapi')
+      expect(result?.modes.generate?.supports.aspectRatio).toMatchObject({ type: 'enum' })
+      expect(result?.modes.generate?.supports.size).toBeUndefined()
+    })
+
     it('getImageGenerationSupport returns null when neither model nor provider has the block', async () => {
       setupRegistryData()
       const result = providerRegistryService.getImageGenerationSupport('openai', 'gpt-4o')

@@ -4,7 +4,7 @@ import type { MessageToolApprovalInput } from '@renderer/components/chat/message
 import { toast } from '@renderer/services/toast'
 import { cn } from '@renderer/utils/style'
 import { ArrowRight, ChevronLeft, ChevronRight, Pencil, X } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ComposerOverride } from '../ComposerContext'
@@ -27,6 +27,20 @@ type AskUserQuestionComposerOverrideOptions = {
 
 type AnswersByIndex = Record<number, string[]>
 
+function isFreeTextOptionLabel(label: string, otherLabel: string): boolean {
+  const normalized = label.trim().toLowerCase()
+  if (!normalized) return false
+  const other = otherLabel.trim().toLowerCase()
+  return (
+    normalized === other ||
+    normalized === '其他' ||
+    normalized === '其它' ||
+    normalized === 'other' ||
+    normalized === 'custom' ||
+    normalized === '自定义'
+  )
+}
+
 export function createAskUserQuestionComposerOverride({
   request,
   onRespond
@@ -44,7 +58,10 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedAnswers, setSelectedAnswers] = useState<AnswersByIndex>({})
   const [customAnswers, setCustomAnswers] = useState<Record<number, string>>({})
+  const [isCustomModeByIndex, setIsCustomModeByIndex] = useState<Record<number, boolean>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const customInputWrapperRef = useRef<HTMLDivElement>(null)
+  const shouldFocusCustomInputRef = useRef(false)
 
   const currentQuestion = questions[currentIndex]
   const totalQuestions = questions.length
@@ -52,6 +69,23 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
   const isLastQuestion = currentIndex === totalQuestions - 1
   const currentCustomAnswer = customAnswers[currentIndex] ?? ''
   const currentCustomAnswerText = currentCustomAnswer.trim()
+  const otherLabel = t('agent.askUserQuestion.other')
+  const otherDescription = t('agent.askUserQuestion.otherDescription')
+  const isFreeTextSelected = Boolean(isCustomModeByIndex[currentIndex] || currentCustomAnswerText)
+
+  const displayedOptions = useMemo(() => {
+    if (!currentQuestion) return []
+    if (currentQuestion.options.some((option) => isFreeTextOptionLabel(option.label, otherLabel))) {
+      return currentQuestion.options
+    }
+    return [...currentQuestion.options, { label: otherLabel, description: otherDescription }]
+  }, [currentQuestion, otherDescription, otherLabel])
+
+  useEffect(() => {
+    if (!shouldFocusCustomInputRef.current) return
+    shouldFocusCustomInputRef.current = false
+    customInputWrapperRef.current?.querySelector('input')?.focus()
+  }, [currentIndex, isCustomModeByIndex])
 
   const hasAnswerAt = useCallback(
     (index: number, answersByIndex: AnswersByIndex = selectedAnswers) => {
@@ -144,11 +178,24 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
     [isLastQuestion, submitAnswers, totalQuestions]
   )
 
+  const handleSelectFreeText = useCallback(() => {
+    if (!currentQuestion || isSubmitting) return
+
+    shouldFocusCustomInputRef.current = true
+    setIsCustomModeByIndex((prev) => ({ ...prev, [currentIndex]: true }))
+    setSelectedAnswers((prev) => ({ ...prev, [currentIndex]: [] }))
+  }, [currentIndex, currentQuestion, isSubmitting])
+
   const handleSelectOption = useCallback(
     (label: string) => {
-      const isMultiSelect = currentQuestion?.multiSelect
       if (!currentQuestion || isSubmitting) return
 
+      if (isFreeTextOptionLabel(label, otherLabel)) {
+        handleSelectFreeText()
+        return
+      }
+
+      const isMultiSelect = currentQuestion.multiSelect
       const current = selectedAnswers[currentIndex] ?? []
       const nextForCurrent = isMultiSelect
         ? current.includes(label)
@@ -157,10 +204,20 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
         : [label]
       const nextSelectedAnswers = { ...selectedAnswers, [currentIndex]: nextForCurrent }
 
+      setIsCustomModeByIndex((prev) => ({ ...prev, [currentIndex]: false }))
+      setCustomAnswers((prev) => ({ ...prev, [currentIndex]: '' }))
       setSelectedAnswers(nextSelectedAnswers)
       if (!isMultiSelect) completeCurrentQuestion(nextSelectedAnswers)
     },
-    [completeCurrentQuestion, currentIndex, currentQuestion, isSubmitting, selectedAnswers]
+    [
+      completeCurrentQuestion,
+      currentIndex,
+      currentQuestion,
+      handleSelectFreeText,
+      isSubmitting,
+      otherLabel,
+      selectedAnswers
+    ]
   )
 
   const handleCustomAction = useCallback(async () => {
@@ -201,8 +258,8 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
       <div
         className="rounded-[17px] border-[0.5px] border-border p-2.5 backdrop-blur"
         style={{ backgroundColor: 'color-mix(in srgb, var(--background) 88%, transparent)' }}>
-        <div className="flex items-center justify-between gap-3 px-1">
-          <h2 className="line-clamp-1 min-w-0 flex-1 font-semibold text-foreground text-sm leading-5">
+        <div className="flex items-start justify-between gap-3 px-1">
+          <h2 className="max-h-40 min-w-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words font-semibold text-foreground text-sm leading-5">
             {currentQuestion.question}
           </h2>
 
@@ -248,8 +305,9 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
         </div>
 
         <div className="mt-2 flex flex-col gap-1.5">
-          {currentQuestion.options.map((option, optionIndex) => {
-            const isSelected = selectedForCurrent.includes(option.label)
+          {displayedOptions.map((option, optionIndex) => {
+            const isFreeText = isFreeTextOptionLabel(option.label, otherLabel)
+            const isSelected = isFreeText ? isFreeTextSelected : selectedForCurrent.includes(option.label)
 
             return (
               <Button
@@ -275,15 +333,24 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
                 </span>
 
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold text-foreground text-sm leading-5">{option.label}</span>
+                  <span className="block whitespace-normal break-words font-semibold text-foreground text-sm leading-5">
+                    {option.label}
+                  </span>
                   {option.description && (
-                    <span className="block truncate font-medium text-muted-foreground text-xs leading-4">
+                    <span className="block whitespace-normal break-words font-medium text-muted-foreground text-xs leading-4">
                       {option.description}
                     </span>
                   )}
                 </span>
 
-                {currentQuestion.multiSelect ? (
+                {isFreeText ? (
+                  <Pencil
+                    className={cn(
+                      'size-4 shrink-0 text-muted-foreground transition-opacity',
+                      isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    )}
+                  />
+                ) : currentQuestion.multiSelect ? (
                   <Checkbox
                     checked={isSelected}
                     size="sm"
@@ -305,19 +372,25 @@ export default function AskUserQuestionComposer({ request, onRespond, className 
         </div>
 
         <div className="mt-2 flex items-center gap-2 border-border-subtle border-t pt-2">
-          <div className="relative min-w-0 flex-1">
+          <div ref={customInputWrapperRef} className="relative min-w-0 flex-1">
             <Pencil className="-translate-y-1/2 absolute top-1/2 left-3 size-3.5 text-muted-foreground" />
             <Input
               value={currentCustomAnswer}
               disabled={isSubmitting}
               placeholder={t('agent.askUserQuestion.customPlaceholder')}
-              className="h-9 rounded-full border-transparent bg-muted/70 pl-9 text-sm shadow-none focus-visible:border-transparent"
-              onChange={(event) =>
+              className={cn(
+                'h-9 rounded-full border-transparent bg-muted/70 pl-9 text-sm shadow-none focus-visible:border-transparent',
+                isFreeTextSelected && 'bg-muted ring-1 ring-foreground/20'
+              )}
+              onChange={(event) => {
+                const value = event.target.value
                 setCustomAnswers((prev) => ({
                   ...prev,
-                  [currentIndex]: event.target.value
+                  [currentIndex]: value
                 }))
-              }
+                setIsCustomModeByIndex((prev) => ({ ...prev, [currentIndex]: true }))
+                setSelectedAnswers((prev) => ({ ...prev, [currentIndex]: [] }))
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
                   event.preventDefault()

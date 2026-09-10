@@ -1,22 +1,37 @@
+import { randomUUID } from 'node:crypto'
+
 import { application } from '@application'
 import {
   assertOutsideManagedStorageMutation,
   ContentCommittedMetadataPendingError,
+  createDirectoryTree,
+  DirectoryTreeStoppedError,
   dispatchHandle,
   getMetadataByPath,
   readByPath,
   readChunkByPath,
   safeOpen,
   showInFolder as showPathInFolder,
+  StaleVersionError,
   writeIfUnchangedByPath
 } from '@main/services/file'
-import { DirectoryTreeStoppedError, StaleVersionError } from '@main/services/file'
 import { PathStaleVersionError } from '@main/utils/file'
 import type { FileHandle } from '@shared/data/types/file'
 import { fileErrorCodes } from '@shared/ipc/errors/file'
 import { IpcError } from '@shared/ipc/errors/IpcError'
 import type { fileRequestSchemas } from '@shared/ipc/schemas/file'
 import type { IpcHandlersFor, WindowId } from '@shared/ipc/types'
+
+/** Qt/headless bridge has no Electron window; trees are one-shot snapshots. */
+const HEADLESS_TREE_PREFIX = 'headless:'
+
+function isHeadlessBridge(): boolean {
+  return process.env.CHERRY_HEADLESS === '1'
+}
+
+function isHeadlessTreeId(treeId: string): boolean {
+  return treeId.startsWith(HEADLESS_TREE_PREFIX)
+}
 
 /**
  * The caller window's WebContents — the directory tree addresses its mutation
@@ -26,12 +41,6 @@ import type { IpcHandlersFor, WindowId } from '@shared/ipc/types'
  */
 function senderWebContents(senderId: WindowId | null): Electron.WebContents | undefined {
   return senderId == null ? undefined : application.get('WindowManager').getWindow(senderId)?.webContents
-}
-
-function requireSenderWebContents(senderId: WindowId | null): Electron.WebContents {
-  const wc = senderWebContents(senderId)
-  if (!wc) throw new Error('file.tree.create requires a managed window sender')
-  return wc
 }
 
 /**
@@ -142,8 +151,24 @@ export const fileHandlers: IpcHandlersFor<typeof fileRequestSchemas> = {
     return dispatchHandle(handle as FileHandle, (entryId) => fileManager.showInFolder(entryId), showPathInFolder)
   },
   'file.tree.create': async ({ rootPath, options }, { senderId }) => {
+    const owner = senderWebContents(senderId)
+    if (!owner) {
+      if (!isHeadlessBridge()) {
+        throw new Error('file.tree.create requires a managed window sender')
+      }
+      const builder = await createDirectoryTree(rootPath, options)
+      try {
+        return {
+          treeId: `${HEADLESS_TREE_PREFIX}${randomUUID()}`,
+          revision: 0,
+          snapshot: builder.snapshot()
+        }
+      } finally {
+        builder.dispose()
+      }
+    }
     try {
-      return await application.get('DirectoryTreeManager').create(requireSenderWebContents(senderId), rootPath, options)
+      return await application.get('DirectoryTreeManager').create(owner, rootPath, options)
     } catch (error) {
       // Shutdown-in-flight, not a failure the user should be toasted about — carry a
       // domain code so the renderer can stay quiet (`error.name` does not survive IpcApi).
@@ -156,14 +181,17 @@ export const fileHandlers: IpcHandlersFor<typeof fileRequestSchemas> = {
   // Follow-up operations carry the caller's identity: the manager refuses a treeId
   // that belongs to another window, so ownership never rests on the id's secrecy.
   'file.tree.activate': async ({ treeId, revision }, { senderId }) => {
+    if (isHeadlessTreeId(treeId)) return true
     const owner = senderWebContents(senderId)
     return owner ? application.get('DirectoryTreeManager').activateTree(treeId, revision, owner.id) : false
   },
   'file.tree.dispose': async ({ treeId }, { senderId }) => {
+    if (isHeadlessTreeId(treeId)) return
     const owner = senderWebContents(senderId)
     if (owner) application.get('DirectoryTreeManager').dispose(treeId, owner.id)
   },
   'file.tree.rename': async ({ treeId, oldPath, newName }, { senderId }) => {
+    if (isHeadlessTreeId(treeId)) return false
     const owner = senderWebContents(senderId)
     return owner ? application.get('DirectoryTreeManager').rename(treeId, oldPath, newName, owner.id) : false
   }

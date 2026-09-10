@@ -15,6 +15,7 @@ import { getDataService } from '@data/services/dataServiceRegistry'
 import { pinService } from '@data/services/PinService'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
+import { disposeDeletedAgentSessions } from '@main/ai/agentSession/disposeDeletedAgentSessions'
 import { DataApiErrorFactory } from '@shared/data/api/errors'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
 import type {
@@ -59,6 +60,8 @@ function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
   const clean = nullsToUndefined(row.session)
   return {
     id: clean.id,
+    ...(clean.branchParentId && { branchParentId: clean.branchParentId }),
+    ...(clean.branchPointMessageId && { branchPointMessageId: clean.branchPointMessageId }),
     // agentId is legitimately nullable (orphans only via cascade) — preserve T | null.
     agentId: row.session.agentId,
     name: clean.name,
@@ -142,6 +145,67 @@ export class AgentSessionService {
     return this.getById(id)
   }
 
+  markAsBranch(id: string, parentSessionId: string, branchPointMessageId: string): AgentSessionEntity {
+    const db = application.get('DbService').getDb()
+    const [parent] = db
+      .select({ id: sessionsTable.id, agentId: sessionsTable.agentId })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.id, parentSessionId))
+      .limit(1)
+      .all()
+    const [branch] = db
+      .select({ id: sessionsTable.id, agentId: sessionsTable.agentId })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.id, id))
+      .limit(1)
+      .all()
+    if (!parent) throw DataApiErrorFactory.notFound('Session', parentSessionId)
+    if (!branch) throw DataApiErrorFactory.notFound('Session', id)
+    if (parent.agentId !== branch.agentId) {
+      throw DataApiErrorFactory.invalidOperation('branch session', 'parent and branch must use the same agent')
+    }
+
+    db.update(sessionsTable)
+      .set({
+        branchParentId: parentSessionId,
+        branchPointMessageId,
+        // Branch metadata is structural and must not make the branch look newer.
+        updatedAt: sql`${sessionsTable.updatedAt}`
+      })
+      .where(eq(sessionsTable.id, id))
+      .run()
+    this.notifyReadModelChange([id, parentSessionId], 'membership')
+    return this.getById(id)
+  }
+
+  listBranchFamily(id: string): AgentSessionEntity[] {
+    const db = application.get('DbService').getDb()
+    const rootRows = db.all<{ id: string }>(sql`
+      WITH RECURSIVE ancestors(id, branch_parent_id) AS (
+        SELECT id, branch_parent_id FROM agent_session WHERE id = ${id}
+        UNION ALL
+        SELECT parent.id, parent.branch_parent_id
+        FROM agent_session parent
+        JOIN ancestors child ON child.branch_parent_id = parent.id
+      )
+      SELECT id FROM ancestors WHERE branch_parent_id IS NULL LIMIT 1
+    `)
+    const rootId = rootRows[0]?.id
+    if (!rootId) throw DataApiErrorFactory.notFound('Session', id)
+
+    const familyRows = db.all<{ id: string }>(sql`
+      WITH RECURSIVE descendants(id) AS (
+        SELECT id FROM agent_session WHERE id = ${rootId}
+        UNION ALL
+        SELECT child.id
+        FROM agent_session child
+        JOIN descendants parent ON child.branch_parent_id = parent.id
+      )
+      SELECT id FROM descendants
+    `)
+    return familyRows.map((row) => this.getById(row.id))
+  }
+
   /**
    * DB-only create primitive for caller-owned transaction composition.
    * The caller supplies the reserved id and owns the outer commit boundary.
@@ -204,6 +268,31 @@ export class AgentSessionService {
       .returning({ id: sessionsTable.id })
       .all()
     if (updated.length !== 1) throw DataApiErrorFactory.notFound('Session', sessionId)
+
+    const ancestors = tx.all<{ id: string }>(sql`
+      WITH RECURSIVE parents(id, branch_parent_id) AS (
+        SELECT id, branch_parent_id FROM agent_session WHERE id = ${sessionId}
+        UNION ALL
+        SELECT parent.id, parent.branch_parent_id
+        FROM agent_session parent
+        JOIN parents child ON child.branch_parent_id = parent.id
+      )
+      SELECT id FROM parents WHERE id != ${sessionId}
+    `)
+    if (ancestors.length > 0) {
+      tx.update(sessionsTable)
+        .set({
+          lastActivityAt: sql`max(${sessionsTable.lastActivityAt}, ${timestamp})`,
+          updatedAt: sql`max(${sessionsTable.updatedAt}, ${timestamp})`
+        })
+        .where(
+          inArray(
+            sessionsTable.id,
+            ancestors.map((row) => row.id)
+          )
+        )
+        .run()
+    }
   }
 
   private assertAgentExistsTx(tx: DbOrTx, agentId: string): void {
@@ -416,7 +505,7 @@ export class AgentSessionService {
         .from(sessionsTable)
         .innerJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
         .innerJoin(pinTable, and(eq(pinTable.entityType, 'session'), eq(pinTable.entityId, sessionsTable.id)))
-        .where(and(agentFilter, pinAfter))
+        .where(and(agentFilter, isNull(sessionsTable.branchParentId), pinAfter))
         .orderBy(asc(pinTable.orderKey), asc(sessionsTable.id))
         .limit(limit + 1)
         .all()
@@ -463,7 +552,14 @@ export class AgentSessionService {
       .select({ session: sessionsTable, workspace: agentWorkspaceTable })
       .from(sessionsTable)
       .innerJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
-      .where(and(agentFilter, notInArray(sessionsTable.id, pinnedSubquery), sessionAfter))
+      .where(
+        and(
+          agentFilter,
+          isNull(sessionsTable.branchParentId),
+          notInArray(sessionsTable.id, pinnedSubquery),
+          sessionAfter
+        )
+      )
       .orderBy(asc(sessionsTable.orderKey), asc(sessionsTable.id))
       .limit(remaining + 1)
       .all()
@@ -618,7 +714,30 @@ export class AgentSessionService {
     )
   }
 
+  listIdsByAgentId(agentId: string): string[] {
+    return application
+      .get('DbService')
+      .getDb()
+      .select({ id: sessionsTable.id })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.agentId, agentId))
+      .all()
+      .map((row) => row.id)
+  }
+
+  private listIdsByWorkspaceId(workspaceId: string): string[] {
+    return application
+      .get('DbService')
+      .getDb()
+      .select({ id: sessionsTable.id })
+      .from(sessionsTable)
+      .where(eq(sessionsTable.workspaceId, workspaceId))
+      .all()
+      .map((row) => row.id)
+  }
+
   delete(id: string): void {
+    disposeDeletedAgentSessions([id])
     const taskScheduleIds = application.get('DbService').withWriteTx((tx) => this.deleteTx(tx, id))
     publishTaskReadModelChanges(taskScheduleIds)
     this.notifyReadModelChange([id], 'membership')
@@ -642,6 +761,7 @@ export class AgentSessionService {
     const uniqueIds = Array.from(new Set(ids))
     if (uniqueIds.length === 0) return { deletedIds: [] }
 
+    disposeDeletedAgentSessions(uniqueIds)
     const result = application.get('DbService').withWriteTx((tx) => {
       const rows = tx
         .select({ session: sessionsTable, workspace: agentWorkspaceTable })
@@ -661,6 +781,7 @@ export class AgentSessionService {
   }
 
   deleteWorkspaceCascade(workspaceId: string): DeleteAgentSessionsResult {
+    disposeDeletedAgentSessions(this.listIdsByWorkspaceId(workspaceId))
     const result = application.get('DbService').withWriteTx((tx) => {
       agentWorkspaceService.getRowByIdTx(tx, workspaceId)
       const channelReferences = agentChannelService.resetWorkspaceReferencesTx(tx, workspaceId)
@@ -694,6 +815,7 @@ export class AgentSessionService {
   }
 
   deleteByAgentId(agentId: string): DeleteAgentSessionsResult {
+    disposeDeletedAgentSessions(this.listIdsByAgentId(agentId))
     const result = application.get('DbService').withWriteTx((tx) => {
       const taskScheduleIds = this.getTaskScheduleIdsForAgentTx(tx, agentId)
       const deletedIds = this.deleteByAgentIdTx(tx, agentId)

@@ -3,6 +3,7 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import { useAgentModelFilter } from '@renderer/hooks/agent/useAgentModelFilter'
 import { useDefaultModel } from '@renderer/hooks/useModel'
 import { AGENT_RUNTIME_CAPABILITIES } from '@shared/ai/agentRuntimeCapabilities'
+import { DEFAULT_COCO_MODE, DEFAULT_COCO_PERMISSION } from '@shared/ai/cocoAgent'
 import type { Model, UniqueModelId } from '@shared/data/types/model'
 import { Check } from 'lucide-react'
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
@@ -45,8 +46,10 @@ function getDefaultValues(kind: ResourceCreateWizardKind, initialName = ''): Res
     avatar: getResourceCreateDefaultAvatar(kind),
     name: initialName,
     description: '',
-    agentType: 'claude-code',
-    permissionMode: AGENT_RUNTIME_CAPABILITIES['claude-code'].createDefaults.permissionMode,
+    agentType: 'coco',
+    permissionMode: AGENT_RUNTIME_CAPABILITIES.coco.createDefaults.permissionMode,
+    cocoMode: DEFAULT_COCO_MODE,
+    cocoPermission: DEFAULT_COCO_PERMISSION,
     modelId: null,
     prompt: '',
     knowledgeBaseIds: [],
@@ -265,6 +268,8 @@ export function ResourceCreateWizard({
         avatar: values.avatar,
         agentType: values.agentType,
         permissionMode: values.permissionMode,
+        cocoMode: values.cocoMode,
+        cocoPermission: values.cocoPermission,
         name: values.name.trim(),
         modelId: values.modelId,
         description: values.description.trim(),

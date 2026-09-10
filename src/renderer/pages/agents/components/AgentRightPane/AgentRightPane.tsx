@@ -1,6 +1,10 @@
 import { Badge, Button, ConfirmDialog, HoverCard, HoverCardContent, HoverCardTrigger, Tooltip } from '@cherrystudio/ui'
+import { dataApiService } from '@data/DataApiService'
 import { loggerService } from '@logger'
 import { AgentContextUsageSummary } from '@renderer/components/chat/agent/AgentContextUsageSummary'
+import { CocoSessionAssetsPanel } from '@renderer/components/chat/agent/CocoSessionAssetsPanel'
+import { CocoSessionCanvasEditor, readPipelineSessionId } from '@renderer/components/chat/agent/CocoSessionCanvasDialog'
+import { layoutTopicMessageFlowGraph, TopicMessageFlowCanvas } from '@renderer/components/chat/flow'
 import MessageList from '@renderer/components/chat/messages/MessageList'
 import { MessageListProvider } from '@renderer/components/chat/messages/MessageListProvider'
 import {
@@ -34,6 +38,7 @@ import { EmptyState } from '@renderer/components/chat/primitives'
 import type { ResourceListRevealRequest } from '@renderer/components/chat/resourceList/base'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { usePreference } from '@renderer/data/hooks/usePreference'
+import { useAgent } from '@renderer/hooks/agent/useAgent'
 import { useAgentSessionCompaction } from '@renderer/hooks/agent/useAgentSessionCompaction'
 import { useAgentSessionContextUsage } from '@renderer/hooks/agent/useAgentSessionContextUsage'
 import { useAgentSessionTaskEvents } from '@renderer/hooks/agent/useAgentSessionTaskEvents'
@@ -41,14 +46,21 @@ import { useDirectoryTree } from '@renderer/hooks/useDirectoryTree'
 import { type FileEditSession, useFileEditSession } from '@renderer/hooks/useFileEditSession'
 import { useToolResult } from '@renderer/hooks/useToolResult'
 import { ipcApi } from '@renderer/ipc'
+import { openRoute } from '@renderer/services/mainWindowNavigation'
 import { toast } from '@renderer/services/toast'
 import { type Topic, TopicType, type TopicType as TopicTypeEnum } from '@renderer/types/topic'
 import { buildAgentFileWorkspaceKey, buildAgentSessionTopicId } from '@renderer/utils/agentSession'
+import { rememberAgentSessionBranch } from '@renderer/utils/agentSessionBranchMemory'
 import { resolveInlineFilePath } from '@renderer/utils/filePath'
 import { cn } from '@renderer/utils/style'
 import type { AgentSessionTaskEvents } from '@shared/ai/agentSessionBackgroundTasks'
+import { readCocoPermission } from '@shared/ai/cocoAgent'
+import { readCocoSessionAssets } from '@shared/ai/cocoSessionAssets'
 import { isDeferredToolOutput } from '@shared/ai/transport'
+import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessionMessages'
+import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { AGENT_WORKSPACE_TYPE, type AgentWorkspaceType } from '@shared/data/api/schemas/agentWorkspaces'
+import type { CursorPaginationResponse } from '@shared/data/api/types'
 import type { CherryMessagePart, CherryUIMessage } from '@shared/data/types/message'
 import type { Model } from '@shared/data/types/model'
 import { AbsoluteFilePathSchema } from '@shared/types/file'
@@ -95,6 +107,7 @@ import {
   buildAgentRightPaneStatus,
   buildAgentToolFlowProjection
 } from './agentRightPaneProjection'
+import { buildAgentSessionBranchFlowGraph } from './agentSessionBranchFlow'
 
 const logger = loggerService.withContext('AgentRightPane')
 
@@ -161,6 +174,7 @@ interface AgentRightPaneMeta {
   agentId?: string
   agentName?: string
   agentAvatar?: string
+  agentType?: string
   conversationState: AgentConversationState
   workspaceId?: string
   workspacePath?: string
@@ -207,6 +221,9 @@ interface AgentRightPanelScope {
   meta: AgentRightPaneMeta
   resourcePane: ResourcePaneConfig | null
   statusTitle: string
+  assetsTitle: string
+  canvasTitle: string
+  branchesTitle: string
   traceTitle: string
 }
 
@@ -378,6 +395,7 @@ function AgentRightPaneStateProvider({
   agentId,
   agentName,
   agentAvatar,
+  agentType,
   model,
   conversationState = 'ready',
   present = true,
@@ -555,6 +573,7 @@ function AgentRightPaneStateProvider({
       agentId,
       agentName,
       agentAvatar,
+      agentType,
       conversationState,
       workspaceId,
       workspacePath,
@@ -565,6 +584,7 @@ function AgentRightPaneStateProvider({
       agentAvatar,
       agentId,
       agentName,
+      agentType,
       conversationState,
       model,
       sessionId,
@@ -584,6 +604,9 @@ function AgentRightPaneStateProvider({
       meta,
       resourcePane,
       statusTitle: t('agent.right_pane.tabs.status'),
+      assetsTitle: t('agent.right_pane.tabs.assets'),
+      canvasTitle: t('agent.right_pane.tabs.canvas'),
+      branchesTitle: t('chat.message.flow.title'),
       traceTitle: t('trace.label')
     }),
     [enableDeveloperMode, flowTab, hasSystemWorkspaceFiles, meta, resourcePane, t]
@@ -681,7 +704,11 @@ function AgentRightPaneFilesPanel({ active, scope }: RightPanelComponentProps<Ag
       paneTitle={scope.filesTitle}
       paneActions={<RightPanelHeaderControls canMaximize />}
       workspacePath={state.workspacePath}
-      previewFileSelection={state.previewFileSelection}
+      // Keep the file/tree state, but unmount the actual preview whenever the
+      // right pane is collapsed or another capability is selected. This is
+      // especially important for GLB: unmounting runs the viewer's abort,
+      // resource disposal and WebGL context-loss cleanup immediately.
+      previewFileSelection={active ? state.previewFileSelection : null}
       onPreviewClose={actions.closeFilePreview}
       enableFileSearch
       fileSession={state.fileSession}
@@ -1018,6 +1045,190 @@ function useAgentRightPaneStatus(active = true): AgentRightPaneStatus {
   return status
 }
 
+function AgentCanvasRightPanel({ active, scope }: RightPanelComponentProps<AgentRightPanelScope>) {
+  const { agent } = useAgent(scope.meta.agentId ?? '')
+  const runtime = useAgentRightPaneRuntime()
+  const liveUpdating = runtime.messages.some(
+    (message) => message.role === 'assistant' && message.metadata?.status === 'pending'
+  )
+  if (!scope.meta.agentId || !scope.meta.sessionId) return null
+  return (
+    <CocoSessionCanvasEditor
+      active={active}
+      agentId={scope.meta.agentId}
+      sessionId={scope.meta.sessionId}
+      pipelineSessionId={readPipelineSessionId(agent?.configuration, scope.meta.sessionId)}
+      readOnly={readCocoPermission(agent?.configuration) === 'read_only'}
+      liveUpdating={liveUpdating}
+    />
+  )
+}
+
+function AgentAssetsRightPanel({ active, scope }: RightPanelComponentProps<AgentRightPanelScope>) {
+  const { agent } = useAgent(scope.meta.agentId ?? '')
+  const runtime = useAgentRightPaneRuntime()
+  const liveUpdating = runtime.messages.some(
+    (message) => message.role === 'assistant' && message.metadata?.status === 'pending'
+  )
+  if (!scope.meta.agentId || !scope.meta.sessionId) return null
+  return (
+    <CocoSessionAssetsPanel
+      active={active}
+      sessionId={scope.meta.sessionId}
+      pipelineSessionId={readPipelineSessionId(agent?.configuration, scope.meta.sessionId)}
+      initialAssets={readCocoSessionAssets(agent?.configuration, scope.meta.sessionId)}
+      liveUpdating={liveUpdating}
+      messages={runtime.messages}
+      partsByMessageId={runtime.partsByMessageId}
+    />
+  )
+}
+
+async function loadAllAgentSessionMessages(sessionId: string): Promise<AgentSessionMessageEntity[]> {
+  const messages: AgentSessionMessageEntity[] = []
+  let cursor: string | undefined
+  do {
+    const response = (await dataApiService.get(`/agent-sessions/${sessionId}/messages`, {
+      query: {
+        limit: 200,
+        ...(cursor ? { cursor } : {})
+      }
+    })) as CursorPaginationResponse<AgentSessionMessageEntity>
+    messages.push(...response.items)
+    cursor = response.nextCursor
+  } while (cursor)
+  return messages
+}
+
+function AgentBranchesRightPanel({ active, scope }: RightPanelComponentProps<AgentRightPanelScope>) {
+  const { t } = useTranslation()
+  const [branches, setBranches] = useState<AgentSessionEntity[]>([])
+  const [messagesBySession, setMessagesBySession] = useState<ReadonlyMap<string, AgentSessionMessageEntity[]>>(
+    () => new Map()
+  )
+  const [loading, setLoading] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [switchingId, setSwitchingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!active || !scope.meta.sessionId) return
+    let cancelled = false
+    setLoading(true)
+    setLoadFailed(false)
+    void ipcApi
+      .request('ai.agent.session.branches', { sessionId: scope.meta.sessionId })
+      .then(async (items) => {
+        const entries = await Promise.all(
+          items.map(async (session) => [session.id, await loadAllAgentSessionMessages(session.id)] as const)
+        )
+        if (!cancelled) {
+          setBranches(items)
+          setMessagesBySession(new Map(entries))
+        }
+      })
+      .catch((error) => {
+        logger.warn('Failed to load Agent conversation branches', error as Error)
+        if (!cancelled) {
+          setLoadFailed(true)
+          toast.error(t('common.error'))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [active, scope.meta.sessionId, t])
+
+  const graph = useMemo(
+    () =>
+      layoutTopicMessageFlowGraph(
+        buildAgentSessionBranchFlowGraph({
+          activeSessionId: scope.meta.sessionId ?? '',
+          messagesBySession,
+          sessions: branches
+        })
+      ),
+    [branches, messagesBySession, scope.meta.sessionId]
+  )
+
+  const switchBranch = useCallback(
+    async (messageId: string) => {
+      const branchId = graph.nodes.find((node) => node.data.messageId === messageId)?.data.agentSessionId
+      if (!branchId) return
+      if (branchId === scope.meta.sessionId || switchingId) return
+      setSwitchingId(branchId)
+      try {
+        const rootSessionId = branches.find((session) => !session.branchParentId)?.id ?? branchId
+        rememberAgentSessionBranch(rootSessionId, branchId)
+        // This updates the current conversation route/tab. It deliberately
+        // does not create another tab; canvas/assets follow the selected
+        // branch because each branch owns an independent Pipeline session.
+        await openRoute('/app/agents', { sessionId: branchId })
+      } catch (error) {
+        logger.warn('Failed to switch Agent conversation branch', error as Error)
+        toast.error(t('common.error'))
+        setSwitchingId(null)
+      }
+    },
+    [branches, graph.nodes, scope.meta.sessionId, switchingId, t]
+  )
+
+  if (!active) return null
+  if (loading && branches.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-foreground-tertiary text-sm">
+        {t('common.loading')}
+      </div>
+    )
+  }
+  if (loadFailed) {
+    return (
+      <div className="flex h-full items-center justify-center text-destructive text-sm" role="alert">
+        {t('common.error')}
+      </div>
+    )
+  }
+  if (branches.length <= 1) {
+    return (
+      <EmptyState
+        compact
+        className="h-full px-6"
+        icon={GitBranch}
+        title={t('agent.right_pane.branches.empty.title')}
+        description={t('agent.right_pane.branches.empty.description')}
+      />
+    )
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden text-card-foreground">
+      <div className="flex min-h-10 shrink-0 items-center gap-2 border-border-subtle border-b px-3 text-xs">
+        <span className="min-w-0 max-w-55 truncate text-foreground-tertiary">{scope.meta.sessionName}</span>
+        <span className="shrink-0 text-foreground-tertiary">·</span>
+        <span className="shrink-0 text-foreground-tertiary">
+          {graph.stats.branchCount} {t('chat.message.flow.branches')}
+        </span>
+        <span className="shrink-0 text-foreground-tertiary">·</span>
+        <span className="shrink-0 text-foreground-tertiary">
+          {graph.stats.nodeCount} {t('chat.message.flow.nodes')}
+        </span>
+        {switchingId ? <Loader2 size={13} className="ml-auto shrink-0 animate-spin" /> : null}
+      </div>
+      <div className="min-h-0 flex-1">
+        <TopicMessageFlowCanvas
+          className="h-full min-h-0 rounded-none border-0"
+          focusKey={scope.meta.sessionId}
+          graph={graph}
+          layoutReady={active}
+          onNodeSelect={(messageId) => void switchBranch(messageId)}
+        />
+      </div>
+    </div>
+  )
+}
+
 function AgentStatusRightPanel({ active }: RightPanelComponentProps<AgentRightPanelScope>) {
   const meta = useAgentRightPaneMeta()
   const actions = useAgentRightPaneActions()
@@ -1086,6 +1297,13 @@ function AgentTraceRightPanel({ active, scope }: RightPanelComponentProps<AgentR
   )
 }
 
+function resolveAgentCanvasReadiness(scope: AgentRightPanelScope): RightPanelReadiness {
+  if (scope.meta.agentType !== 'coco') return 'unavailable'
+  if (scope.meta.conversationState === 'unavailable') return 'unavailable'
+  if (scope.meta.conversationState === 'pending') return 'pending'
+  return scope.meta.agentId && scope.meta.sessionId ? 'ready' : 'unavailable'
+}
+
 function resolveAgentFilesReadiness(scope: AgentRightPanelScope): RightPanelReadiness {
   if (scope.meta.conversationState !== 'ready') return scope.meta.conversationState
   if (scope.meta.workspaceType === AGENT_WORKSPACE_TYPE.SYSTEM && !scope.hasSystemWorkspaceFiles) {
@@ -1128,6 +1346,35 @@ const AGENT_RIGHT_PANEL_CAPABILITIES = [
     })
   },
   {
+    component: AgentCanvasRightPanel,
+    resolve: (scope) => ({
+      id: 'canvas',
+      instanceKey: `session:${scope.meta.sessionId ?? ''}:canvas`,
+      title: scope.canvasTitle,
+      readiness: resolveAgentCanvasReadiness(scope),
+      canMaximize: true
+    })
+  },
+  {
+    component: AgentAssetsRightPanel,
+    resolve: (scope) => ({
+      id: 'assets',
+      instanceKey: `session:${scope.meta.sessionId ?? ''}:assets`,
+      title: scope.assetsTitle,
+      readiness: resolveAgentCanvasReadiness(scope),
+      canMaximize: true
+    })
+  },
+  {
+    component: AgentBranchesRightPanel,
+    resolve: (scope) => ({
+      id: 'branches',
+      instanceKey: `session:${scope.meta.sessionId ?? ''}:branches`,
+      title: scope.branchesTitle,
+      readiness: scope.meta.sessionId ? scope.meta.conversationState : 'unavailable'
+    })
+  },
+  {
     component: AgentStatusRightPanel,
     resolve: (scope) => ({
       id: 'status',
@@ -1152,8 +1399,38 @@ const AGENT_RIGHT_PANEL_CAPABILITIES = [
   }
 ] satisfies readonly RightPanelCapability<AgentRightPanelScope>[]
 
+const MODEL_ARTIFACT_NAME = /\.(glb|gltf|fbx|obj|stl|usd|usda|usdc)(\?|#|$)/i
+
+function isModelArtifactFile(artifact: AgentArtifactFile): boolean {
+  return MODEL_ARTIFACT_NAME.test(artifact.path) || MODEL_ARTIFACT_NAME.test(artifact.name)
+}
+
+function AutoOpenLatestModelArtifact() {
+  const status = useAgentRightPaneStatus()
+  const actions = useAgentRightPaneActions()
+  const openedPathRef = useRef<string | null>(null)
+  const latestModel = useMemo(
+    () => [...status.artifacts].reverse().find(isModelArtifactFile) ?? null,
+    [status.artifacts]
+  )
+
+  useEffect(() => {
+    if (!actions.canOpenArtifactFile || !latestModel) return
+    if (openedPathRef.current === latestModel.path) return
+    openedPathRef.current = latestModel.path
+    actions.openArtifactFile(latestModel.path)
+  }, [actions, latestModel])
+
+  return null
+}
+
 const AgentRightPaneViewport = memo(function AgentRightPaneViewport() {
-  return <RightPanelViewport />
+  return (
+    <>
+      <AutoOpenLatestModelArtifact />
+      <RightPanelViewport />
+    </>
+  )
 })
 
 function AgentRightPaneHighlightSection({
@@ -1348,6 +1625,24 @@ const AgentRightPaneShortcuts = memo(function AgentRightPaneShortcuts() {
         tab="files"
         label={t('agent.right_pane.tabs.files')}
         icon={<FolderOpen className="size-3.5" />}
+      />
+      <RightPanelShortcut
+        tab="canvas"
+        label={t('agent.right_pane.tabs.canvas')}
+        icon={<Workflow className="size-3.5" />}
+        data-testid="coco-session-canvas-button"
+      />
+      <RightPanelShortcut
+        tab="assets"
+        label={t('agent.right_pane.tabs.assets')}
+        icon={<Package className="size-3.5" />}
+        data-testid="coco-session-assets-button"
+      />
+      <RightPanelShortcut
+        tab="branches"
+        label={t('agent.right_pane.tabs.branches')}
+        icon={<GitBranch className="size-3.5" />}
+        data-testid="agent-session-branches-button"
       />
       <AgentRightPaneStatusShortcut />
       <RightPanelShortcut tab={TRACE_PANE_ID} label={t('trace.label')} icon={<Waypoints className="size-3.5" />} />

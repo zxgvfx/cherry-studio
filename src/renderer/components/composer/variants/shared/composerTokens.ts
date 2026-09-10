@@ -3,6 +3,7 @@ import {
   composerFileTokenIdFromSourceId,
   getComposerFileTokenSourceId
 } from '@renderer/utils/message/composerFileTokenSource'
+import { cocoSessionAssetPromptText } from '@shared/ai/cocoSessionAssets'
 import type { KnowledgeBase } from '@shared/data/types/knowledge'
 
 import type { ComposerDraftToken, ComposerSerializedToken } from '../../tokens'
@@ -22,7 +23,12 @@ export function fileToComposerToken(file: ComposerAttachment): ComposerDraftToke
     id: composerFileTokenId(file),
     kind: 'file',
     label: file.origin_name || file.name,
-    payload: file
+    payload: file,
+    ...(file.pipelineAssetId
+      ? {
+          promptText: cocoSessionAssetPromptText({ assetId: file.pipelineAssetId, name: file.origin_name || file.name })
+        }
+      : {})
   }
 }
 

@@ -20,13 +20,15 @@ import { createFilePathHandle, toFileUrl } from '@shared/utils/file'
 
 export function withComposerFilePartMeta(
   part: FileUIPart,
-  attachment: Pick<ComposerAttachment, 'fileTokenSourceId' | 'composerFileKind'>,
+  attachment: Pick<ComposerAttachment, 'fileTokenSourceId' | 'composerFileKind' | 'pipelineAssetId' | 'previewUrl'>,
   fileEntryId?: string
 ): FileUIPart {
   return withCherryMeta(part, {
     ...(fileEntryId ? { fileEntryId } : {}),
     fileTokenSourceId: attachment.fileTokenSourceId,
-    ...(attachment.composerFileKind ? { composerFileKind: attachment.composerFileKind } : {})
+    ...(attachment.composerFileKind ? { composerFileKind: attachment.composerFileKind } : {}),
+    ...(attachment.pipelineAssetId ? { pipelineAssetId: attachment.pipelineAssetId } : {}),
+    ...(attachment.previewUrl ? { previewUrl: attachment.previewUrl } : {})
   })
 }
 
@@ -52,6 +54,7 @@ export function withComposerFilePartMeta(
  */
 export async function buildFilePartsForAttachments(attachments: ComposerAttachment[]): Promise<FileUIPart[]> {
   const paths = attachments.map((attachment) => {
+    if (attachment.pipelineAssetId) return attachment.path
     if (!attachment.path) {
       throw new Error(`Cannot send attachment "${attachment.origin_name || attachment.name}": it has no file path`)
     }
@@ -59,9 +62,27 @@ export async function buildFilePartsForAttachments(attachments: ComposerAttachme
   })
   return Promise.all(
     attachments.map(async (attachment, index) => {
+      if (attachment.pipelineAssetId) {
+        const url =
+          attachment.previewUrl ||
+          (paths[index] ? toFileUrl(paths[index]!) : `pipeline-asset://${attachment.pipelineAssetId}`)
+        const mediaType =
+          attachment.type === 'image'
+            ? 'image/png'
+            : attachment.type === 'video'
+              ? 'video/mp4'
+              : 'application/octet-stream'
+        const basePart: FileUIPart = {
+          type: 'file',
+          mediaType,
+          url,
+          filename: attachment.origin_name || attachment.name
+        }
+        return withComposerFilePartMeta(basePart, attachment)
+      }
       const entry = await window.api.file.createInternalEntry({
         source: 'path',
-        path: paths[index],
+        path: paths[index]!,
         cleanupPolicy: 'delete_when_unreferenced'
       })
       const physicalPath = await window.api.file.getPhysicalPath({ id: entry.id })

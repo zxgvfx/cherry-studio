@@ -7,6 +7,7 @@ import { application } from '@application'
 import { agentGlobalSkillService } from '@data/services/AgentGlobalSkillService'
 import { loggerService } from '@logger'
 import { isWin } from '@main/core/platform'
+import { getProxyEnvironment } from '@main/services/proxy/proxyEnv'
 import { findExecutableInEnv } from '@main/utils/commandResolver'
 import { deleteDirectoryRecursive } from '@main/utils/fileOperations'
 import { directoryExists } from '@main/utils/legacyFile'
@@ -630,7 +631,10 @@ export class SkillService {
   }
 
   private async runGit(gitCommand: string, args: string[]): Promise<string> {
-    const env = await getShellEnv()
+    // ProxyService updates process.env whenever Coco pushes a managed proxy.
+    // getShellEnv() is cached and may have been captured before that push, so
+    // overlay the live proxy variables for every Git process.
+    const env = { ...(await getShellEnv()), ...getProxyEnvironment(process.env) }
     return executeCommand(gitCommand, args, {
       capture: true,
       timeout: GIT_COMMAND_TIMEOUT_MS,
@@ -893,20 +897,20 @@ export class SkillService {
 
     const branch = await this.resolveDefaultBranch(gitCommand, repoUrl)
     if (branch) {
-      await executeCommand(gitCommand, ['clone', '--depth', '1', '--branch', branch, '--', repoUrl, destDir])
+      await this.runGit(gitCommand, ['clone', '--depth', '1', '--branch', branch, '--', repoUrl, destDir])
       return
     }
 
     try {
-      await executeCommand(gitCommand, ['clone', '--depth', '1', '--', repoUrl, destDir])
+      await this.runGit(gitCommand, ['clone', '--depth', '1', '--', repoUrl, destDir])
     } catch {
-      await executeCommand(gitCommand, ['clone', '--depth', '1', '--branch', 'master', '--', repoUrl, destDir])
+      await this.runGit(gitCommand, ['clone', '--depth', '1', '--branch', 'master', '--', repoUrl, destDir])
     }
   }
 
   private async resolveDefaultBranch(command: string, repoUrl: string): Promise<string | null> {
     try {
-      const output = await executeCommand(command, ['ls-remote', '--symref', '--', repoUrl, 'HEAD'], { capture: true })
+      const output = await this.runGit(command, ['ls-remote', '--symref', '--', repoUrl, 'HEAD'])
       const match = output.match(/ref: refs\/heads\/([^\s]+)/)
       return match?.[1] ?? null
     } catch {

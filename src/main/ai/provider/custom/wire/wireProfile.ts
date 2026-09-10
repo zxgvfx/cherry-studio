@@ -248,7 +248,14 @@ export const WIRE_REGISTRY: Record<string, WireRegistration> = {
   // our providerId variant), so deliver under 'cherryin' here too — mirroring
   // google-vertex → vertex below.
   'cherryin-chat': { profile: OPENAI_WIRE_PROFILE, dualOpenAI: true, key: 'cherryin', passthrough: true },
-  newapi: { profile: OPENAI_WIRE_PROFILE, dualOpenAI: true },
+  // Sibling `google.imageConfig` so Nano Banana / Gemini chat-image on New API
+  // still receive aspectRatio + 1K/2K/4K after the OpenAI images wrapper drops
+  // leftover DALL·E pixel `size` (which the relay rejects as `unsupported size`).
+  newapi: {
+    profile: OPENAI_WIRE_PROFILE,
+    dualOpenAI: true,
+    also: [{ key: 'google', profile: DMXAPI_GOOGLE_PROFILE }]
+  },
   google: { profile: GOOGLE_WIRE_PROFILE },
   // Vertex reuses the google body but delivers under `vertex` (the key the
   // @ai-sdk/google-vertex image model reads), NOT the `google-vertex` provider id.

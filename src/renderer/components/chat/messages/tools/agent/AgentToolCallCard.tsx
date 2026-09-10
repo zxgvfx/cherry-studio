@@ -1,3 +1,7 @@
+import { useAgent } from '@renderer/hooks/agent/useAgent'
+import { useSession } from '@renderer/hooks/agent/useSession'
+import { useSearch } from '@tanstack/react-router'
+
 import { useOptionalMessageListActions } from '../../MessageListProvider'
 import {
   AgentToolsType,
@@ -9,6 +13,7 @@ import { type ToolStatus, ToolStatusIndicator } from '../shared/GenericTools'
 import type { ToolDisclosureItem } from '../shared/ToolDisclosure'
 import { extractToolErrorText } from '../toolError'
 import { AgentToolDisclosure, AgentToolDisclosureLabel } from './AgentToolDisclosure'
+import { isCocoScriptProposeTool, ScriptProposeTool } from './ScriptProposeTool'
 import { ToMarkdownTool } from './ToMarkdownTool'
 import { isValidAgentToolsType, renderTool } from './toolRendererRegistry'
 import { UnknownToolRenderer } from './UnknownToolRenderer'
@@ -61,11 +66,19 @@ export function AgentToolCallCard({
   showInlineDetails?: boolean
 }) {
   const actions = useOptionalMessageListActions()
-  const renderedItem = isValidAgentToolsType(toolName)
-    ? renderTool(toolName, input ?? {}, output, hasError)
-    : toolName === TO_MARKDOWN_RUNTIME_TOOL_NAME
-      ? ToMarkdownTool({ input, output })
-      : UnknownToolRenderer({ toolName: toolName ?? 'Tool', input, output })
+  const search = useSearch({ strict: false }) as { sessionId?: string }
+  const sessionId = typeof search.sessionId === 'string' ? search.sessionId : ''
+  const { session } = useSession(sessionId || null)
+  const { agent } = useAgent(session?.agentId ?? '')
+  const isCocoAgent = agent?.type === 'coco'
+  const renderedItem =
+    isCocoAgent && isCocoScriptProposeTool(toolName)
+      ? ScriptProposeTool({ toolName: toolName ?? 'script.propose', input, output })
+      : isValidAgentToolsType(toolName)
+        ? renderTool(toolName, input ?? {}, output, hasError)
+        : toolName === TO_MARKDOWN_RUNTIME_TOOL_NAME
+          ? ToMarkdownTool({ input, output })
+          : UnknownToolRenderer({ toolName: toolName ?? 'Tool', input, output })
   const openToolFlow =
     openFlowOnClick && actions?.openAgentToolFlow && toolCallId
       ? () =>

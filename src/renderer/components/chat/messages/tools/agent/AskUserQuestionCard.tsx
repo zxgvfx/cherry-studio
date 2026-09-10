@@ -48,11 +48,11 @@ interface CompletedContentProps {
 function CompletedContent({ question, answer }: CompletedContentProps) {
   return (
     <div className="space-y-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <Badge variant={answer ? 'secondary' : 'outline'} className="m-0">
+      <div className="flex min-w-0 items-start gap-2">
+        <Badge variant={answer ? 'secondary' : 'outline'} className="m-0 shrink-0">
           <SkeletonValue value={question?.header} width="60px" />
         </Badge>
-        <div className="min-w-0 flex-1 text-default-700 text-sm">
+        <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-default-700 text-sm">
           <SkeletonValue value={question?.question} width="100%" />
         </div>
       </div>

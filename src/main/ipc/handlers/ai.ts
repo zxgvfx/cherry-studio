@@ -1,10 +1,12 @@
 import { application } from '@application'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
+import { agentSessionService } from '@data/services/AgentSessionService'
 import { fileEntryService } from '@data/services/FileEntryService'
 import { messageService } from '@data/services/MessageService'
 import { loggerService } from '@logger'
 import { createAgent } from '@main/ai/agents/createAgent'
 import { createBuiltinSupportSession } from '@main/ai/agents/createBuiltinSupportSession'
+import { branchAgentSession } from '@main/ai/agentSession/branchAgentSession'
 import { extractAgentSessionId, isAgentSessionTopic } from '@main/ai/agentSession/topic'
 import { inflateEntities, isToolOutputBlobEntry, reconstructOutput } from '@main/ai/contextBuild/toolOutputStore'
 import { AiStreamAdmissionError, WebContentsListener } from '@main/ai/streamManager'
@@ -206,6 +208,8 @@ export const aiHandlers: IpcHandlersFor<typeof aiRequestSchemas> = {
 
   // ── Agent creation + session warm-connection lifecycle. ──
   'ai.agent.create': createAgent,
+  'ai.agent.session.branch': (payload) => branchAgentSession(payload),
+  'ai.agent.session.branches': async ({ sessionId }) => agentSessionService.listBranchFamily(sessionId),
   'ai.agent.support_session.create': async () => ({ sessionId: createBuiltinSupportSession().id }),
   // Warm-lease acquire: opens the live connection eagerly (not just a warm-query park) so the
   // session's slash-command catalog is read into the cache before the first message — the

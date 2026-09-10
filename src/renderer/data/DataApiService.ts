@@ -40,6 +40,21 @@ import { DataApiDevtools } from './utils/dataApiDevtools'
 
 const logger = loggerService.withContext('DataApiService')
 
+function isDccPanelAttach(): boolean {
+  try {
+    const win = window as Window & { __CHERRY_PANEL_ATTACH?: string; __CHERRY_DCC_TYPE?: string }
+    if (win.__CHERRY_PANEL_ATTACH === '1') return true
+    const dcc = win.__CHERRY_DCC_TYPE
+    return Boolean(dcc && dcc !== 'standalone')
+  } catch {
+    return false
+  }
+}
+
+function dataApiRequestTimeoutMs(): number {
+  return isDccPanelAttach() ? 12_000 : 3_000
+}
+
 /**
  * Retry options interface.
  * Retryability is now determined by DataApiError.isRetryable getter.
@@ -67,9 +82,9 @@ export class DataApiService implements ApiClient {
   // Default retry options
   // Retryability is determined by DataApiError.isRetryable
   private defaultRetryOptions: RetryOptions = {
-    maxRetries: 2,
-    retryDelay: 1000,
-    backoffMultiplier: 2
+    maxRetries: isDccPanelAttach() ? 10 : 2,
+    retryDelay: isDccPanelAttach() ? 1500 : 1000,
+    backoffMultiplier: 1.2
   }
 
   constructor() {
@@ -140,10 +155,11 @@ export class DataApiService implements ApiClient {
       logger.debug(`Making ${request.method} request to ${request.path}`, { request })
 
       // Direct IPC call with timeout
+      const timeoutMs = dataApiRequestTimeoutMs()
       const response = await Promise.race([
         window.api.dataApi.request(request),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(DataApiErrorFactory.timeout(request.path, 3000, requestContext)), 3000)
+          setTimeout(() => reject(DataApiErrorFactory.timeout(request.path, timeoutMs, requestContext)), timeoutMs)
         )
       ])
 

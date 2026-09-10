@@ -11,6 +11,7 @@ import { pinTable } from '@data/db/schemas/pin'
 import { topicTable } from '@data/db/schemas/topic'
 import type { DbOrTx } from '@data/db/types'
 import { loggerService } from '@logger'
+import { abortDeletedTopicStreams } from '@main/ai/agentSession/disposeDeletedAgentSessions'
 import { DataApiErrorFactory } from '@shared/data/api/errors'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
 import type { EntitySearchItem } from '@shared/data/api/schemas/search'
@@ -396,6 +397,7 @@ export class TopicService {
    * makes `listByCursor`'s JOIN silently hide the topic from both sections.
    */
   delete(id: string): void {
+    abortDeletedTopicStreams([id])
     const dbService = application.get('DbService')
     const deletedIds = dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, [id], { requireAll: true }))
     this.notifyReadModelChange(deletedIds, 'membership')
@@ -405,6 +407,7 @@ export class TopicService {
   }
 
   deleteByIds(ids: string[]): DeleteTopicsResult {
+    abortDeletedTopicStreams(ids)
     const dbService = application.get('DbService')
     const deletedIds = dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, ids, { requireAll: true }))
     this.notifyReadModelChange(deletedIds, 'membership')
@@ -667,6 +670,14 @@ export class TopicService {
 
   deleteByAssistantId(assistantId: string): DeleteTopicsResult {
     const dbService = application.get('DbService')
+    const topicIds = dbService
+      .getDb()
+      .select({ id: topicTable.id })
+      .from(topicTable)
+      .where(and(eq(topicTable.assistantId, assistantId), isNull(topicTable.deletedAt)))
+      .all()
+      .map((row) => row.id)
+    abortDeletedTopicStreams(topicIds)
     const deletedIds = dbService.withWriteTx((tx) => this.deleteByAssistantIdTx(tx, assistantId))
     this.notifyReadModelChange(deletedIds, 'membership')
     if (deletedIds.length > 0) pinService.notifyPurged()

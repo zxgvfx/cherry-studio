@@ -13,11 +13,18 @@ describe('StreamChunkCoalescer', () => {
 
   it('merges rapid reasoning deltas into one renderer chunk', () => {
     vi.useFakeTimers()
-    const emitted: Array<{ chunk: UIMessageChunk; model: UniqueModelId | undefined; anchor: string | undefined }> = []
-    const coalescer = new StreamChunkCoalescer((chunk, model, anchor) => emitted.push({ chunk, model, anchor }))
+    const emitted: Array<{
+      chunk: UIMessageChunk
+      model: UniqueModelId | undefined
+      anchor: string | undefined
+      attemptId: number | undefined
+    }> = []
+    const coalescer = new StreamChunkCoalescer((chunk, model, anchor, attemptId) =>
+      emitted.push({ chunk, model, anchor, attemptId })
+    )
 
-    coalescer.push({ type: 'reasoning-delta', id: 'thought-1', delta: 'first ' }, modelId, 'assistant-1')
-    coalescer.push({ type: 'reasoning-delta', id: 'thought-1', delta: 'second' }, modelId, 'assistant-1')
+    coalescer.push({ type: 'reasoning-delta', id: 'thought-1', delta: 'first ' }, modelId, 'assistant-1', 3)
+    coalescer.push({ type: 'reasoning-delta', id: 'thought-1', delta: 'second' }, modelId, 'assistant-1', 3)
 
     expect(emitted).toEqual([])
     vi.advanceTimersByTime(16)
@@ -26,7 +33,8 @@ describe('StreamChunkCoalescer', () => {
       {
         chunk: { type: 'reasoning-delta', id: 'thought-1', delta: 'first second' },
         model: modelId,
-        anchor: 'assistant-1'
+        anchor: 'assistant-1',
+        attemptId: 3
       }
     ])
   })

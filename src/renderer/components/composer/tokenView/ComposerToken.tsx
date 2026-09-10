@@ -12,15 +12,17 @@ import { ImagePreviewService } from '@renderer/services/ImagePreviewService'
 import { COMPOSER_FILE_KIND, type ComposerFileKind, FILE_TYPE } from '@renderer/types/file'
 import { formatFileSize } from '@renderer/utils/file'
 import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
+import { readPipelineNodeTokenPayload } from '@renderer/utils/pipelineNodes'
 import type { FileUrlString } from '@shared/types/file'
 import { fileUrlToPath } from '@shared/utils/file'
-import { Boxes, FileText, Folder, Link2, MessagesSquare, TextQuote, ToolCase, X } from 'lucide-react'
+import { Boxes, FileText, Folder, Link2, MessagesSquare, TextQuote, ToolCase, Workflow, X } from 'lucide-react'
 import {
   type ComponentType,
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type MouseEventHandler,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -32,13 +34,25 @@ import { useTranslation } from 'react-i18next'
 import type { ChatInputTokenKind, ChatTokenView } from '../chatTokenView'
 import { parseComposerLink } from '../linkToken'
 import { type FileTokenPresentation, getFileTokenPresentation } from './fileTokenPresentation'
+import { PipelineNodeParamForm, usePipelineNodeCatalogItem } from './PipelineNodeParamForm'
 
 const tokenIconClassName = 'size-[1em] shrink-0 text-current opacity-80'
 const tokenRemoveIconClassName = 'size-[0.95em] shrink-0 text-current'
 const TOKEN_POPOVER_OPEN_DELAY_MS = 120
 const TOKEN_POPOVER_CLOSE_DELAY_MS = 160
 const TOKEN_TOOLTIP_DELAY_MS = 300
-type TokenPopoverOpenReason = 'keyboard' | 'pointer'
+type TokenPopoverOpenReason = 'keyboard' | 'pointer' | 'pinned'
+const pinnedComposerPopoverKeys = new Set<string>()
+
+function isComposerPopoverPinned(pinKey: string | undefined) {
+  return Boolean(pinKey && pinnedComposerPopoverKeys.has(pinKey))
+}
+
+function setComposerPopoverPinned(pinKey: string | undefined, pinned: boolean) {
+  if (!pinKey) return
+  if (pinned) pinnedComposerPopoverKeys.add(pinKey)
+  else pinnedComposerPopoverKeys.delete(pinKey)
+}
 const tokenPreviewHeaderClassName =
   'flex h-20 items-center justify-center border-border-subtle border-b bg-[repeating-linear-gradient(135deg,var(--border-subtle)_0,var(--border-subtle)_1px,transparent_1px,transparent_8px)] bg-muted'
 const pastedTextPreviewCache = new Map<string, Promise<string>>()
@@ -51,6 +65,7 @@ const tokenIconByKind: Record<ChatInputTokenKind, ReactNode> = {
   knowledge: <Boxes className={tokenIconClassName} />,
   reference: <MessagesSquare className={tokenIconClassName} />,
   quote: <TextQuote className={tokenIconClassName} />,
+  pipelineNode: <Workflow className={tokenIconClassName} />,
   promptVariable: <BracesVariableIcon className={tokenIconClassName} />
 }
 
@@ -70,6 +85,7 @@ export interface ComposerTokenProps {
   onMouseDown?: MouseEventHandler<HTMLSpanElement>
   onRemove?: () => void
   removeLabel?: string
+  onPipelineNodeValuesChange?: (values: Record<string, unknown>) => void
 }
 
 export interface ReadOnlyComposerFileTokenPreview {
@@ -401,7 +417,7 @@ function FileTokenPreviewCard({
   secondaryAction?: ReactNode
 }) {
   const { t } = useTranslation()
-  const sizeLabel = typeof file?.size === 'number' ? formatFileSize(file.size) : undefined
+  const sizeLabel = typeof file?.size === 'number' && file.size > 0 ? formatFileSize(file.size) : undefined
   const hasActions = Boolean(secondaryAction)
   const [failedPreviewUrl, setFailedPreviewUrl] = useState<string>()
   const hasFailedPreview = Boolean(presentation.previewUrl && presentation.previewUrl === failedPreviewUrl)
@@ -484,21 +500,30 @@ interface ComposerTokenHoverPopoverProps {
   ariaLabel: string
   contentClassName?: string
   onActivate?: () => void
+  /** Click the chip to pin the panel until the user clicks elsewhere. Hover remains a preview. */
+  pinOnClick?: boolean
+  pinKey?: string
 }
 
-function ComposerTokenHoverPopover({
+export function ComposerTokenHoverPopover({
   trigger,
   content,
   ariaLabel,
   contentClassName,
-  onActivate
+  onActivate,
+  pinOnClick = false,
+  pinKey
 }: ComposerTokenHoverPopoverProps) {
-  const [popoverOpen, setPopoverOpen] = useState(false)
+  const [pinned, setPinned] = useState(() => pinOnClick && isComposerPopoverPinned(pinKey))
+  const [popoverOpen, setPopoverOpen] = useState(() => pinOnClick && isComposerPopoverPinned(pinKey))
   const openTimerRef = useRef<number | null>(null)
   const closeTimerRef = useRef<number | null>(null)
   const triggerRef = useRef<HTMLSpanElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
-  const popoverOpenReasonRef = useRef<TokenPopoverOpenReason>('pointer')
+  const pinnedRef = useRef(pinned)
+  const popoverOpenReasonRef = useRef<TokenPopoverOpenReason>(pinned ? 'pinned' : 'pointer')
+
+  pinnedRef.current = pinned
 
   const clearOpenTimer = useCallback(() => {
     if (openTimerRef.current === null) return
@@ -512,29 +537,50 @@ function ComposerTokenHoverPopover({
     closeTimerRef.current = null
   }, [])
 
+  const pinPopover = useCallback(() => {
+    pinnedRef.current = true
+    setComposerPopoverPinned(pinKey, true)
+    popoverOpenReasonRef.current = 'pinned'
+    clearOpenTimer()
+    clearCloseTimer()
+    setPinned(true)
+    setPopoverOpen(true)
+  }, [clearCloseTimer, clearOpenTimer, pinKey])
+
+  const closePopover = useCallback(() => {
+    pinnedRef.current = false
+    setComposerPopoverPinned(pinKey, false)
+    clearOpenTimer()
+    clearCloseTimer()
+    setPinned(false)
+    setPopoverOpen(false)
+  }, [clearCloseTimer, clearOpenTimer, pinKey])
+
   const openPopover = useCallback(
     (reason: TokenPopoverOpenReason = 'pointer') => {
+      if (reason === 'pinned') {
+        pinPopover()
+        return
+      }
       popoverOpenReasonRef.current = reason
       clearOpenTimer()
       clearCloseTimer()
       setPopoverOpen(true)
     },
-    [clearCloseTimer, clearOpenTimer]
+    [clearCloseTimer, clearOpenTimer, pinPopover]
   )
 
-  const closePopover = useCallback(() => {
-    clearOpenTimer()
-    clearCloseTimer()
-    setPopoverOpen(false)
-  }, [clearCloseTimer, clearOpenTimer])
-
   const openPointerPopover = useCallback(() => {
+    if (pinnedRef.current) {
+      clearCloseTimer()
+      return
+    }
     openPopover('pointer')
-  }, [openPopover])
+  }, [clearCloseTimer, openPopover])
 
   const scheduleOpenPopover = useCallback(() => {
     clearCloseTimer()
-    if (popoverOpen || openTimerRef.current !== null) return
+    if (popoverOpen || pinnedRef.current || openTimerRef.current !== null) return
     popoverOpenReasonRef.current = 'pointer'
 
     openTimerRef.current = window.setTimeout(() => {
@@ -544,40 +590,56 @@ function ComposerTokenHoverPopover({
   }, [clearCloseTimer, popoverOpen])
 
   const scheduleClosePopover = useCallback(() => {
+    if (pinnedRef.current) return
     clearOpenTimer()
     clearCloseTimer()
     closeTimerRef.current = window.setTimeout(() => {
+      if (pinnedRef.current) {
+        closeTimerRef.current = null
+        return
+      }
       setPopoverOpen(false)
       closeTimerRef.current = null
     }, TOKEN_POPOVER_CLOSE_DELAY_MS)
   }, [clearCloseTimer, clearOpenTimer])
 
   const markPointerOpenReason = useCallback(() => {
+    if (pinOnClick) {
+      pinPopover()
+      return
+    }
     popoverOpenReasonRef.current = 'pointer'
-  }, [])
+  }, [pinOnClick, pinPopover])
 
   const handlePopoverOpenChange = useCallback(
     (open: boolean) => {
-      if (open && popoverOpenReasonRef.current !== 'keyboard') {
-        popoverOpenReasonRef.current = 'pointer'
+      if (open) {
+        if (pinOnClick && (pinnedRef.current || popoverOpenReasonRef.current === 'pinned')) {
+          pinPopover()
+          return
+        }
+        if (popoverOpenReasonRef.current !== 'keyboard' && popoverOpenReasonRef.current !== 'pinned') {
+          popoverOpenReasonRef.current = 'pointer'
+        }
+        clearOpenTimer()
+        clearCloseTimer()
+        setPopoverOpen(true)
+        return
       }
-      clearOpenTimer()
-      clearCloseTimer()
-      setPopoverOpen(open)
+
+      closePopover()
     },
-    [clearCloseTimer, clearOpenTimer]
+    [clearCloseTimer, clearOpenTimer, closePopover, pinOnClick, pinPopover]
   )
 
   const handlePopoverOpenAutoFocus = useCallback((event: Event) => {
-    if (popoverOpenReasonRef.current !== 'keyboard') {
+    if (popoverOpenReasonRef.current !== 'keyboard' && popoverOpenReasonRef.current !== 'pinned') {
       event.preventDefault()
     }
   }, [])
 
   const handlePopoverCloseAutoFocus = useCallback((event: Event) => {
-    if (popoverOpenReasonRef.current !== 'keyboard') {
-      event.preventDefault()
-    }
+    event.preventDefault()
   }, [])
 
   const isFocusWithinPopover = useCallback((target: EventTarget | null) => {
@@ -587,7 +649,7 @@ function ComposerTokenHoverPopover({
 
   const handleTriggerBlur = useCallback(
     (event: ReactFocusEvent<HTMLElement>) => {
-      if (isFocusWithinPopover(event.relatedTarget)) return
+      if (pinnedRef.current || isFocusWithinPopover(event.relatedTarget)) return
       scheduleClosePopover()
     },
     [isFocusWithinPopover, scheduleClosePopover]
@@ -595,7 +657,7 @@ function ComposerTokenHoverPopover({
 
   const handleContentBlur = useCallback(
     (event: ReactFocusEvent<HTMLElement>) => {
-      if (isFocusWithinPopover(event.relatedTarget)) return
+      if (pinnedRef.current || isFocusWithinPopover(event.relatedTarget)) return
       scheduleClosePopover()
     },
     [isFocusWithinPopover, scheduleClosePopover]
@@ -611,6 +673,8 @@ function ComposerTokenHoverPopover({
         if (onActivate) {
           closePopover()
           onActivate()
+        } else if (pinOnClick) {
+          pinPopover()
         } else {
           openPopover('keyboard')
         }
@@ -623,19 +687,61 @@ function ComposerTokenHoverPopover({
         closePopover()
       }
     },
-    [closePopover, onActivate, openPopover]
+    [closePopover, onActivate, openPopover, pinOnClick, pinPopover]
   )
 
   const handleTriggerClick = useCallback(
     (event: ReactMouseEvent<HTMLElement>) => {
-      if (!onActivate || (event.target as HTMLElement | null)?.closest('[data-composer-token-remove]')) return
+      if ((event.target as HTMLElement | null)?.closest('[data-composer-token-remove]')) return
+
+      if (onActivate) {
+        stopTokenActionEvent(event)
+        closePopover()
+        onActivate()
+        return
+      }
+
+      if (!pinOnClick) return
 
       stopTokenActionEvent(event)
-      closePopover()
-      onActivate()
+      pinPopover()
     },
-    [closePopover, onActivate]
+    [closePopover, onActivate, pinOnClick, pinPopover]
   )
+
+  const handleContentPointerDown = useCallback(
+    (event: ReactMouseEvent<HTMLElement> | ReactPointerEvent<HTMLElement>) => {
+      event.stopPropagation()
+      if (pinOnClick) pinPopover()
+    },
+    [pinOnClick, pinPopover]
+  )
+
+  const handleInteractOutside = useCallback(
+    (event: Event) => {
+      const target = event.target
+      if (target instanceof Node && isFocusWithinPopover(target)) {
+        event.preventDefault()
+        return
+      }
+      if (pinOnClick) closePopover()
+    },
+    [closePopover, isFocusWithinPopover, pinOnClick]
+  )
+
+  useEffect(() => {
+    if (!pinned) return
+
+    const dismissIfOutside = (event: Event) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (triggerRef.current?.contains(target) || contentRef.current?.contains(target)) return
+      closePopover()
+    }
+
+    document.addEventListener('pointerdown', dismissIfOutside, true)
+    return () => document.removeEventListener('pointerdown', dismissIfOutside, true)
+  }, [closePopover, pinned])
 
   useEffect(
     () => () => {
@@ -652,6 +758,8 @@ function ComposerTokenHoverPopover({
       role="button"
       tabIndex={0}
       aria-label={ariaLabel}
+      aria-pressed={pinOnClick ? pinned : undefined}
+      data-composer-popover-pinned={pinOnClick ? String(pinned) : undefined}
       onMouseEnter={scheduleOpenPopover}
       onMouseLeave={scheduleClosePopover}
       onMouseMove={scheduleOpenPopover}
@@ -674,10 +782,15 @@ function ComposerTokenHoverPopover({
         className={cn('w-fit max-w-[calc(100vw-24px)] overflow-hidden rounded-2xl p-0 shadow-xl', contentClassName)}
         onMouseEnter={openPointerPopover}
         onMouseLeave={scheduleClosePopover}
+        onPointerDown={handleContentPointerDown}
+        onMouseDown={handleContentPointerDown}
         onFocus={clearCloseTimer}
         onBlur={handleContentBlur}
         onOpenAutoFocus={handlePopoverOpenAutoFocus}
-        onCloseAutoFocus={handlePopoverCloseAutoFocus}>
+        onCloseAutoFocus={handlePopoverCloseAutoFocus}
+        onInteractOutside={handleInteractOutside}
+        onFocusOutside={handleInteractOutside}
+        onPointerDownOutside={handleInteractOutside}>
         {typeof content === 'function' ? content({ closePopover }) : content}
       </PopoverContent>
     </Popover>
@@ -760,7 +873,7 @@ export function FileComposerToken(props: FileComposerTokenProps) {
   )
 
   if (pathTooltipPath && shouldShowPathTooltip) {
-    const sizeLabel = typeof file?.size === 'number' ? formatFileSize(file.size) : undefined
+    const sizeLabel = typeof file?.size === 'number' && file.size > 0 ? formatFileSize(file.size) : undefined
     const tooltipContent = <TokenPathTooltipContent path={pathTooltipPath} sizeLabel={sizeLabel} />
 
     return (
@@ -776,7 +889,7 @@ export function FileComposerToken(props: FileComposerTokenProps) {
   }
 
   if (props.readOnly && !shouldShowPopover) {
-    const sizeLabel = typeof file?.size === 'number' ? formatFileSize(file.size) : undefined
+    const sizeLabel = typeof file?.size === 'number' && file.size > 0 ? formatFileSize(file.size) : undefined
     const detail = [presentation.typeLabel, sizeLabel].filter(Boolean).join(' · ')
 
     return (
@@ -901,6 +1014,33 @@ export function PromptVariableComposerToken(props: ComposerTokenProps) {
   return <ActiveComposerToken {...props} icon={tokenIconByKind.promptVariable} colorClassName="text-info" />
 }
 
+export function PipelineNodeComposerToken(props: ComposerTokenProps) {
+  const payload = readPipelineNodeTokenPayload(props.token)
+  const node = usePipelineNodeCatalogItem(payload.nodeId)
+  const chipElement = renderActiveComposerTokenElement({
+    ...props,
+    icon: tokenIconByKind.pipelineNode,
+    colorClassName: 'text-primary'
+  })
+
+  return (
+    <ComposerTokenHoverPopover
+      trigger={chipElement}
+      ariaLabel={props.token.label}
+      pinOnClick
+      pinKey={props.token.id}
+      content={
+        <PipelineNodeParamForm
+          token={props.token}
+          node={node}
+          disabled={props.readOnly || !props.onPipelineNodeValuesChange}
+          onValuesChange={props.readOnly ? undefined : props.onPipelineNodeValuesChange}
+        />
+      }
+    />
+  )
+}
+
 export const composerInputTokenComponentByKind = {
   skill: SkillComposerToken,
   link: LinkComposerToken,
@@ -909,6 +1049,7 @@ export const composerInputTokenComponentByKind = {
   knowledge: KnowledgeComposerToken,
   reference: ReferenceComposerToken,
   quote: QuoteComposerToken,
+  pipelineNode: PipelineNodeComposerToken,
   promptVariable: PromptVariableComposerToken
 } satisfies Record<ChatInputTokenKind, ComponentType<ComposerTokenProps>>
 

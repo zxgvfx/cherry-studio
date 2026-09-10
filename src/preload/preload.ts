@@ -130,6 +130,7 @@ const api = {
     write: (filePath: string, data: Uint8Array | string) => ipcRenderer.invoke(IpcChannel.File_Write, filePath, data),
     open: (options?: OpenDialogOptions) => ipcRenderer.invoke(IpcChannel.File_Open, options),
     openPath: (path: string) => ipcRenderer.invoke(IpcChannel.File_OpenPath, path),
+    startDrag: (path: string) => ipcRenderer.send(IpcChannel.File_StartDrag, path),
     save: (path: string, content: string | NodeJS.ArrayBufferView, options?: any): Promise<string | null> =>
       ipcRenderer.invoke(IpcChannel.File_Save, path, content, options),
     selectFolder: (options?: OpenDialogOptions): Promise<string | null> =>

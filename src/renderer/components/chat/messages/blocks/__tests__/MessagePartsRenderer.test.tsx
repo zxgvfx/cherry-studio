@@ -101,6 +101,7 @@ vi.mock('react-i18next', () => ({
       if (key === 'chat.input.tools.open_file') return 'Open File'
       if (key === 'chat.input.tools.open_with') return 'Open with'
       if (key === 'chat.input.tools.open_file_error') return 'Failed to open file'
+      if (key === 'agent.session.artifact.open_in_pane') return 'Open in file pane'
       return key
     }
   })
@@ -239,6 +240,23 @@ vi.mock('../ErrorBlock', () => ({
       data-error-message={error?.message ?? ''}
       data-cached-diagnosis={cachedDiagnosis ? JSON.stringify(cachedDiagnosis) : ''}
     />
+  )
+}))
+
+vi.mock('../PipelineAssetBlock', () => ({
+  __esModule: true,
+  default: ({ assets }: { assets: Array<{ assetId: string }> }) => (
+    <div data-testid="mock-pipeline-asset-block" data-ids={assets.map((asset) => asset.assetId).join(',')} />
+  )
+}))
+
+vi.mock('../PipelineRunBlocks', () => ({
+  __esModule: true,
+  PipelineRunProgressBlock: ({ data }: { data: { runId: string; status: string } }) => (
+    <div data-testid="mock-pipeline-run-progress" data-run={data.runId} data-status={data.status} />
+  ),
+  PipelineReviewBlock: ({ data }: { data: { runId: string; url: string } }) => (
+    <div data-testid="mock-pipeline-review" data-run={data.runId} data-url={data.url} />
   )
 }))
 
@@ -973,6 +991,41 @@ describe('MessagePartsRenderer', () => {
       expect(screen.getByTestId('mock-error-block')).toHaveAttribute('data-error-message', 'boom')
     })
 
+    it('does not render pipeline workflow products as a chat card', () => {
+      renderParts([
+        {
+          type: 'data-pipeline-asset',
+          data: {
+            assetId: 'ec608aec-c2b5-4248-b719-8f2bd59f4d6a',
+            name: 'result_1787028190375.glb',
+            assetType: 'model/gltf-binary',
+            downloadUrl: 'http://pipeline/api/assets/ec608aec-c2b5-4248-b719-8f2bd59f4d6a/file'
+          }
+        }
+      ] as unknown as CherryMessagePart[])
+
+      expect(screen.queryByTestId('mock-pipeline-asset-block')).not.toBeInTheDocument()
+    })
+
+    it('renders pipeline run progress and HITL review parts', () => {
+      renderParts([
+        {
+          type: 'data-pipeline-run-progress',
+          data: { runId: 'run-1', status: 'running', stepLabel: 'pixal3d' }
+        },
+        {
+          type: 'data-pipeline-review',
+          data: { runId: 'run-1', url: 'http://pipeline/review/?run_id=run-1', title: '人工审核' }
+        }
+      ] as unknown as CherryMessagePart[])
+
+      expect(screen.getByTestId('mock-pipeline-run-progress')).toHaveAttribute('data-status', 'running')
+      expect(screen.getByTestId('mock-pipeline-review')).toHaveAttribute(
+        'data-url',
+        'http://pipeline/review/?run_id=run-1'
+      )
+    })
+
     it('rehydrates a persisted diagnosis onto the error block after an API round-trip', () => {
       const diagnosis = {
         summary: 'OpenAI API key is invalid',
@@ -1061,8 +1114,19 @@ describe('MessagePartsRenderer', () => {
         (container.textContent ?? '').indexOf('final answer')
       )
 
+      // Clicking the card toggles an inline preview that unmounts on collapse, so
+      // heavy viewers (GLB) never outlive the card.
       fireEvent.click(screen.getByRole('button', { name: 'Preview report.md' }))
-      expect(openArtifactFile).toHaveBeenCalledWith('dist/report.md')
+      expect(screen.getByTestId('artifact-inline-preview')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Preview report.md' }))
+      expect(screen.queryByTestId('artifact-inline-preview')).toBeNull()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open with report.md' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Open in file pane' }))
+      await waitFor(() => {
+        expect(openArtifactFile).toHaveBeenCalledWith('dist/report.md')
+      })
+
       fireEvent.click(screen.getByRole('button', { name: 'Open with report.md' }))
       fireEvent.click(screen.getByRole('button', { name: 'Open File' }))
       await waitFor(() => {
@@ -1536,6 +1600,66 @@ describe('MessagePartsRenderer', () => {
       expect(screen.queryByTestId('tool-history-content')).toBeNull()
       expect(screen.queryByTestId('mock-tool-group-content')).toBeNull()
       expect(screen.getByText('final answer')).toBeInTheDocument()
+    })
+
+    it('does not keep workflow product cards in the completed answer', () => {
+      renderParts(
+        [
+          toolPart('propose', 'output-available', 'script.propose'),
+          { type: 'text', text: '画布已生成并应用。现在提交运行。' },
+          toolPart('submit', 'output-available', 'submit.graph'),
+          {
+            type: 'data-pipeline-asset',
+            data: {
+              assetId: 'asset-1',
+              name: 'result.glb',
+              assetType: 'model/gltf-binary',
+              downloadUrl: 'http://pipeline/api/assets/asset-1/file'
+            }
+          }
+        ] as unknown as CherryMessagePart[],
+        msg({ status: 'success', updatedAt: '2026-01-01T00:00:01Z' })
+      )
+
+      expect(screen.getByTestId('completed-process-trigger')).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByTestId('mock-pipeline-asset-block')).not.toBeInTheDocument()
+    })
+
+    it('folds settled workflow progress into collapsed tool history', () => {
+      renderParts(
+        [
+          toolPart('propose', 'output-available', 'script.propose'),
+          { type: 'text', text: '画布已生成并应用。现在提交运行。' },
+          toolPart('submit', 'output-available', 'submit.graph'),
+          {
+            type: 'data-pipeline-run-progress',
+            data: { runId: 'run-1', status: 'success' }
+          },
+          {
+            type: 'data-pipeline-review',
+            data: { runId: 'run-1', url: 'http://pipeline/review/?run_id=run-1', title: '人工审核' }
+          },
+          {
+            type: 'data-pipeline-asset',
+            data: {
+              assetId: 'asset-1',
+              name: 'result.glb',
+              assetType: 'model/gltf-binary',
+              downloadUrl: 'http://pipeline/api/assets/asset-1/file'
+            }
+          }
+        ] as unknown as CherryMessagePart[],
+        msg({ status: 'success', updatedAt: '2026-01-01T00:00:01Z' })
+      )
+
+      expect(screen.queryByTestId('mock-pipeline-run-progress')).toBeNull()
+      expect(screen.queryByTestId('mock-pipeline-asset-block')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByTestId('completed-process-trigger'))
+      expect(screen.getByTestId('mock-pipeline-run-progress')).toHaveAttribute('data-status', 'success')
+      expect(
+        screen.getByTestId('mock-pipeline-run-progress').closest('[data-testid="tool-history-content"]')
+      ).not.toBeNull()
+      expect(screen.queryByTestId('mock-pipeline-review')).not.toBeInTheDocument()
     })
 
     it('keeps the final text node mounted across the active-to-terminal frame', () => {

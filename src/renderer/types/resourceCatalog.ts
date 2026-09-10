@@ -1,3 +1,4 @@
+import type { CocoAgentMode, CocoAgentPermission } from '@shared/ai/cocoAgent'
 import type { Tool } from '@shared/ai/tool'
 import type { AgentEntity, AgentPermissionMode } from '@shared/data/api/schemas/agents'
 import type { AgentType, InstalledSkill } from '@shared/data/types/agent'
@@ -16,6 +17,8 @@ export type ResourceEditDialogTarget = ({ kind: 'assistant'; id: string } | { ki
 export type ResourceCreateValues = {
   agentType: AgentType
   permissionMode: AgentPermissionMode
+  cocoMode?: CocoAgentMode
+  cocoPermission?: CocoAgentPermission
   avatar: string
   name: string
   modelId: UniqueModelId

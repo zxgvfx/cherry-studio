@@ -51,6 +51,7 @@ export enum IpcChannel {
   //file
   File_Open = 'file:open',
   File_OpenPath = 'file:openPath',
+  File_StartDrag = 'file:startDrag',
   File_Save = 'file:save',
   File_Select = 'file:select',
   File_ReadExternal = 'file:readExternal',

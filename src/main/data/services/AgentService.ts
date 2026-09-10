@@ -13,6 +13,7 @@ import { pinService } from '@data/services/PinService'
 import { applyMoves, insertWithOrderKey } from '@data/services/utils/orderKey'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
+import { disposeDeletedAgentSessions } from '@main/ai/agentSession/disposeDeletedAgentSessions'
 import { Emitter, type Event } from '@main/core/lifecycle'
 import { t } from '@main/i18n'
 import { BUILTIN_AGENT_ROLE, type BuiltinAgentRole, CHERRY_SUPPORT_AGENT_ID } from '@shared/ai/builtinAgent'
@@ -772,6 +773,9 @@ export class AgentService {
     // can opt into deleting them in this same transaction. `pin` has no FK back
     // to agent, so purge it alongside the agent row. Junction table rows are
     // cascade-deleted by FK.
+    if (options.deleteSessions === true) {
+      disposeDeletedAgentSessions(agentSessionService.listIdsByAgentId(id))
+    }
     const result = withSqliteErrors(
       () =>
         application.get('DbService').withWriteTx((tx) => {

@@ -42,6 +42,13 @@ describe('AgentEntitySchema', () => {
     expect(AgentConfigurationSchema.safeParse({ reasoning_effort: 'invalid' }).success).toBe(false)
   })
 
+  it('preserves coco_dcc extras through a configuration round-trip', () => {
+    const parsed = AgentConfigurationSchema.parse({
+      coco_dcc: { sessionId: 'dcc-1', dccType: 'houdini' }
+    })
+    expect(parsed.coco_dcc).toEqual({ sessionId: 'dcc-1', dccType: 'houdini' })
+  })
+
   it('accepts first-level configuration patches and preserves explicit removals', () => {
     expect(UpdateAgentSchema.parse({ configuration: { reasoning_effort: 'high' } }).configuration).toEqual({
       reasoning_effort: 'high'

@@ -12,6 +12,7 @@ import {
   SelectValue
 } from '@cherrystudio/ui'
 import { PermissionModeSelect } from '@renderer/components/PermissionModeOption'
+import { CocoSettingsFields } from '@renderer/components/resourceCatalog/dialogs/components/CocoSettingsFields'
 import {
   AvatarField,
   CompactModelField,
@@ -20,6 +21,12 @@ import {
 } from '@renderer/components/resourceCatalog/dialogs/components/EditDialogShared'
 import { getPermissionModeCards } from '@renderer/utils/agent'
 import { AGENT_RUNTIME_CAPABILITIES } from '@shared/ai/agentRuntimeCapabilities'
+import {
+  type CocoAgentMode,
+  type CocoAgentPermission,
+  DEFAULT_COCO_MODE,
+  DEFAULT_COCO_PERMISSION
+} from '@shared/ai/cocoAgent'
 import type { AgentType } from '@shared/data/types/agent'
 import type { Model } from '@shared/data/types/model'
 import { useEffect, useState } from 'react'
@@ -47,6 +54,10 @@ const AGENT_RUNTIME_SELECTED_LABELS: Record<AgentType, { labelKey: string; label
   pi: {
     labelKey: 'library.config.agent.field.runtime.selected.pi',
     labelFallback: 'Fast'
+  },
+  coco: {
+    labelKey: 'library.config.agent.field.runtime.selected.coco',
+    labelFallback: 'COCO'
   }
 }
 
@@ -92,6 +103,10 @@ function AgentRuntimeModelFields({
     form.setValue('permissionMode', AGENT_RUNTIME_CAPABILITIES[next].createDefaults.permissionMode, {
       shouldDirty: true
     })
+    if (next === 'coco') {
+      form.setValue('cocoMode', DEFAULT_COCO_MODE, { shouldDirty: true })
+      form.setValue('cocoPermission', DEFAULT_COCO_PERMISSION, { shouldDirty: true })
+    }
     // A model compatible with one runtime may be unsupported by another, so
     // clear the current pick to force a re-select against the new filter.
     form.setValue('modelId', null, { shouldDirty: true })
@@ -134,24 +149,37 @@ function AgentRuntimeModelFields({
           </FormItem>
         )}
       />
-      <FormField
-        control={form.control}
-        name="permissionMode"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>{t('library.config.agent.field.permission_mode.label')}</FormLabel>
-            <PermissionModeSelect
-              cards={permissionModeCards}
-              value={field.value}
-              onValueChange={field.onChange}
-              portalContainer={portalContainer}
-              ariaLabel={t('library.config.agent.field.permission_mode.label')}
-              t={t}
-            />
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      {agentType === 'coco' ? (
+        <CocoSettingsFields
+          control={form.control}
+          mode={form.watch('cocoMode') ?? DEFAULT_COCO_MODE}
+          permission={form.watch('cocoPermission') ?? DEFAULT_COCO_PERMISSION}
+          onModeChange={(value: CocoAgentMode) => form.setValue('cocoMode', value, { shouldDirty: true })}
+          onPermissionChange={(value: CocoAgentPermission) =>
+            form.setValue('cocoPermission', value, { shouldDirty: true })
+          }
+          portalContainer={portalContainer}
+        />
+      ) : (
+        <FormField
+          control={form.control}
+          name="permissionMode"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('library.config.agent.field.permission_mode.label')}</FormLabel>
+              <PermissionModeSelect
+                cards={permissionModeCards}
+                value={field.value}
+                onValueChange={field.onChange}
+                portalContainer={portalContainer}
+                ariaLabel={t('library.config.agent.field.permission_mode.label')}
+                t={t}
+              />
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
       <CompactModelField
         form={form}
         name="modelId"

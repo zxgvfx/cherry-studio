@@ -6,6 +6,12 @@ import type { UnifiedPreferenceKeyType } from '@shared/data/preference/preferenc
 interface PrepareWindowOptions {
   /** Preference keys the first frame reads — 'all' warms the entire cache. */
   preference: 'all' | UnifiedPreferenceKeyType[]
+  /**
+   * Cap how long preference preload may block first paint. i18n still always
+   * finishes first — rendering before `initI18n()` makes `t()` / `changeLanguage`
+   * throw `Cannot read properties of undefined (reading 'toResolveHierarchy')`.
+   */
+  preferenceTimeoutMs?: number
 }
 
 /**
@@ -24,6 +30,13 @@ export async function prepareWindow(options: PrepareWindowOptions): Promise<void
 
   const preferencesWarm =
     options.preference === 'all' ? preferenceService.preloadAll() : preferenceService.preload(options.preference)
+  const prefs =
+    options.preferenceTimeoutMs && options.preferenceTimeoutMs > 0
+      ? Promise.race([
+          preferencesWarm,
+          new Promise<void>((resolve) => window.setTimeout(resolve, options.preferenceTimeoutMs))
+        ])
+      : preferencesWarm
 
-  await Promise.all([initI18n(), preferencesWarm])
+  await Promise.all([initI18n(), prefs])
 }

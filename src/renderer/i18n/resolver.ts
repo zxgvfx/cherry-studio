@@ -70,10 +70,26 @@ export const setDayjsLocale = (language: string) => {
 
 let initPromise: Promise<void> | null = null
 
+function withTimeout<T>(task: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => resolve(fallback), ms)
+    task.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      () => {
+        window.clearTimeout(timer)
+        resolve(fallback)
+      }
+    )
+  })
+}
+
 const doInit = async (): Promise<void> => {
-  // Resolve the language up front. A rejected lookup falls back rather than
-  // rejecting init — the UI must still render (in the fallback language).
-  const lng = await getLanguage().catch(() => defaultLanguage)
+  // Resolve the language up front. A rejected or hung lookup falls back rather
+  // than rejecting init — the UI must still render (in the fallback language).
+  const lng = await withTimeout(getLanguage(), 1500, defaultLanguage)
 
   await i18n
     .use(

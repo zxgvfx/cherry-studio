@@ -1024,6 +1024,44 @@ describe('ComposerToken', () => {
     expect(onRemove).toHaveBeenCalledTimes(1)
   })
 
+  it('previews pipeline node params on hover and pins them after clicking the chip', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <ComposerToken
+        token={{
+          id: 'pipelineNode:model.text-to-image:pin-test',
+          kind: 'pipelineNode',
+          label: '/model.text-to-image',
+          promptText: '/model.text-to-image',
+          payload: { nodeId: 'model.text-to-image', values: {} }
+        }}
+        onPipelineNodeValuesChange={vi.fn()}
+      />
+    )
+
+    const trigger = getTokenTrigger(container, 'pipelineNode')
+    await user.hover(trigger)
+    await waitFor(() => expect(screen.getByTestId('composer-token-popover')).toHaveAttribute('data-open', 'true'))
+    expect(trigger).toHaveAttribute('data-composer-popover-pinned', 'false')
+
+    fireEvent.mouseLeave(trigger)
+    await waitFor(() => expect(screen.getByTestId('composer-token-popover')).toHaveAttribute('data-open', 'false'))
+
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('data-composer-popover-pinned', 'true')
+    expect(screen.getByTestId('composer-token-popover')).toHaveAttribute('data-open', 'true')
+
+    fireEvent.mouseLeave(trigger)
+    fireEvent.mouseLeave(screen.getByTestId('composer-token-popover-content'))
+    expect(screen.getByTestId('composer-token-popover')).toHaveAttribute('data-open', 'true')
+
+    fireEvent.pointerDown(document.body)
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('data-composer-popover-pinned', 'false')
+      expect(screen.getByTestId('composer-token-popover')).toHaveAttribute('data-open', 'false')
+    })
+  })
+
   it('rejects unsupported token kinds', () => {
     expect(() =>
       render(<ComposerToken token={{ id: 'command:run', kind: 'command', label: 'Run' } as never} />)

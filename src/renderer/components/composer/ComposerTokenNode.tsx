@@ -1,3 +1,4 @@
+import { withPipelineNodeValues } from '@renderer/utils/pipelineNodes'
 import { type Editor, mergeAttributes, Node } from '@tiptap/core'
 import { AllSelection, NodeSelection } from '@tiptap/pm/state'
 import type { NodeViewProps } from '@tiptap/react'
@@ -231,6 +232,17 @@ function ComposerTokenNodeView(props: NodeViewProps & { renderToken?: ComposerTo
         selected={props.selected}
         onRemove={removeCurrentToken}
         removeLabel={t('common.delete')}
+        onPipelineNodeValuesChange={
+          token.kind === 'pipelineNode'
+            ? (values) => {
+                const next = withPipelineNodeValues(token, values)
+                props.updateAttributes({
+                  payload: next.payload,
+                  promptText: next.promptText
+                })
+              }
+            : undefined
+        }
       />
     ))
 

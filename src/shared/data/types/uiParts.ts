@@ -14,6 +14,9 @@
  * - data-error (error blocks)
  * - data-translation (translation blocks)
  * - data-video (video blocks)
+ * - data-pipeline-asset (COCO/pipeline workflow products: preview + download + DCC drag)
+ * - data-pipeline-run-progress (canvas edit vs live node/queue progress)
+ * - data-pipeline-review (embedded HITL review shell)
  * - data-compact (compact/summary blocks)
  * - data-compaction-anchor (timeline anchor for completed runtime compaction)
  * - data-agent-task-event (Claude Agent SDK task lifecycle event)
@@ -54,6 +57,63 @@ export interface TranslationPartData {
 export interface VideoPartData {
   url?: string
   filePath?: string
+}
+
+/** Pipeline / COCO workflow product shown as an inline preview tag. */
+export interface PipelineAssetPartData {
+  assetId: string
+  name: string
+  assetType: string
+  downloadUrl: string
+  previewUrl?: string
+  localPath?: string
+  mimeType?: string
+  sizeBytes?: number
+  runId?: string
+  sourceNodeId?: string
+  sourceStepId?: string
+}
+
+/** One DAG step in a live workflow progress card. */
+export interface PipelineRunStepProgress {
+  stepId: string
+  nodeId: string
+  state: string
+  progress?: number | null
+  message?: string
+  queue?: Record<string, unknown> | null
+}
+
+/** Live workflow / node progress while submit.graph is waiting. */
+export interface PipelineRunProgressPartData {
+  runId: string
+  status: string
+  /** canvas = editing the pipeline template; run = executing the DAG. */
+  phase?: 'canvas' | 'run'
+  workflowId?: string
+  message?: string
+  stepId?: string
+  stepLabel?: string
+  progress?: number | null
+  queue?: string
+  queueLines?: string[]
+  queueItems?: Record<string, unknown>[]
+  queuedCount?: number
+  summary?: string
+  steps?: PipelineRunStepProgress[]
+  elapsedSeconds?: number
+  interactiveUrl?: string
+  timedOut?: boolean
+  stillRunning?: boolean
+}
+
+/** Embedded HITL review shell for a human-approval node. */
+export interface PipelineReviewPartData {
+  runId: string
+  url: string
+  stepId?: string
+  title?: string
+  closed?: boolean
 }
 
 /** Compact/summary data — replaces CompactBlock */
@@ -140,6 +200,9 @@ export type CherryDataPartTypes = {
   error: ErrorPartData
   translation: TranslationPartData
   video: VideoPartData
+  'pipeline-asset': PipelineAssetPartData
+  'pipeline-run-progress': PipelineRunProgressPartData
+  'pipeline-review': PipelineReviewPartData
   compact: CompactPartData
   'compaction-anchor': CompactionAnchorPartData
   'conversation-reset': ConversationResetPartData
@@ -216,6 +279,10 @@ export interface CherryFileMeta {
   fileTokenSourceId?: string
   /** Safe composer-only source marker used to restore sent-message token previews. */
   composerFileKind?: 'pasted-text'
+  /** Pipeline asset UUID already uploaded or generated; send should reuse it. */
+  pipelineAssetId?: string
+  /** Thumbnail / preview for session-asset mentions. */
+  previewUrl?: string
 }
 
 /**
@@ -254,6 +321,16 @@ const ComposerMessageFileTokenPayloadSchema: z.ZodType<ComposerMessageFileTokenP
   size: z.number().optional()
 })
 
+const ComposerMessagePipelineNodeTokenPayloadSchema: z.ZodType<ComposerMessagePipelineNodeTokenPayload> = z.object({
+  nodeId: z.string(),
+  values: z.record(z.string(), z.unknown()).optional()
+})
+
+const ComposerMessageTokenPayloadSchema: z.ZodType<ComposerMessageTokenPayload> = z.union([
+  ComposerMessagePipelineNodeTokenPayloadSchema,
+  ComposerMessageFileTokenPayloadSchema
+])
+
 const ComposerMessageTokenKindSchema = z.enum([
   'skill',
   'link',
@@ -262,7 +339,8 @@ const ComposerMessageTokenKindSchema = z.enum([
   'command',
   'knowledge',
   'reference',
-  'quote'
+  'quote',
+  'pipelineNode'
 ])
 
 const ComposerMessageTokenSchema: z.ZodType<ComposerMessageToken> = z.object({
@@ -274,7 +352,7 @@ const ComposerMessageTokenSchema: z.ZodType<ComposerMessageToken> = z.object({
   index: z.number(),
   textOffset: z.number(),
   promptText: z.string().optional(),
-  payload: ComposerMessageFileTokenPayloadSchema.optional()
+  payload: ComposerMessageTokenPayloadSchema.optional()
 })
 
 const ComposerMessageSnapshotSchema: z.ZodType<ComposerMessageSnapshot> = z.object({
@@ -307,7 +385,9 @@ export const CherryToolMetaSchema: z.ZodType<CherryToolMeta> = z.object({
 export const CherryFileMetaSchema: z.ZodType<CherryFileMeta> = z.object({
   fileEntryId: z.string().optional(),
   fileTokenSourceId: z.string().optional(),
-  composerFileKind: z.literal('pasted-text').optional()
+  composerFileKind: z.literal('pasted-text').optional(),
+  pipelineAssetId: z.string().optional(),
+  previewUrl: z.string().optional()
 })
 
 const DiagnosisStepSchema: z.ZodType<DiagnosisStep> = z.object({
@@ -414,7 +494,19 @@ export interface ComposerMessageFileTokenPayload {
   size?: number
 }
 
-export type ComposerMessageTokenPayload = ComposerMessageFileTokenPayload
+export interface ComposerMessagePipelineNodeTokenPayload {
+  nodeId: string
+  values?: Record<string, unknown>
+}
+
+export type ComposerMessageTokenPayload = ComposerMessageFileTokenPayload | ComposerMessagePipelineNodeTokenPayload
+
+/** Narrows a token payload to the file shape; pipeline-node payloads always carry `nodeId`. */
+export function getComposerMessageFileTokenPayload(
+  payload: ComposerMessageTokenPayload | undefined
+): ComposerMessageFileTokenPayload | undefined {
+  return payload && !('nodeId' in payload) ? payload : undefined
+}
 
 export interface ComposerMessageToken {
   id: string

@@ -26,6 +26,11 @@ vi.mock('@main/utils/shellEnv', () => ({
   getShellEnv: vi.fn().mockResolvedValue({})
 }))
 
+const getProxyEnvironmentMock = vi.hoisted(() => vi.fn(() => ({})))
+vi.mock('@main/services/proxy/proxyEnv', () => ({
+  getProxyEnvironment: getProxyEnvironmentMock
+}))
+
 const executeCommandMock = vi.hoisted(() => vi.fn())
 vi.mock('@main/utils/processRunner', () => ({
   executeCommand: executeCommandMock
@@ -695,6 +700,27 @@ describe('SkillService', () => {
         expect(options.env).toMatchObject({ GIT_TERMINAL_PROMPT: '0', GIT_LFS_SKIP_SMUDGE: '1' })
         expect(options.timeout).toBeGreaterThan(0)
       }
+    })
+
+    it('overlays the live managed proxy onto every Git child process', async () => {
+      executeCommandMock.mockClear()
+      getProxyEnvironmentMock.mockReturnValue({
+        HTTP_PROXY: 'http://managed-proxy.test:8080',
+        HTTPS_PROXY: 'http://managed-proxy.test:8080'
+      })
+      const { skillService } = await setupGithubInstall({ refs: [{ name: 'main', oid: 'a'.repeat(40) }] })
+
+      await skillService.install({
+        installSource: 'github:https://github.com/owner/repo/blob/main/skills/demo/SKILL.md'
+      })
+
+      for (const [, , options] of executeCommandMock.mock.calls) {
+        expect(options.env).toMatchObject({
+          HTTP_PROXY: 'http://managed-proxy.test:8080',
+          HTTPS_PROXY: 'http://managed-proxy.test:8080'
+        })
+      }
+      getProxyEnvironmentMock.mockReturnValue({})
     })
 
     it('rejects a github URL that does not point at a SKILL.md file before cloning', async () => {

@@ -4,6 +4,7 @@ import MultiSelectActionPopup from '@renderer/components/chat/messages/MultiSele
 import LoadingIcon from '@renderer/components/icons/LoadingIcon'
 import SelectionContextMenu from '@renderer/components/SelectionContextMenu'
 import { useTimer } from '@renderer/hooks/useTimer'
+import { publishActiveMessageViewport } from '@renderer/utils/activeMessageViewport'
 import { removeSpecialCharactersForFileName } from '@renderer/utils/file'
 import { captureScrollable, captureScrollableAsDataUrl } from '@renderer/utils/image'
 import { classNames } from '@renderer/utils/style'
@@ -404,8 +405,6 @@ const MessageList = ({ enableSearch = false }: MessageListProps) => {
   // Top-aligned so a turn jumped to via its tick immediately reads as current;
   // at the very bottom the last turn wins regardless of its height.
   const updateActiveAnchorMessage = useCallback(() => {
-    if (!shouldTrackAnchorPosition) return
-
     const scrollElement = scrollContainerRef.current ?? messageListRef.current?.getScrollElement()
     if (!scrollElement) return
 
@@ -441,7 +440,7 @@ const MessageList = ({ enableSearch = false }: MessageListProps) => {
 
     const nextId = bestMatch?.messageId ?? null
     setActiveAnchorMessageId((current) => (current === nextId ? current : nextId))
-  }, [messageById, shouldTrackAnchorPosition])
+  }, [messageById])
   const updateActiveAnchorMessageRef = useRef(updateActiveAnchorMessage)
   updateActiveAnchorMessageRef.current = updateActiveAnchorMessage
 
@@ -634,22 +633,24 @@ const MessageList = ({ enableSearch = false }: MessageListProps) => {
   }, [data.isInitialLoading, data.listKey, requestActiveMessageOutlineUpdate, shouldTrackMessageOutline, topic.id])
 
   useEffect(() => {
-    if (!shouldTrackAnchorPosition) {
-      setActiveAnchorMessageId((current) => (current ? null : current))
-      return
-    }
     updateActiveAnchorMessage()
-  }, [groupedMessages, shouldTrackAnchorPosition, updateActiveAnchorMessage])
+  }, [groupedMessages, updateActiveAnchorMessage])
 
   useEffect(() => {
-    if (!shouldTrackAnchorPosition) {
-      setRailGutterPx(0)
-      return
-    }
+    publishActiveMessageViewport({ topicId: topic.id, messageId: activeAnchorMessageId })
+  }, [activeAnchorMessageId, topic.id])
+
+  useEffect(() => () => publishActiveMessageViewport({ topicId: topic.id, messageId: null }), [topic.id])
+
+  useEffect(() => {
     const scrollElement = messageListRef.current?.getScrollElement()
     if (!scrollElement) return
 
     const updateRailGutter = () => {
+      if (!shouldTrackAnchorPosition) {
+        setRailGutterPx(0)
+        return
+      }
       // The content yields a right-hand gutter that grows smoothly with the column
       // width; the rail fades in within it. Tracking width continuously (rather
       // than toggling at a threshold) means the content shifts smoothly and never

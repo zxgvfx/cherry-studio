@@ -33,6 +33,21 @@ describe('ai IPC schemas — uniqueModelId validation', () => {
     expect(genImage.safeParse(input('openai::gpt-image')).success).toBe(true)
     expect(genImage.safeParse(input('bad-id')).success).toBe(false)
   })
+
+  it('accepts UUID inputFileIds and rejects non-UUID ids', () => {
+    const input = (inputFileIds: string[]) => ({
+      requestId: 'r1',
+      payload: {
+        uniqueModelId: 'vapi::gpt-image-2',
+        prompt: 'edit',
+        paramValues: {},
+        cleanupPolicy: 'delete_when_unreferenced',
+        inputFileIds
+      }
+    })
+    expect(genImage.safeParse(input(['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'])).success).toBe(true)
+    expect(genImage.safeParse(input(['not-a-uuid'])).success).toBe(false)
+  })
 })
 
 describe('ai.stream.open IPC schema', () => {
@@ -137,6 +152,43 @@ describe('ai.agent.create IPC schema', () => {
       skillIds: ['skill-a', 'skill-b'],
       knowledgeBaseIds: ['kb-a', 'kb-b']
     })
+  })
+
+  it('accepts coco runtime plus Studio mode/permission extras on configuration', () => {
+    expect(
+      createAgent.parse({
+        type: 'coco',
+        name: 'Pipeline Agent',
+        model: 'openai::gpt-4',
+        configuration: {
+          avatar: '🤖',
+          permission_mode: 'default',
+          coco_mode: 'agent',
+          coco_permission: 'ask'
+        }
+      })
+    ).toMatchObject({
+      type: 'coco',
+      configuration: {
+        coco_mode: 'agent',
+        coco_permission: 'ask'
+      }
+    })
+  })
+})
+
+describe('ai.agent.session.branch IPC schema', () => {
+  const branchSession = aiRequestSchemas['ai.agent.session.branch'].input
+
+  it('accepts an edited message payload and rejects missing branch identity', () => {
+    expect(
+      branchSession.safeParse({
+        sessionId: 'session-1',
+        messageId: 'message-2',
+        parts: [{ type: 'text', text: 'corrected request' }]
+      }).success
+    ).toBe(true)
+    expect(branchSession.safeParse({ parts: [] }).success).toBe(false)
   })
 })
 

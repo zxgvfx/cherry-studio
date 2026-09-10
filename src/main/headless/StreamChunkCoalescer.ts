@@ -10,6 +10,7 @@ interface PendingDelta {
   identifier: string
   sourceModelId: UniqueModelId | undefined
   anchorMessageId: string | undefined
+  attemptId: number | undefined
   text: string
 }
 
@@ -34,25 +35,27 @@ export class StreamChunkCoalescer {
     private readonly emit: (
       chunk: UIMessageChunk,
       sourceModelId: UniqueModelId | undefined,
-      anchorMessageId: string | undefined
+      anchorMessageId: string | undefined,
+      attemptId: number | undefined
     ) => void
   ) {}
 
-  push(chunk: UIMessageChunk, sourceModelId?: UniqueModelId, anchorMessageId?: string): void {
+  push(chunk: UIMessageChunk, sourceModelId?: UniqueModelId, anchorMessageId?: string, attemptId?: number): void {
     const coalescable = toCoalescable(chunk)
     if (!coalescable) {
       this.flush()
-      this.emit(chunk, sourceModelId, anchorMessageId)
+      this.emit(chunk, sourceModelId, anchorMessageId, attemptId)
       return
     }
 
-    const next = normalizePending(coalescable, sourceModelId, anchorMessageId)
+    const next = normalizePending(coalescable, sourceModelId, anchorMessageId, attemptId)
     if (
       this.pending &&
       this.pending.type === next.type &&
       this.pending.identifier === next.identifier &&
       this.pending.sourceModelId === next.sourceModelId &&
-      this.pending.anchorMessageId === next.anchorMessageId
+      this.pending.anchorMessageId === next.anchorMessageId &&
+      this.pending.attemptId === next.attemptId
     ) {
       this.pending.text += next.text
       if (
@@ -79,7 +82,7 @@ export class StreamChunkCoalescer {
     const pending = this.pending
     if (!pending) return
     this.pending = null
-    this.emit(rebuildChunk(pending), pending.sourceModelId, pending.anchorMessageId)
+    this.emit(rebuildChunk(pending), pending.sourceModelId, pending.anchorMessageId, pending.attemptId)
   }
 
   discard(): void {
@@ -103,7 +106,8 @@ function toCoalescable(chunk: UIMessageChunk): CoalescableChunk | null {
 function normalizePending(
   chunk: CoalescableChunk,
   sourceModelId: UniqueModelId | undefined,
-  anchorMessageId: string | undefined
+  anchorMessageId: string | undefined,
+  attemptId: number | undefined
 ): PendingDelta {
   if (chunk.type === 'tool-input-delta') {
     return {
@@ -111,6 +115,7 @@ function normalizePending(
       identifier: chunk.toolCallId,
       sourceModelId,
       anchorMessageId,
+      attemptId,
       text: chunk.inputTextDelta
     }
   }
@@ -119,6 +124,7 @@ function normalizePending(
     identifier: chunk.id,
     sourceModelId,
     anchorMessageId,
+    attemptId,
     text: chunk.delta
   }
 }

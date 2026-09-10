@@ -20,6 +20,7 @@ function isFbxFile(fileName: string): boolean {
 export default function Model3DFilePreview({ filePath, fileName, refreshKey }: FilePreviewPluginProps) {
   const { t } = useTranslation()
   const [status, setStatus] = useState<'error' | 'loading' | 'ready'>('loading')
+  const [errorMessage, setErrorMessage] = useState('')
 
   // Raw file:// URL — resolved by the Model3DFilePreview's environment (in Electron
   // it loads directly; in the Houdini WebEngineView build it is transparently
@@ -38,6 +39,7 @@ export default function Model3DFilePreview({ filePath, fileName, refreshKey }: F
   const handleLoad = () => setStatus('ready')
   const handleError = (message: string) => {
     logger.error(`Failed to load 3D preview: ${filePath} (${message})`)
+    setErrorMessage(message)
     setStatus('error')
   }
 
@@ -49,7 +51,7 @@ export default function Model3DFilePreview({ filePath, fileName, refreshKey }: F
             <EmptyState
               icon={Box}
               title={t('file_preview.load_error.title')}
-              description={t('file_preview.load_error.description')}
+              description={errorMessage || t('file_preview.load_error.description')}
               className="h-full"
             />
           </div>

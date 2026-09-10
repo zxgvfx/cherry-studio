@@ -25,6 +25,7 @@
       "next": "Next",
       "noQuestions": "No questions available",
       "other": "Other",
+      "otherDescription": "Type your own answer",
       "previous": "Previous",
       "progress": "{{current}} of {{total}}",
       "skip": "Skip",
@@ -311,6 +312,46 @@
       }
     },
     "right_pane": {
+      "assets": {
+        "add_to_composer": "Add to composer",
+        "added_to_composer": "Added {{name}} to the composer",
+        "copy_id": "Copy asset ID",
+        "count": "{{count}} assets in this session",
+        "delete_confirm_description": "Delete “{{name}}” from this session and the asset library? Existing references will stop working.",
+        "delete_confirm_title": "Delete asset?",
+        "delete_failed": "Failed to delete asset: {{error}}",
+        "deleted": "Deleted {{name}}",
+        "download_failed": "Download failed: {{error}}",
+        "drag_failed": "Failed to prepare dragged file: {{error}}",
+        "empty": "No session assets match this filter",
+        "filters": {
+          "all": "All",
+          "generated": "Generated",
+          "model": "3D models",
+          "upload": "Uploads"
+        },
+        "load_failed": "Failed to load session assets",
+        "origin": {
+          "generated": "Generated",
+          "upload": "Upload"
+        },
+        "parent": "Parent asset",
+        "refresh": "Refresh assets",
+        "scope": {
+          "session": "All in session",
+          "turn": "Current turn {{number}}"
+        },
+        "search": "Search name, type, or asset ID",
+        "source": "Source node",
+        "title": "Session assets",
+        "zoom": "Size"
+      },
+      "branches": {
+        "empty": {
+          "description": "Conversation branches appear here after you edit a previous message.",
+          "title": "No branches yet"
+        }
+      },
       "close": "Close",
       "flow": {
         "empty": {
@@ -367,6 +408,9 @@
         "workspace": "Workspace"
       },
       "tabs": {
+        "assets": "Assets",
+        "branches": "Branches",
+        "canvas": "Canvas",
         "files": "Files",
         "flow": "Flow",
         "status": "Status"
@@ -412,6 +456,13 @@
         "reason": "Request failed ({{error}}, HTTP {{status}}) — retrying",
         "retrying": "Retrying {{attempt}}/{{max}}…",
         "retrying_in": "Retrying {{attempt}}/{{max}} in {{seconds}}s"
+      },
+      "artifact": {
+        "drag_hint": "Drag to Houdini / desktop",
+        "drag_to_dcc": "Drag to DCC",
+        "load_3d_preview": "Click to load 3D preview",
+        "open_in_pane": "Open in file pane",
+        "preview_unsupported": "Use \"Open with\" for this file type, or drag it into your DCC."
       },
       "auto_rename": "Generate task name",
       "create": {
@@ -1575,6 +1626,36 @@
       "paste_text_file": "Paste into input",
       "pasted_text_file_name": "Pasted text.txt",
       "pause": "Pause",
+      "pipeline_nodes": {
+        "advanced": "Advanced",
+        "all_nodes": "All nodes",
+        "category": {
+          "3d": "3D generation",
+          "data": "Data",
+          "image": "Image generation",
+          "interactive": "Human-in-the-loop",
+          "io": "Input / output",
+          "model": "Model chat",
+          "motion": "Motion / rigging",
+          "other": "Other",
+          "segmentation": "Segmentation",
+          "video": "Video generation",
+          "workflow": "Workflows"
+        },
+        "category_count": "{{count}} nodes",
+        "empty_hint": "Missing required fields are filled by the orchestrator, or it will ask you.",
+        "filter_by_tag": "Filter by tag",
+        "load_failed": "Could not load the node catalog",
+        "params": "Node parameters",
+        "preset_count": "{{count}} presets",
+        "preset_description": "{{model}} · {{provider}}",
+        "preset_suffix": "Preset",
+        "presets": "Node presets",
+        "required": "Required",
+        "tag_suffix": "Tag",
+        "tag_title": "Tag: {{tag}}",
+        "title": "Pipeline nodes"
+      },
       "placeholder": "Type a message. Press {{key}} to send. Type / for tools and actions, @ to reference topics.",
       "placeholder_without_triggers": "Type your message here, press {{key}} to send",
       "reference_panel": {
@@ -2682,6 +2763,10 @@
       "description": "Select a file in this folder to preview it.",
       "title": "This is a folder"
     },
+    "explode": "Explode",
+    "explode_hint": "Separate mesh pieces to inspect segmentation",
+    "explode_reset": "Reset explode amount",
+    "explode_unavailable": "This model has no separable pieces",
     "html": {
       "empty": {
         "description": "This HTML file has no content.",
@@ -3418,6 +3503,74 @@
     },
     "config": {
       "agent": {
+        "coco": {
+          "canvas": {
+            "add_node": "Add node",
+            "add_placeholder": "Search and add a node…",
+            "auto_layout": "Arrange layout",
+            "delete": "Delete node",
+            "empty": "The canvas is empty. Right-click to add a node, or open the left palette.",
+            "fit_view": "Fit view",
+            "graph_summary": "{{nodes}} nodes · {{edges}} connections",
+            "history": "Canvas history",
+            "history_current": "Current",
+            "history_empty": "No canvas versions are available yet",
+            "history_hint": "Agent proposals and manual saves are retained. Restoring creates a new version.",
+            "history_load_failed": "Could not load canvas history",
+            "history_restore": "Restore",
+            "history_restore_failed": "Could not restore the canvas version",
+            "history_restored": "Canvas version restored and retained as the new current version.",
+            "history_source": {
+              "agent_proposal": "Agent proposal",
+              "branch_legacy_fallback": "Legacy branch",
+              "history_restore": "History restore",
+              "legacy_current": "Legacy current version",
+              "manual_save": "Manual save",
+              "session_created": "Initial version",
+              "turn_input": "Conversation turn sync"
+            },
+            "history_turn": "Canvas after turn {{turn}}",
+            "inspector": "Node properties",
+            "issue_count": "{{count}} node(s) missing required inputs",
+            "literal": "Literal / unconnected",
+            "live_updating_short": "The agent is editing the canvas — syncing live…",
+            "load_failed": "Could not load the canvas",
+            "missing_required": "Missing required inputs: {{ports}}",
+            "more_params": "{{count}} more parameter(s)",
+            "no_match": "No matching nodes",
+            "no_selection": "Select a node to edit parameters or connections",
+            "node_id": "Node type",
+            "read_only": "This canvas is read-only.",
+            "redo": "Redo (Ctrl+Shift+Z)",
+            "run": "Run",
+            "run_empty": "The canvas is empty. Add a node before running.",
+            "run_failed": "Could not run the canvas",
+            "run_started": "Canvas run started ({{runId}})",
+            "running": "Running…",
+            "save": "Save changes",
+            "save_failed": "Could not save the canvas",
+            "saved": "Canvas saved. The agent will see your edits on the next turn.",
+            "saving": "Saving…",
+            "snap_to_grid": "Snap to grid",
+            "step_id": "Step ID",
+            "toggle_inspector": "Node properties panel",
+            "toggle_palette": "Node palette",
+            "undo": "Undo (Ctrl+Z)",
+            "unknown_node": "This node type is not in the catalog; only its connections can be edited.",
+            "unsaved": "Unsaved",
+            "zoom_in": "Zoom in",
+            "zoom_out": "Zoom out"
+          },
+          "proposal": {
+            "applied": "Canvas updated",
+            "apply": "Apply to session canvas",
+            "auto_applied": "Applied to this COCO session canvas.",
+            "empty_diff": "No script diff in this result.",
+            "label": "Pipeline Script proposal",
+            "reject": "Reject",
+            "rejected": "Proposal discarded"
+          }
+        },
         "create_banner": "Save before binding tools and MCP servers",
         "create_title": "New agent",
         "field": {
@@ -3434,6 +3587,32 @@
           },
           "avatar": {
             "hint": "Used to identify it in the library and sessions"
+          },
+          "coco_mode": {
+            "label": "Mode",
+            "option": {
+              "agent": "Agent",
+              "agent_description": "Build and edit this session canvas with Pipeline Script.",
+              "ask": "Ask",
+              "ask_description": "Read-only questions about the current canvas.",
+              "debug": "Debug",
+              "debug_description": "Inspect diagnostics and failed nodes.",
+              "multitask": "Multitask",
+              "multitask_description": "Coordinate several canvas tasks in one session.",
+              "plan": "Plan",
+              "plan_description": "Plan the graph without submitting a run."
+            }
+          },
+          "coco_permission": {
+            "label": "Canvas permission",
+            "option": {
+              "ask": "Ask",
+              "ask_description": "Show a script diff and wait before applying it to this session canvas.",
+              "auto": "Auto",
+              "auto_description": "Apply a valid Pipeline Script proposal to this session canvas immediately.",
+              "read_only": "Read only",
+              "read_only_description": "Inspect the canvas; do not propose or submit writes."
+            }
           },
           "description": {
             "hint": "Helps identify what this agent is for",
@@ -3488,10 +3667,12 @@
             "label": "Runtime mode",
             "option": {
               "claude_code": "Advanced: Claude Agent",
+              "coco": "COCO Agent",
               "pi": "Fast: Pi"
             },
             "selected": {
               "claude_code": "Advanced",
+              "coco": "COCO",
               "pi": "Fast"
             }
           },

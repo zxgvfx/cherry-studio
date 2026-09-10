@@ -48,7 +48,7 @@ export function getComposerTokenClipboardText(token: ComposerMessageToken): stri
   if (token.kind === 'folder') {
     return token.promptText ?? token.label
   }
-  if (token.kind === 'link') {
+  if (token.kind === 'link' || token.kind === 'pipelineNode') {
     return token.promptText ?? token.label
   }
   return token.label

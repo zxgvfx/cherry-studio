@@ -511,6 +511,108 @@ describe('AiService', () => {
     expect(mockGenerateImage.mock.calls[1]?.[2] as Record<string, unknown>).not.toHaveProperty('size')
   })
 
+  it("sends size 'auto' for gpt-image models when the UI sentinel is auto or omitted", async () => {
+    const service = createService()
+    mockModelGetByKey.mockReturnValue({
+      id: 'vapi::gpt-image-2',
+      providerId: 'vapi',
+      apiModelId: 'gpt-image-2@vapi',
+      name: 'GPT-Image-2',
+      capabilities: [],
+      supportsStreaming: true,
+      isEnabled: true,
+      isHidden: false
+    })
+    vi.spyOn(service as never, 'buildAgentParamsFor').mockResolvedValue({
+      sdkConfig: {
+        providerId: 'vapi',
+        providerSettings: {},
+        modelId: 'gpt-image-2@vapi'
+      }
+    } as never)
+
+    mockGenerateImage.mockResolvedValue({ images: [] })
+    mockApplicationGet.mockImplementation((name: string) =>
+      name === 'FileManager' ? { createInternalEntry: vi.fn() } : undefined
+    )
+
+    await service.generateImage({
+      uniqueModelId: 'vapi::gpt-image-2',
+      cleanupPolicy: 'delete_when_unreferenced',
+      prompt: 'draw a cat',
+      paramValues: { size: 'auto' }
+    })
+    expect((mockGenerateImage.mock.calls[0]?.[2] as Record<string, unknown>).size).toBe('auto')
+
+    await service.generateImage({
+      uniqueModelId: 'vapi::gpt-image-2',
+      cleanupPolicy: 'delete_when_unreferenced',
+      prompt: 'draw a cat',
+      paramValues: {}
+    })
+    expect((mockGenerateImage.mock.calls[1]?.[2] as Record<string, unknown>).size).toBe('auto')
+  })
+
+  it('reads inputFileIds as binary and ships them as data URLs on the in-process path', async () => {
+    const service = createService()
+    vi.spyOn(service as never, 'buildAgentParamsFor').mockResolvedValue({
+      sdkConfig: { providerId: 'test-provider', providerSettings: {}, modelId: 'test-model' }
+    } as never)
+    mockGenerateImage.mockResolvedValue({ images: [{ base64: 'out', mediaType: 'image/png' }] })
+
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+    const read = vi.fn().mockResolvedValue({ content: png, mime: 'image/png', version: 1 })
+    const createInternalEntry = vi.fn().mockResolvedValue({
+      id: 'file-out',
+      origin: 'internal',
+      ext: 'png',
+      name: 'img',
+      size: 3,
+      createdAt: 0
+    })
+    mockApplicationGet.mockImplementation((name: string) =>
+      name === 'FileManager' ? { createInternalEntry, read } : undefined
+    )
+
+    await service.generateImage({
+      uniqueModelId: 'test-provider::test-model',
+      cleanupPolicy: 'delete_when_unreferenced',
+      prompt: 'edit the sky',
+      paramValues: {},
+      inputFileIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']
+    })
+
+    expect(read).toHaveBeenCalledWith('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { encoding: 'binary' })
+    const prompt = mockGenerateImage.mock.calls[0]?.[2]?.prompt as { text: string; images: string[] }
+    expect(prompt.text).toBe('edit the sky')
+    expect(prompt.images).toEqual([`data:image/png;base64,${Buffer.from(png).toString('base64')}`])
+  })
+
+  it('rejects UTF-8-replacement-corrupted input files before calling the image model', async () => {
+    const service = createService()
+    vi.spyOn(service as never, 'buildAgentParamsFor').mockResolvedValue({
+      sdkConfig: { providerId: 'test-provider', providerSettings: {}, modelId: 'test-model' }
+    } as never)
+
+    const corrupt = new Uint8Array([0xef, 0xbf, 0xbd, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0])
+    mockApplicationGet.mockImplementation((name: string) =>
+      name === 'FileManager'
+        ? { createInternalEntry: vi.fn(), read: vi.fn().mockResolvedValue({ content: corrupt, mime: 'image/png' }) }
+        : undefined
+    )
+
+    await expect(
+      service.generateImage({
+        uniqueModelId: 'test-provider::test-model',
+        cleanupPolicy: 'delete_when_unreferenced',
+        prompt: 'edit',
+        paramValues: {},
+        inputFileIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']
+      })
+    ).rejects.toThrow(/已损坏/)
+    expect(mockGenerateImage).not.toHaveBeenCalled()
+  })
+
   it('routes silicon through the WireProfile engine, producing the same providerOptions.silicon', async () => {
     const service = createService()
     vi.spyOn(service as never, 'buildAgentParamsFor').mockResolvedValue({
@@ -1819,6 +1921,47 @@ describe('AiService.generateImage — custom async transport (job path)', () => 
     expect(mockAddFileRefsTx).toHaveBeenCalledWith(tx, [
       { fileEntryId: 'in-1', sourceId: 'job-1', role: 'input' },
       { fileEntryId: 'mask-1', sourceId: 'job-1', role: 'mask' }
+    ])
+  })
+
+  it('reuses painting-owned inputFileIds on the job path without copying or deleting them', async () => {
+    const service = createService()
+    stubResolution(service)
+
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
+    const read = vi.fn().mockResolvedValue({ content: png, mime: 'image/png' })
+    const createInternalEntry = vi.fn()
+    const enqueue = vi.fn().mockReturnValue({
+      id: 'job-1',
+      snapshot: {},
+      finished: Promise.resolve({ status: 'completed', output: { files: [] }, error: null })
+    })
+    const tx = {}
+    mockApplicationGet.mockImplementation((name: string) => {
+      if (name === 'FileManager') return { createInternalEntry, read }
+      if (name === 'JobManager') return { enqueue, enqueueTx: (...a: any[]) => enqueue(...a.slice(1)), cancel: vi.fn() }
+      if (name === 'DbService') return { withWriteTx: (fn: any) => fn(tx) }
+      return undefined
+    })
+
+    await service.generateImage({
+      uniqueModelId: 'ppio::qwen-image',
+      prompt: 'edit',
+      paramValues: {},
+      inputFileIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
+      cleanupPolicy: 'delete_when_unreferenced',
+      requestOptions: { signal: new AbortController().signal }
+    })
+
+    expect(createInternalEntry).not.toHaveBeenCalled()
+    expect(enqueue).toHaveBeenCalledWith(
+      'image-generation.generate',
+      expect.objectContaining({
+        inputFileIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']
+      })
+    )
+    expect(mockAddFileRefsTx).toHaveBeenCalledWith(tx, [
+      { fileEntryId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', sourceId: 'job-1', role: 'input' }
     ])
   })
 

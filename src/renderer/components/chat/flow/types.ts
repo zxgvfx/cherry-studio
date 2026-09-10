@@ -18,6 +18,10 @@ export interface TopicMessageFlowNodeData extends Record<string, unknown> {
   isInactiveBranch: boolean
   isAwaitingInput?: boolean
   siblingsGroupId?: number
+  /** Each Agent conversation branch owns an independent versioned canvas session. */
+  agentSessionId?: string
+  /** Agent-session messages are not available through the Topic message preview API. */
+  disablePreview?: boolean
 }
 
 export interface TopicMessageFlowEdgeData extends Record<string, unknown> {

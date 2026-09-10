@@ -1,6 +1,7 @@
 import { FILE_TYPE } from '@renderer/types/file'
 import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
 import { createComposerFileTokenSourceId } from '@renderer/utils/message/composerFileTokenSource'
+import type { CocoSessionAsset } from '@shared/ai/cocoSessionAssets'
 import { type AbsoluteFilePath, AbsoluteFilePathSchema, type DirectoryEntry } from '@shared/types/file'
 import { getFileTypeByExt } from '@shared/utils/file'
 import type { Editor } from '@tiptap/core'
@@ -13,6 +14,7 @@ import { createComposerFolderToken } from '../../folderToken'
 import type { ComposerSuggestionItem, ComposerSuggestionSource } from '../../quickPanel'
 import { agentComposerTokenId, agentFileToComposerToken } from '../agentComposerTokens'
 import { getAccessiblePathRelativePath, getPathComparisonKey } from './accessiblePath'
+import { buildCocoSessionAssetMentionItems } from './cocoSessionAssetMention'
 
 const normalizePathSeparators = (filePath: string) => filePath.replace(/\\/g, '/')
 
@@ -83,6 +85,9 @@ interface AgentResourceMentionOptions {
   enabled: boolean
   /** Extra items appended after the workspace resources, sharing the same `@` panel. */
   getAdditionalItems?: (options: { query: string; editor: Editor }) => Promise<ComposerSuggestionItem[]>
+  /** COCO: list only this session's uploaded/generated assets, never workspace paths. */
+  sessionAssetsOnly?: boolean
+  getSessionAssets?: () => CocoSessionAsset[] | Promise<CocoSessionAsset[]>
 }
 
 /**
@@ -96,7 +101,9 @@ export function useAgentResourceMentionSource({
   files,
   setFiles,
   enabled,
-  getAdditionalItems
+  getAdditionalItems,
+  sessionAssetsOnly,
+  getSessionAssets
 }: AgentResourceMentionOptions): ComposerSuggestionSource[] {
   const { t } = useTranslation()
   const pendingResourceSearchRef = useRef<PendingResourceSearch | undefined>(undefined)
@@ -108,6 +115,8 @@ export function useAgentResourceMentionSource({
     files,
     setFiles,
     getAdditionalItems,
+    sessionAssetsOnly,
+    getSessionAssets,
     t
   })
   resourceMentionStateRef.current = {
@@ -116,6 +125,8 @@ export function useAgentResourceMentionSource({
     files,
     setFiles,
     getAdditionalItems,
+    sessionAssetsOnly,
+    getSessionAssets,
     t
   }
 
@@ -188,9 +199,28 @@ export function useAgentResourceMentionSource({
         invalidateResourceSearch()
       },
       items: async ({ query, editor }) => {
-        const { accessiblePaths, accessiblePathsKey, files, setFiles, getAdditionalItems, t } =
-          resourceMentionStateRef.current
+        const {
+          accessiblePaths,
+          accessiblePathsKey,
+          files,
+          setFiles,
+          getAdditionalItems,
+          sessionAssetsOnly,
+          getSessionAssets,
+          t
+        } = resourceMentionStateRef.current
         const normalizedQuery = query.trim()
+
+        if (sessionAssetsOnly) {
+          const assets = (await getSessionAssets?.()) ?? []
+          return buildCocoSessionAssetMentionItems({
+            assets,
+            files,
+            setFiles,
+            query: normalizedQuery,
+            editor
+          })
+        }
         // Settled here, not at the await below: a rejection there would reject the whole source
         // and the suggestion wrapper would replace the loaded file results with a single error row.
         const additionalItemsPromise = getAdditionalItems?.({ query, editor }).catch((): ComposerSuggestionItem[] => [
@@ -337,7 +367,7 @@ export function useAgentResourceMentionSource({
   )
 
   return useMemo(
-    () => (enabled || getAdditionalItems ? [resourceMentionSource] : []),
-    [enabled, getAdditionalItems, resourceMentionSource]
+    () => (enabled || getAdditionalItems || sessionAssetsOnly ? [resourceMentionSource] : []),
+    [enabled, getAdditionalItems, resourceMentionSource, sessionAssetsOnly]
   )
 }

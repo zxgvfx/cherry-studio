@@ -17,9 +17,12 @@ import {
 } from '@renderer/data/hooks/useDataApi'
 import { useReorder } from '@renderer/data/hooks/useReorder'
 import { useCloseConversationTabs } from '@renderer/hooks/tab'
-import { useIpcOn } from '@renderer/ipc'
+import { ipcApi, useIpcOn } from '@renderer/ipc'
 import { toast } from '@renderer/services/toast'
 import type { UpdateAgentBaseOptions } from '@renderer/types/agent'
+import { buildAgentSessionTopicId } from '@renderer/utils/agentSession'
+import { forgetAgentSessionBranch } from '@renderer/utils/agentSessionBranchMemory'
+import { forgetLastUsedAgentSession } from '@renderer/utils/conversationEntry'
 import { formatErrorMessageWithPrefix, getErrorMessage } from '@renderer/utils/error'
 import { isDataApiNotFoundError } from '@shared/data/api/errors'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
@@ -322,7 +325,10 @@ export const useSessions = (
   const deleteSession = useCallback(
     async (id: string): Promise<boolean> => {
       try {
+        void ipcApi.request('ai.stream.abort', { topicId: buildAgentSessionTopicId(id) }).catch(() => undefined)
         await deleteTrigger({ params: { sessionId: id } })
+        forgetLastUsedAgentSession([id])
+        forgetAgentSessionBranch(id)
         closeConversationTabs('agents', [id])
         return true
       } catch (error) {
@@ -336,7 +342,12 @@ export const useSessions = (
   const deleteSessions = useCallback(
     async (ids: string[]): Promise<DeleteAgentSessionsResult | null> => {
       try {
+        for (const id of ids) {
+          void ipcApi.request('ai.stream.abort', { topicId: buildAgentSessionTopicId(id) }).catch(() => undefined)
+        }
         const result = await deleteManyTrigger({ query: { ids: ids.join(',') } })
+        forgetLastUsedAgentSession(result.deletedIds)
+        for (const id of result.deletedIds) forgetAgentSessionBranch(id)
         closeConversationTabs('agents', result.deletedIds)
         return result
       } catch (error) {

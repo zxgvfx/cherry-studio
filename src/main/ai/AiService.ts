@@ -29,7 +29,7 @@ import type { CompactionSink } from '@shared/ai/compaction'
 import type { AiToolApprovalRespondRequest, AiToolApprovalRespondResponse } from '@shared/ai/transport'
 import type { JobSnapshot } from '@shared/data/api/schemas/jobs'
 import { type Assistant } from '@shared/data/types/assistant'
-import type { CleanupPolicy, FileEntry } from '@shared/data/types/file'
+import type { CleanupPolicy, FileEntry, FileEntryId } from '@shared/data/types/file'
 import type { ImageGenerationMode } from '@shared/data/types/model'
 import { type Model, parseUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
@@ -70,7 +70,8 @@ import type {
   ListModelsRequest
 } from './types'
 import { installProviderUserAgentInterceptor } from './utils/customFetch'
-import { type SplitImageParams, splitParamValues } from './utils/imageOptions'
+import { sanitizeGeminiImageParams } from './utils/geminiImageParams'
+import { resolveImageRequestSize, type SplitImageParams, splitParamValues } from './utils/imageOptions'
 import { createAiUsageCaptureContext } from './utils/usageCapture'
 
 const logger = loggerService.withContext('AiService')
@@ -236,6 +237,8 @@ export interface AiImageRequest extends AiBaseRequest {
   prompt: string
   /** Input images for editing (base64 data URLs or URLs). If provided, uses edit mode. */
   inputImages?: string[]
+  /** FileEntry ids for edit inputs — preferred over `inputImages` when both are set. */
+  inputFileIds?: string[]
   /** Mask for inpainting (only with inputImages). */
   mask?: string
   /** Image-generation mode (which tab). main derives per-model transport routing
@@ -283,16 +286,63 @@ export function imageInputEntryParams(value: string): CreateInternalEntryIpcPara
     : { source: 'url', url: value as UrlString, cleanupPolicy: 'delete_when_unreferenced' }
 }
 
-/**
- * Resolve the wire `size`. `'auto'` is the painting UI sentinel for "let the
- * server pick the size", so it's omitted. An absent size is also omitted — the
- * provider/server applies its own default. (A blanket client-forced
- * `1024x1024` was wrong for vendors like Doubao that only accept `1K`/`2K`/`4K`
- * and reject a pixel size; models that want a concrete default declare it on
- * their registry `size` param instead.)
- */
-function resolveImageRequestSize(size: string | undefined): string | undefined {
-  return size === 'auto' ? undefined : size
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff])
+const GIF_MAGIC = Buffer.from([0x47, 0x49, 0x46])
+const WEBP_MAGIC = Buffer.from('WEBP', 'ascii')
+const UTF8_REPLACEMENT = Buffer.from([0xef, 0xbf, 0xbd])
+
+function looksLikeImageBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false
+  const head = Buffer.from(bytes.subarray(0, 12))
+  if (head.subarray(0, 4).equals(PNG_MAGIC)) return true
+  if (head.subarray(0, 3).equals(JPEG_MAGIC)) return true
+  if (head.subarray(0, 3).equals(GIF_MAGIC)) return true
+  if (head.subarray(0, 4).equals(Buffer.from('RIFF', 'ascii')) && head.subarray(8, 12).equals(WEBP_MAGIC)) return true
+  return false
+}
+
+function mimeFromImageBytes(bytes: Uint8Array): string {
+  if (bytes.length >= 4 && Buffer.from(bytes.subarray(0, 4)).equals(PNG_MAGIC)) return 'image/png'
+  if (bytes.length >= 3 && Buffer.from(bytes.subarray(0, 3)).equals(JPEG_MAGIC)) return 'image/jpeg'
+  if (bytes.length >= 3 && Buffer.from(bytes.subarray(0, 3)).equals(GIF_MAGIC)) return 'image/gif'
+  if (
+    bytes.length >= 12 &&
+    Buffer.from(bytes.subarray(0, 4)).equals(Buffer.from('RIFF', 'ascii')) &&
+    Buffer.from(bytes.subarray(8, 12)).equals(WEBP_MAGIC)
+  ) {
+    return 'image/webp'
+  }
+  return 'image/png'
+}
+
+function assertImageBytesForEdit(bytes: Uint8Array): void {
+  if (looksLikeImageBytes(bytes)) return
+  const head = Buffer.from(bytes.subarray(0, 3))
+  if (head.equals(UTF8_REPLACEMENT)) {
+    throw new Error('上传的图片已损坏（二进制被当成文本写入）。请重新选择原图，不要从已损坏的预览里再导出。')
+  }
+  throw new Error('上传的图片不是有效的 PNG/JPEG/WEBP/GIF，无法提交 /images/edits。')
+}
+
+async function assertInputFileIds(ids: readonly string[]): Promise<void> {
+  const fileManager = application.get('FileManager')
+  for (const id of ids) {
+    const result = await fileManager.read(id as FileEntryId, { encoding: 'binary' })
+    assertImageBytesForEdit(result.content)
+  }
+}
+
+async function dataUrlsFromInputFileIds(ids: readonly string[]): Promise<string[]> {
+  const fileManager = application.get('FileManager')
+  const urls: string[] = []
+  for (const id of ids) {
+    const result = await fileManager.read(id as FileEntryId, { encoding: 'binary' })
+    const bytes = result.content
+    assertImageBytesForEdit(bytes)
+    urls.push(`data:${mimeFromImageBytes(bytes)};base64,${Buffer.from(bytes).toString('base64')}`)
+  }
+  return urls
 }
 
 /** Embedding request. */
@@ -752,6 +802,7 @@ export class AiService extends BaseService {
 
     const { provider, model, assistant } = this.getProviderAndModel(request)
     const source = sourceSnapshotForAssistant(assistant)
+    const imageModelId = model.apiModelId ?? model.id
 
     // `request.paramValues` is already a strict, coerced `ParamValues` — the
     // `ai.image.generate` IPC validated it via the catalog `imageParamsSchema` at
@@ -760,7 +811,8 @@ export class AiService extends BaseService {
     // below) vs the leftover vendor bag (cfg, the diffusion/openai knobs, …) the
     // WireProfile engine forwards.
     const params = request.paramValues
-    const { structured, vendorBag } = splitParamValues(params)
+    const { structured: splitStructured, vendorBag } = splitParamValues(params)
+    const structured = sanitizeGeminiImageParams(imageModelId, splitStructured)
 
     // Async custom-provider transports (ppio / dashscope / modelscope /
     // dmxapi-bespoke) run the submit/poll loop on the job system so it survives
@@ -769,13 +821,16 @@ export class AiService extends BaseService {
     // builds its own request envelope per model, so it receives the canonical
     // camelCase `vendorBag` directly (native n/size/seed travel via the job
     // payload → `input.*`). No wire-naming, no casing probes.
-    if (request.uniqueModelId && hasImageTransport(provider.id, model.apiModelId ?? model.id)) {
+    if (request.uniqueModelId && hasImageTransport(provider.id, imageModelId)) {
       return await this.generateImageViaJob(request, structured, vendorBag, signal, source)
     }
 
     const { sdkConfig, credentialReceipt } = await this.buildAgentParamsFor(request, signal)
-    const promptParam = request.inputImages
-      ? { text: request.prompt, images: request.inputImages, ...(request.mask && { mask: request.mask }) }
+    const inputImages = request.inputFileIds?.length
+      ? await dataUrlsFromInputFileIds(request.inputFileIds)
+      : request.inputImages
+    const promptParam = inputImages?.length
+      ? { text: request.prompt, images: inputImages, ...(request.mask && { mask: request.mask }) }
       : request.prompt
 
     // Vendor body (`providerOptions[providerId]`): the WireProfile engine maps the
@@ -787,7 +842,7 @@ export class AiService extends BaseService {
 
     // `structured.aspectRatio` is already normalized to `X:Y` by the aspectRatio
     // native binding's `map` (in `splitParamValues`).
-    const requestSize = resolveImageRequestSize(structured.size)
+    const requestSize = resolveImageRequestSize(structured.size, imageModelId)
 
     // Only the genuine AI SDK `ImageModelV3CallOptions` image params (n/size/seed/
     // aspectRatio). The vendor knobs (negativePrompt/quality/numInferenceSteps/…)
@@ -895,19 +950,24 @@ export class AiService extends BaseService {
 
     let handle: JobHandle
     try {
-      // allSettled (not all) so every create resolves before we decide: a partial
-      // failure still leaves `createdEntryIds` complete for the catch to clean up.
-      const settled = await Promise.allSettled((request.inputImages ?? []).map(persistInputImage))
-      const rejected = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
-      if (rejected) throw rejected.reason
-      const inputFileIds = settled.length ? settled.map((r) => (r as PromiseFulfilledResult<string>).value) : undefined
+      let inputFileIds: string[] | undefined
+      if (request.inputFileIds?.length) {
+        await assertInputFileIds(request.inputFileIds)
+        inputFileIds = [...request.inputFileIds]
+      } else {
+        // allSettled (not all) so every create resolves before we decide: a partial
+        // failure still leaves `createdEntryIds` complete for the catch to clean up.
+        const settled = await Promise.allSettled((request.inputImages ?? []).map(persistInputImage))
+        const rejected = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected')
+        if (rejected) throw rejected.reason
+        inputFileIds = settled.length ? settled.map((r) => (r as PromiseFulfilledResult<string>).value) : undefined
+      }
       const maskFileId = request.mask ? await persistInputImage(request.mask) : undefined
-      const requestSize = resolveImageRequestSize(structured.size)
-
       // Per-model transport routing, derived from the registry (main hosts it) —
       // NOT laundered through paramValues. Carried in the payload so the handler
       // reaches the right endpoint / response family without re-resolving it.
       const { providerId, modelId } = parseUniqueModelId(uniqueModelId)
+      const requestSize = resolveImageRequestSize(structured.size, modelId)
       const mode = request.mode ?? 'generate'
       const support = providerRegistryService.getImageGenerationSupport(providerId, modelId)
       const vendorTransport = support?.modes?.[mode]?.vendorTransport

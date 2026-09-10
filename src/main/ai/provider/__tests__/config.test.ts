@@ -950,6 +950,47 @@ describe('providerToAiSdkConfig — builder dispatch matrix', () => {
       expect(settings.fetch).toBe(customFetch)
     })
 
+    it('wraps image-model fetch so /images/edits FormData parts have a filename', async () => {
+      vi.mocked(net.fetch).mockResolvedValue(new Response('{}', { status: 200 }))
+      const provider = makeProvider({
+        id: 'vapi',
+        defaultChatEndpoint: ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS,
+        endpointConfigs: {
+          [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: {
+            baseUrl: 'https://newapi.example/v1',
+            adapterFamily: 'openai-compatible'
+          }
+        }
+      })
+      const model = makeModel({
+        providerId: 'vapi',
+        apiModelId: 'gpt-image-2',
+        capabilities: [MODEL_CAPABILITY.IMAGE_GENERATION]
+      })
+
+      const config = await providerToAiSdkConfig(provider, model)
+      const settings = config.providerSettings as Record<string, unknown>
+      const fetch = settings.fetch as typeof globalThis.fetch
+      expect(fetch).not.toBe(customFetch)
+
+      const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' })
+      const form = new FormData()
+      form.append('image', png)
+      await fetch('https://newapi.example/v1/images/edits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer x' },
+        body: form
+      })
+
+      const init = vi.mocked(net.fetch).mock.calls[0]?.[1] as RequestInit
+      const sent = init.body as FormData
+      const image = sent.get('image')
+      expect(image).toBeInstanceOf(File)
+      expect((image as File).name).toBe('image.png')
+      expect(new Headers(init.headers).get('content-type')).toBeNull()
+      expect(new Headers(init.headers).get('authorization')).toBe('Bearer x')
+    })
+
     it('routes ModelScope IMAGE models through ModelScope config (so the async submit/poll transport is used)', async () => {
       // modelscope chat declares adapterFamily 'openai-compatible', and an image model
       // resolves to that same fallback id — the override must force providerId 'modelscope'

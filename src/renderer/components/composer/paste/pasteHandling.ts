@@ -75,10 +75,12 @@ export const handlePaste = async (
           // 使用新的API获取文件路径
           const filePath = window.api.file.getPathForFile(file)
 
-          // 如果没有路径，可能是剪贴板中的图像数据
+          // 没有路径：剪贴板里只有字节（截图），或宿主不暴露文件路径 —— Qt 运行时
+          // 没有 webUtils.getPathForFile，粘贴进来的每个文件都走这里。因此判据只能是
+          // 扩展名是否受支持；只放过 image/* 会让 pdf、视频等格式永远粘不进来。
           if (!filePath) {
-            // 图像生成也支持图像编辑
-            if (file.type.startsWith('image/') && supportExts.includes(getFileExtension(file.name))) {
+            const isImage = file.type.startsWith('image/')
+            if (supportExts.includes(getFileExtension(file.name))) {
               const tempFilePath = await window.api.file.createTempFile(file.name)
               const arrayBuffer = await file.arrayBuffer()
               const uint8Array = new Uint8Array(arrayBuffer)
@@ -87,12 +89,13 @@ export const handlePaste = async (
               if (selectedFile) {
                 setFiles((prevFiles) => [
                   ...prevFiles,
-                  toComposerAttachment({
-                    ...selectedFile,
-                    origin_name: removeFileExtension(file.name)
-                  })
+                  toComposerAttachment(
+                    // 非图片保留扩展名：它是下游推断 MIME 的依据之一
+                    isImage ? { ...selectedFile, origin_name: removeFileExtension(file.name) } : selectedFile
+                  )
                 ])
-                break
+                // 图像生成/编辑一次只接受一张图
+                if (isImage) break
               }
             } else {
               if (t) {

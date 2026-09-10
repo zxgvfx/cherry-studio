@@ -188,7 +188,7 @@ export const AskUserQuestionOptionSchema = z.object({
 export const AskUserQuestionItemSchema = z.object({
   question: z.string(),
   header: z.string(),
-  options: z.array(AskUserQuestionOptionSchema).min(2).max(4),
+  options: z.array(AskUserQuestionOptionSchema).min(2).max(8),
   multiSelect: z.boolean().default(false)
 })
 

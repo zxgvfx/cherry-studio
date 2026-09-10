@@ -41,6 +41,11 @@ const isAgentTool = (toolName: string) => {
   return false
 }
 
+/** Pipeline skills use dotted names (`models.list`, `script.propose`, `submit.graph`). */
+function isCocoPipelineToolName(toolName: string) {
+  return toolName.includes('.')
+}
+
 export function chooseTool(toolResponse: NormalToolResponse): React.ReactNode | null {
   const toolName = toolResponse.tool.name
   if (isMetaToolName(toolName)) {
@@ -63,6 +68,10 @@ export function chooseTool(toolResponse: NormalToolResponse): React.ReactNode | 
   }
 
   if (isAskUserQuestionToolName(toolName)) {
+    return <AgentExecutionTimeline toolResponse={toolResponse} />
+  }
+
+  if (isCocoPipelineToolName(toolName)) {
     return <AgentExecutionTimeline toolResponse={toolResponse} />
   }
 

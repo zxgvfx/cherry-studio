@@ -4513,6 +4513,35 @@ describe('ComposerSurface', () => {
     expect(onSendDraft).not.toHaveBeenCalled()
   })
 
+  it('does not send when Windows IME is still composing but keydown reports isComposing=false', async () => {
+    const onSendDraft = vi.fn()
+    mocks.editorViewComposing = true
+    mocks.quickPanelIsVisible = true
+
+    render(<ComposerSurface {...baseProps} onSendDraft={onSendDraft} />)
+
+    await waitFor(() => expect(mocks.editorOptions).toBeDefined())
+
+    const event = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })
+    expect(mocks.editorOptions.editorProps.handleKeyDown({ composing: true }, event)).toBe(false)
+    expect(event.defaultPrevented).toBe(false)
+    expect(mocks.quickPanelDispatchKeyDown).not.toHaveBeenCalled()
+    expect(onSendDraft).not.toHaveBeenCalled()
+  })
+
+  it('does not send the legacy keyCode 229 event used to commit an IME candidate', async () => {
+    const onSendDraft = vi.fn()
+    render(<ComposerSurface {...baseProps} onSendDraft={onSendDraft} />)
+
+    await waitFor(() => expect(mocks.editorOptions).toBeDefined())
+
+    const event = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })
+    Object.defineProperty(event, 'keyCode', { value: 229 })
+    expect(mocks.editorOptions.editorProps.handleKeyDown({ composing: false }, event)).toBe(false)
+    expect(event.defaultPrevented).toBe(false)
+    expect(onSendDraft).not.toHaveBeenCalled()
+  })
+
   it('preserves Shift+Enter newline while the visible QuickPanel has no active key handler', async () => {
     const onSendDraft = vi.fn()
     mocks.quickPanelIsVisible = true

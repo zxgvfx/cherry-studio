@@ -1,11 +1,13 @@
 import { getDisplayComposerTokens } from '@renderer/utils/message/composerTokens'
 import { REPORT_ARTIFACTS_TOOL_NAME } from '@shared/ai/builtinTools'
+import { selectTerminalRunAssets } from '@shared/ai/pipelinePreview'
 import type { CherryMessagePart } from '@shared/data/types/message'
-import { readCherryMeta } from '@shared/data/types/uiParts'
+import { type PipelineAssetPartData, readCherryMeta } from '@shared/data/types/uiParts'
 import { getToolName, isToolUIPart } from 'ai'
 
 import { isChannelAuthQrPart } from '../tools/channelConfigTool'
 import { isAskUserQuestionToolName } from '../tools/shared/agentToolTypes'
+import { isReviewDismissed } from './reviewDismissal'
 
 export interface PartEntry {
   part: CherryMessagePart
@@ -43,10 +45,23 @@ const HIDDEN_PART_TYPES = new Set([
   'data-clear'
 ])
 
-const ASSOCIATED_RESULT_PART_TYPES = new Set(['data-error', 'file', 'data-video'])
+const ASSOCIATED_RESULT_PART_TYPES = new Set(['data-error', 'file', 'data-video', 'data-pipeline-asset'])
+
+const OPEN_PIPELINE_PROGRESS_STATUSES = new Set([
+  'running',
+  'pending',
+  'awaiting_human',
+  'awaiting_approval',
+  'retrying'
+])
 
 export function isHiddenPart(part: CherryMessagePart): boolean {
-  return HIDDEN_PART_TYPES.has(part.type)
+  if (HIDDEN_PART_TYPES.has(part.type)) return true
+  if (part.type === 'data-pipeline-asset') return true
+  if (part.type !== 'data-pipeline-review') return false
+  const data = (part as { data?: { closed?: boolean; url?: string; runId?: string } }).data
+  if (Boolean(data?.closed) || !data?.url) return true
+  return isReviewDismissed(data?.runId)
 }
 
 function isIgnorableEmptyContentPart(part: CherryMessagePart): boolean {
@@ -131,6 +146,34 @@ function isAskUserQuestionPart(part: CherryMessagePart): boolean {
   return isToolUIPart(part) && isAskUserQuestionToolName(getPartToolName(part))
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
+}
+
+/**
+ * A script proposal awaiting an explicit canvas apply is a user-facing
+ * interaction, not completed process history. Keep its action buttons visible
+ * beside the answer instead of folding it into the collapsed tool trace.
+ */
+function isPendingCocoProposalPart(part: CherryMessagePart): boolean {
+  if (!isToolUIPart(part)) return false
+  const toolName = getPartToolName(part)
+  if (toolName !== 'script.propose' && toolName !== 'graph_proposal' && !toolName.endsWith('script.propose')) {
+    return false
+  }
+
+  const output = asRecord((part as unknown as { output?: unknown }).output)
+  const result = asRecord(output?.result) ?? output
+  if (!result || Boolean(result.applied ?? output?.applied)) return false
+
+  const changeSet = asRecord(result.change_set) ?? asRecord(output?.change_set) ?? result
+  return Boolean(
+    asRecord(result.workflow) ||
+      asRecord(output?.workflow) ||
+      String(changeSet.after_script || result.normalized_script || result.after_script || '').trim()
+  )
+}
+
 function isVisibleReasoningPart(part: CherryMessagePart): boolean {
   if (part.type !== 'reasoning') return false
   return part.state === 'streaming' || isReasoningMessagePart(part)
@@ -138,7 +181,7 @@ function isVisibleReasoningPart(part: CherryMessagePart): boolean {
 
 export function isProcessToolPart(part: CherryMessagePart): boolean {
   if (!isToolUIPart(part) || isReportToolPart(part)) return false
-  return !isAskUserQuestionPart(part) && !isChannelAuthQrPart(part)
+  return !isAskUserQuestionPart(part) && !isChannelAuthQrPart(part) && !isPendingCocoProposalPart(part)
 }
 
 function isVisibleProcessPart(part: CherryMessagePart): boolean {
@@ -187,6 +230,12 @@ export function projectLiveMessageParts(entries: readonly PartEntry[]): LiveMess
     if (isProcessFillerText(entries, position, true)) continue
 
     if (isToolUIPart(entry.part) && !isVisibleProcessPart(entry.part)) {
+      flushRegion()
+      items.push({ kind: 'part', key: entry.index, entry })
+      continue
+    }
+
+    if (isPipelineProgressOrReviewPart(entry.part)) {
       flushRegion()
       items.push({ kind: 'part', key: entry.index, entry })
       continue
@@ -254,6 +303,51 @@ export function isSubstantiveAnswerPart(part: CherryMessagePart): boolean {
 
 function isAssociatedResultPart(part: CherryMessagePart): boolean {
   return ASSOCIATED_RESULT_PART_TYPES.has(part.type)
+}
+
+function isPipelineAssetPart(part: CherryMessagePart): boolean {
+  return part.type === 'data-pipeline-asset'
+}
+
+function pipelineAssetData(part: CherryMessagePart): PipelineAssetPartData | undefined {
+  if (part.type !== 'data-pipeline-asset') return undefined
+  const data = (part as { data?: PipelineAssetPartData }).data
+  return data?.assetId ? data : undefined
+}
+
+function terminalPipelineAssetIds(entries: readonly PartEntry[]): Set<string> {
+  const assets = entries.flatMap((entry) => {
+    const data = pipelineAssetData(entry.part)
+    return data ? [data] : []
+  })
+  return new Set(selectTerminalRunAssets(assets).map((asset) => asset.assetId))
+}
+
+function isPipelineProgressOrReviewPart(part: CherryMessagePart): boolean {
+  return part.type === 'data-pipeline-run-progress' || part.type === 'data-pipeline-review'
+}
+
+function isOpenPipelineProgressPart(part: CherryMessagePart): boolean {
+  if (part.type !== 'data-pipeline-run-progress') return false
+  const data = part.data as { status?: string; stillRunning?: boolean; timedOut?: boolean } | undefined
+  if (!data) return true
+  if (data.stillRunning || data.timedOut) return true
+  const status = String(data.status || '').toLowerCase()
+  if (!status) return true
+  return OPEN_PIPELINE_PROGRESS_STATUSES.has(status)
+}
+
+function isLeftoverPipelineProduct(
+  part: CherryMessagePart,
+  hasOpenProgress: boolean,
+  terminalAssetIds: ReadonlySet<string>
+): boolean {
+  if (isPipelineAssetPart(part)) {
+    const assetId = pipelineAssetData(part)?.assetId
+    return Boolean(assetId && terminalAssetIds.has(assetId))
+  }
+  if (isOpenPipelineProgressPart(part)) return true
+  return part.type === 'data-pipeline-review' && hasOpenProgress
 }
 
 export function isReasoningMessagePart(part: CherryMessagePart): boolean {
@@ -348,13 +442,44 @@ export function projectCompletedMessageParts(entries: readonly PartEntry[]): Com
 
   const isDirectResult = (entry: PartEntry, position: number) =>
     isChannelAuthQrPart(entry.part) ||
+    isPendingCocoProposalPart(entry.part) ||
     (position >= resultStart &&
       position < resultEnd &&
       (isSubstantiveAnswerPart(entry.part) || isAssociatedResultPart(entry.part) || isHiddenPart(entry.part)))
 
+  const historyEntries = contentEntries.filter((entry, position) => !isDirectResult(entry, position))
+  const resultEntries = contentEntries.filter(isDirectResult)
+  // Workflow products arrive on `submit.graph` *after* the model's last prose
+  // ("现在提交运行"). Adjacent-to-answer association would leave them in
+  // collapsed process history; always surface them with the final answer.
+  // Settled progress stays in history so it folds into the tool tag.
+  // Review is one-shot: never fold into the tool tag; drop it once HITL ends.
+  // In-flight / HITL progress stays in the result so the card remains visible.
+  const hasOpenProgress = historyEntries.some((entry) => isOpenPipelineProgressPart(entry.part))
+  const terminalAssetIds = terminalPipelineAssetIds([...historyEntries, ...resultEntries])
+  const leftoverProducts = historyEntries.filter((entry) =>
+    isLeftoverPipelineProduct(entry.part, hasOpenProgress, terminalAssetIds)
+  )
+  const mergedHistory =
+    leftoverProducts.length === 0
+      ? historyEntries
+      : historyEntries.filter((entry) => !isLeftoverPipelineProduct(entry.part, hasOpenProgress, terminalAssetIds))
+  const mergedResult = leftoverProducts.length === 0 ? resultEntries : [...resultEntries, ...leftoverProducts]
+
+  const demotedIntermediates = mergedResult.filter((entry) => {
+    const assetId = pipelineAssetData(entry.part)?.assetId
+    return Boolean(assetId && !terminalAssetIds.has(assetId))
+  })
+  const demotedIndexes = new Set(demotedIntermediates.map((entry) => entry.index))
+  const historySource = demotedIntermediates.length === 0 ? mergedHistory : [...mergedHistory, ...demotedIntermediates]
+  const resultSource =
+    demotedIntermediates.length === 0 ? mergedResult : mergedResult.filter((entry) => !demotedIndexes.has(entry.index))
   return {
-    historyEntries: contentEntries.filter((entry, position) => !isDirectResult(entry, position)),
-    resultEntries: contentEntries.filter(isDirectResult),
+    historyEntries: historySource.filter((entry) => entry.part.type !== 'data-pipeline-review'),
+    resultEntries: resultSource.filter((entry) => {
+      if (entry.part.type !== 'data-pipeline-review') return true
+      return hasOpenProgress && !isHiddenPart(entry.part)
+    }),
     reportEntries
   }
 }

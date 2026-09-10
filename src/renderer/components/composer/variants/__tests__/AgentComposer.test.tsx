@@ -486,6 +486,7 @@ vi.mock('@renderer/components/composer/variants/shared/ComposerSpeedControl', as
 })
 
 vi.mock('@renderer/hooks/agent/useAgent', () => ({
+  useAgent: () => ({ agent: { id: 'agent-1', type: 'coco', configuration: {} } }),
   useUpdateAgent: () => ({ updateAgent: mocks.updateAgent, updateModel: mocks.updateModel })
 }))
 

@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { foreignKey, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 import { createUpdateTimestamps, orderKeyColumns, orderKeyIndex, uuidPrimaryKey } from './_columnHelpers'
 import { agentTable } from './agent'
@@ -9,6 +9,11 @@ export const agentSessionTable = sqliteTable(
   'agent_session',
   {
     id: uuidPrimaryKey(),
+    // Agent conversation branches remain independent sessions so each branch
+    // keeps its own Pipeline/canvas snapshot. The renderer presents this
+    // relation as one conversation tree rather than separate session-list rows.
+    branchParentId: text(),
+    branchPointMessageId: text(),
     agentId: text().references(() => agentTable.id, { onDelete: 'set null' }),
     name: text().notNull(),
     // Whether the name was manually edited by user.
@@ -30,6 +35,8 @@ export const agentSessionTable = sqliteTable(
     ...createUpdateTimestamps
   },
   (t) => [
+    foreignKey({ columns: [t.branchParentId], foreignColumns: [t.id] }).onDelete('set null'),
+    index('agent_session_branch_parent_id_idx').on(t.branchParentId),
     orderKeyIndex('agent_session')(t),
     index('agent_session_last_activity_at_idx').on(t.lastActivityAt),
     index('agent_session_updated_at_idx').on(t.updatedAt)

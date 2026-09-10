@@ -6,6 +6,7 @@ import AgentMemoryServer from '@main/ai/mcp/servers/agentMemory'
 import AssistantServer, { SUPPORT_ASSISTANT_TOOL_NAMES } from '@main/ai/mcp/servers/assistant'
 import { AssistantFileToolsServer } from '@main/ai/mcp/servers/AssistantFileToolsServer'
 import CherryBuiltinToolsServer from '@main/ai/mcp/servers/cherryBuiltinTools'
+import DccToolsServer from '@main/ai/mcp/servers/dccTools'
 import SkillsServer from '@main/ai/mcp/servers/skills'
 import { resolveKnowledgeBaseScope } from '@main/ai/utils/knowledgeScope'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -69,6 +70,17 @@ export function buildAgentMcpServers(
         return liveAgent ? resolveKnowledgeBaseScope(liveAgent.knowledgeBaseIds, selectedKnowledgeBaseIds) : []
       }
     }).mcpServer
+  }
+  const cocoDcc = agent.configuration?.coco_dcc
+  const dccSessionId =
+    cocoDcc && typeof cocoDcc === 'object' && typeof (cocoDcc as { sessionId?: unknown }).sessionId === 'string'
+      ? (cocoDcc as { sessionId: string }).sessionId
+      : ''
+  if (dccSessionId) {
+    servers['dcc-tools'] = {
+      name: 'dcc-tools',
+      instance: new DccToolsServer(dccSessionId).mcpServer
+    }
   }
   servers['agent-memory'] = {
     name: 'agent-memory',

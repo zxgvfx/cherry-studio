@@ -100,4 +100,11 @@ describe('chooseTool', () => {
   it('returns null for an unknown non-Cherry tool', () => {
     expect(chooseTool(resp('totally_unknown_tool', 'builtin'))).toBeNull()
   })
+
+  it('routes coco pipeline dotted tool names to the agent card', () => {
+    expect(testIdOf(chooseTool(resp('models.list', 'builtin')))).toBe('agent-card')
+    expect(testIdOf(chooseTool(resp('nodes.get', 'builtin')))).toBe('agent-card')
+    expect(testIdOf(chooseTool(resp('script.propose', 'builtin')))).toBe('agent-card')
+    expect(testIdOf(chooseTool(resp('submit.graph', 'provider')))).toBe('agent-card')
+  })
 })

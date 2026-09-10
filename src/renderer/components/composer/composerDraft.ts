@@ -2,6 +2,7 @@ import { isComposerInputTokenKind, isComposerMessageTokenKind } from '@renderer/
 import type { CherryMessagePart } from '@shared/data/types/message'
 import type {
   CherryProviderMetadata,
+  ComposerMessageFileTokenPayload,
   ComposerMessageSnapshot,
   ComposerMessageToken,
   ComposerMessageTokenPayload
@@ -53,12 +54,20 @@ function readPayloadString(payload: Record<string, unknown>, key: string) {
 }
 
 function createDisplayFileTokenPayload(token: ComposerSerializedToken): ComposerMessageTokenPayload | undefined {
+  if (token.kind === 'pipelineNode') {
+    const payload = readPayloadObject(token.payload)
+    const nodeId = payload ? readPayloadString(payload, 'nodeId') : undefined
+    if (!payload || !nodeId) return undefined
+    const values = readPayloadObject(payload.values) ?? {}
+    return { nodeId, values }
+  }
+
   if (token.kind !== 'file') return undefined
 
   const payload = readPayloadObject(token.payload)
   if (!payload) return undefined
 
-  const displayPayload: ComposerMessageTokenPayload = {}
+  const displayPayload: ComposerMessageFileTokenPayload = {}
   const type = FileTypeSchema.safeParse(payload.type)
   if (type.success) displayPayload.type = type.data
 

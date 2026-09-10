@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 import { application } from '@application'
@@ -8,8 +9,9 @@ import {
 } from '@main/services/file'
 import { hasWritePermission, isPathInside, untildify } from '@main/utils/legacyFile'
 import { IpcChannel } from '@shared/IpcChannel'
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain, nativeImage } from 'electron'
 
+import dragIconPath from '../../build/icon.png?asset'
 import { skillService } from './ai/skills/SkillService'
 import { appService } from './services/AppService'
 import { copilotService } from './services/CopilotService'
@@ -131,6 +133,13 @@ export async function registerIpc() {
   // file
   ipcMain.handle(IpcChannel.File_Open, fileManager.open.bind(fileManager))
   ipcMain.handle(IpcChannel.File_OpenPath, fileManager.openPath.bind(fileManager))
+  ipcMain.on(IpcChannel.File_StartDrag, (event, filePath: string) => {
+    if (!path.isAbsolute(filePath) || !existsSync(filePath)) return
+    event.sender.startDrag({
+      file: filePath,
+      icon: nativeImage.createFromPath(dragIconPath)
+    })
+  })
   ipcMain.handle(IpcChannel.File_Save, fileManager.save.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Select, fileManager.selectFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_ReadExternal, fileManager.readExternalFile.bind(fileManager))

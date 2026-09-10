@@ -2,6 +2,7 @@ import { Tooltip } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { AgentContextUsageSummary } from '@renderer/components/chat/agent/AgentContextUsageSummary'
 import { ContextUsageMeter } from '@renderer/components/chat/contextUsage'
+import { MessageEditingProvider, useMessageEditing } from '@renderer/components/chat/editing/MessageEditingContext'
 import { useChatLayoutMode } from '@renderer/components/chat/layout/ChatLayoutModeContext'
 import {
   ConversationTopBarPortal,
@@ -49,24 +50,69 @@ import { useTimer } from '@renderer/hooks/useTimer'
 import { useTopicStreamStatus } from '@renderer/hooks/useTopicStreamStatus'
 import { ipcApi } from '@renderer/ipc'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { openRoute } from '@renderer/services/mainWindowNavigation'
 import { toast } from '@renderer/services/toast'
 import type { ThinkingOption } from '@renderer/types/reasoning'
 import { TopicType } from '@renderer/types/topic'
 import { buildAgentFileWorkspaceKey, buildAgentSessionTopicId } from '@renderer/utils/agentSession'
+import { prepareCanvasSessionTransition } from '@renderer/utils/canvasSessionTransition'
+import {
+  COCO_SESSION_ASSET_DELETE_EVENT,
+  COCO_SESSION_ASSET_INSERT_EVENT,
+  type CocoSessionAssetInsertDetail
+} from '@renderer/utils/cocoSessionAssetEvents'
 import { buildFilePartsForAttachments, withComposerFilePartMeta } from '@renderer/utils/file/buildFileParts'
 import { getSendMessageShortcutLabel } from '@renderer/utils/input'
 import type { ComposerAttachment } from '@renderer/utils/message/composerAttachment'
 import { resolveReasoningEffortForModel } from '@renderer/utils/model'
+import {
+  discardPendingAgentBranchSend,
+  queuePendingAgentBranchSend,
+  takePendingAgentBranchSend
+} from '@renderer/utils/pendingAgentBranchSend'
+import {
+  classifyPipelineNode,
+  collectPipelineNodeFilterTags,
+  findPipelineNode,
+  groupPipelineNodesByCategory,
+  parsePipelineNodeQuery,
+  pickFeaturedPipelinePresets,
+  type PipelineModelPreset,
+  type PipelineNodeCategoryId,
+  pipelineNodeToComposerToken,
+  pipelinePresetSlashQuickPanelFields,
+  pipelineSlashQuickPanelFields,
+  readPipelineNodeTokenPayload,
+  resolvePipelineNodeIdForAttachments
+} from '@renderer/utils/pipelineNodes'
+import { cocoSessionAssetPromptText, readCocoSessionAssets } from '@shared/ai/cocoSessionAssets'
 import type { ComposerQueuedMessagePayload } from '@shared/ai/transport'
 import type { AgentEntity } from '@shared/data/types/agent'
 import type { KnowledgeBase } from '@shared/data/types/knowledge'
-import type { FileUIPart } from '@shared/data/types/message'
+import type { CherryMessagePart, FileUIPart } from '@shared/data/types/message'
 import type { Model } from '@shared/data/types/model'
-import { getKnowledgeBaseIdsFromParts, withKnowledgeScopePart } from '@shared/data/types/uiParts'
+import { getKnowledgeBaseIdsFromParts, readCherryMeta, withKnowledgeScopePart } from '@shared/data/types/uiParts'
 import type { OutputFor } from '@shared/ipc/types'
 import type { LocalSkill } from '@shared/types/skill'
 import { type CanonicalFilePath, canonicalizeFilePath, createFilePathHandle, toFileUrl } from '@shared/utils/file'
-import { Settings2, Terminal, ToolCase } from 'lucide-react'
+import {
+  Box,
+  Database,
+  Film,
+  FolderInput,
+  Image,
+  MousePointerClick,
+  Move,
+  Scan,
+  Settings2,
+  Shapes,
+  Sparkles,
+  Tags,
+  Terminal,
+  ToolCase,
+  WandSparkles,
+  Workflow
+} from 'lucide-react'
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -74,6 +120,7 @@ import { excludeComposerDraftTokens } from '../composerDraft'
 import type { InputHistoryDirection } from '../inputHistoryNavigation'
 import { QueuedFollowupsDock } from '../QueuedFollowupsDock'
 import type { ComposerDraftToken, ComposerSerializedDraft, ComposerSerializedToken } from '../tokens'
+import { usePipelineModelPresets, usePipelineNodeCatalog } from '../tokenView'
 import { type FollowupQueueItem, useFollowupQueue } from '../useFollowupQueue'
 import { useInputHistory } from '../useInputHistory'
 import { isPathWithinAccessiblePath } from './agent/accessiblePath'
@@ -93,6 +140,7 @@ import {
   type RestoredAgentComposerDraftCache,
   writeAgentDraftCache
 } from './agent/agentDraftCache'
+import { sessionAssetToComposerAttachment } from './agent/cocoSessionAssetMention'
 import { useAgentResourceMentionSource } from './agent/useAgentResourceMentionSource'
 import {
   agentComposerTokenId,
@@ -101,6 +149,7 @@ import {
   agentSkillToComposerToken,
   getAgentComposerTokenIds
 } from './agentComposerTokens'
+import { createEditableMessageDraft } from './chat/messageEditingDraft'
 import {
   COMPOSER_TOOLBAR_CLASS,
   ComposerBelowControls,
@@ -130,7 +179,22 @@ const AGENT_MANAGED_TOKEN_KINDS_BEFORE_KNOWLEDGE_RESTORE = [
   'skill'
 ] as const satisfies readonly ComposerDraftToken['kind'][]
 const AGENT_SKILLS_LAUNCHER_ID = 'agent-skills'
+const PIPELINE_NODES_LAUNCHER_ID = 'pipeline-nodes'
 const AGENT_NEW_SESSION_TOOL_ID = 'composer:new-session'
+
+const PIPELINE_NODE_CATEGORY_ICONS: Record<PipelineNodeCategoryId, React.ReactNode> = {
+  image: <Image />,
+  video: <Film />,
+  '3d': <Box />,
+  motion: <Move />,
+  segmentation: <Scan />,
+  model: <Sparkles />,
+  workflow: <Workflow />,
+  io: <FolderInput />,
+  interactive: <MousePointerClick />,
+  data: <Database />,
+  other: <Shapes />
+}
 const EMPTY_ACCESSIBLE_PATHS: readonly string[] = []
 const FILE_IPC_BATCH_SIZE = 500
 
@@ -745,6 +809,7 @@ const AgentComposerInner = ({
     customizePanelItem
   } = useComposerToolbarPinnedTools('agent.input.toolbar.pinned_tools')
   const { t } = useTranslation()
+  const { editingMessage, cancelEditing, stopEditing } = useMessageEditing()
   const agentModelFilter = useAgentModelFilter(agent?.type)
   const isModelUnavailable = Boolean(agent) && !model && !modelPending
   const missingModelMessage = isModelUnavailable ? t('code.model_required') : undefined
@@ -804,8 +869,57 @@ const AgentComposerInner = ({
     initialDraft.knowledgeBaseIds.length === 0
   )
   const sessionTopicId = buildAgentSessionTopicId(sessionId)
+  const editingMessageForSession = editingMessage?.message.topicId === sessionTopicId ? editingMessage : null
+  const restoredEditingSessionIdRef = useRef<number | null>(null)
+  const draftBeforeEditingRef = useRef<{
+    text: string
+    tokens: ComposerSerializedToken[]
+    files: ComposerAttachment[]
+    skills: LocalSkill[]
+  } | null>(null)
   const accessiblePaths = sessionData?.accessiblePaths ?? EMPTY_ACCESSIBLE_PATHS
-  const enableResourceMention = accessiblePaths.length > 0
+  const isCocoAgent = agent?.type === 'coco'
+  const enableResourceMention = isCocoAgent || accessiblePaths.length > 0
+  const cocoSessionAssets = useMemo(
+    () => (isCocoAgent ? readCocoSessionAssets(agent?.configuration, sessionId) : []),
+    [agent?.configuration, isCocoAgent, sessionId]
+  )
+  const { nodes: pipelineNodes } = usePipelineNodeCatalog(isCocoAgent)
+  const { presets: pipelineModelPresets } = usePipelineModelPresets(isCocoAgent)
+  const getCocoSessionAssets = useCallback(() => cocoSessionAssets, [cocoSessionAssets])
+  useEffect(() => {
+    if (!isCocoAgent) return
+    const handleInsertAsset = (event: Event) => {
+      const detail = (event as CustomEvent<CocoSessionAssetInsertDetail>).detail
+      if (!detail || detail.sessionId !== sessionId) return
+      const attachment = sessionAssetToComposerAttachment(detail.asset)
+      const token = {
+        ...agentFileToComposerToken(attachment),
+        promptText: cocoSessionAssetPromptText(detail.asset)
+      }
+      if (!actionsRef.current.getDraft().tokens.some((current) => current.id === token.id)) {
+        actionsRef.current.insertToken(token)
+      }
+      setFiles((current) =>
+        current.some((file) => file.pipelineAssetId === detail.asset.assetId) ? current : [...current, attachment]
+      )
+      actionsRef.current.focus('end')
+      toast.success(t('agent.right_pane.assets.added_to_composer', { name: detail.asset.name }))
+    }
+    window.addEventListener(COCO_SESSION_ASSET_INSERT_EVENT, handleInsertAsset)
+    const handleDeleteAsset = (event: Event) => {
+      const detail = (event as CustomEvent<CocoSessionAssetInsertDetail>).detail
+      if (!detail || detail.sessionId !== sessionId) return
+      const attachment = sessionAssetToComposerAttachment(detail.asset)
+      actionsRef.current.removeToken(agentComposerTokenId.file(attachment))
+      setFiles((current) => current.filter((file) => file.pipelineAssetId !== detail.asset.assetId))
+    }
+    window.addEventListener(COCO_SESSION_ASSET_DELETE_EVENT, handleDeleteAsset)
+    return () => {
+      window.removeEventListener(COCO_SESSION_ASSET_INSERT_EVENT, handleInsertAsset)
+      window.removeEventListener(COCO_SESSION_ASSET_DELETE_EVENT, handleDeleteAsset)
+    }
+  }, [actionsRef, isCocoAgent, sessionId, setFiles, t])
   const userWorkspacePath = workspace?.type === 'user' ? workspace.path : undefined
   const workspaceWarning = resolvedWorkspaceWarning ?? undefined
   const quickPanel = useOptionalQuickPanel()
@@ -952,6 +1066,51 @@ const AgentComposerInner = ({
     remountsOnScopeChange: true
   })
 
+  const restoreDraftBeforeEditing = useCallback(() => {
+    const saved = draftBeforeEditingRef.current
+    draftBeforeEditingRef.current = null
+    restoredEditingSessionIdRef.current = null
+    if (!saved) return
+    actionsRef.current.replaceDraft({ text: saved.text, tokens: saved.tokens })
+    setText(saved.text)
+    setDraftTokens(saved.tokens)
+    draftTokensRef.current = saved.tokens
+    setFiles(saved.files)
+    setSelectedSkills(saved.skills)
+  }, [actionsRef, setFiles, setText])
+
+  useEffect(() => {
+    if (!editingMessageForSession) return
+    if (restoredEditingSessionIdRef.current === editingMessageForSession.editingSessionId) return
+    restoredEditingSessionIdRef.current = editingMessageForSession.editingSessionId
+    if (!draftBeforeEditingRef.current) {
+      const current = actionsRef.current.getDraft()
+      draftBeforeEditingRef.current = {
+        text: current.text,
+        tokens: current.tokens,
+        files,
+        skills: selectedSkills
+      }
+    }
+
+    const editable = createEditableMessageDraft(editingMessageForSession.parts)
+    actionsRef.current.replaceDraft({ text: editable.text, tokens: editable.draftTokens })
+    setText(editable.text)
+    setDraftTokens(editable.draftTokens)
+    draftTokensRef.current = editable.draftTokens
+    setFiles(editable.files)
+    setSelectedSkills(getCachedSkillTokens(editable.draftTokens).map(getSkillFromCachedToken))
+  }, [actionsRef, editingMessageForSession, files, selectedSkills, setFiles, setText])
+
+  const handleCancelMessageEditing = useCallback(() => {
+    restoreDraftBeforeEditing()
+    cancelEditing()
+  }, [cancelEditing, restoreDraftBeforeEditing])
+  const handleLocateEditingMessage = useCallback(() => {
+    if (!editingMessageForSession) return
+    void EventEmitter.emit(EVENT_NAMES.LOCATE_MESSAGE + ':' + editingMessageForSession.message.id, true)
+  }, [editingMessageForSession])
+
   useEffect(() => {
     if (isKnowledgeBaseDraftHydrated || isKnowledgeBasesLoading) return
 
@@ -1081,6 +1240,330 @@ const AgentComposerInner = ({
       inputAdapter.focus()
     },
     [selectedSkills]
+  )
+
+  const insertPipelineNodeToken = useCallback(
+    (
+      node: (typeof pipelineNodes)[number],
+      inputAdapter?: QuickPanelInputAdapter,
+      searchText?: string,
+      extraValues?: Record<string, unknown>
+    ) => {
+      if (!inputAdapter?.insertToken) return
+      const resolvedNodeId = resolvePipelineNodeIdForAttachments(
+        node.node_id,
+        files.some((file) => file.type === 'image')
+      )
+      const resolvedNode = findPipelineNode(pipelineNodes, resolvedNodeId) ?? node
+      const queryValues = searchText ? parsePipelineNodeQuery(searchText, node.node_id) : {}
+      inputAdapter.insertToken(pipelineNodeToComposerToken(resolvedNode, { ...queryValues, ...extraValues }))
+      inputAdapter.focus()
+    },
+    [files, pipelineNodes]
+  )
+
+  const insertPipelineModelPreset = useCallback(
+    (preset: PipelineModelPreset, inputAdapter?: QuickPanelInputAdapter) => {
+      const node =
+        findPipelineNode(pipelineNodes, preset.nodeId) ??
+        ({
+          node_id: preset.nodeId,
+          name: preset.displayName,
+          description: preset.displayName
+        } as (typeof pipelineNodes)[number])
+      insertPipelineNodeToken(node, inputAdapter, undefined, {
+        model: preset.model,
+        provider_id: preset.providerId,
+        ...preset.values
+      })
+    },
+    [insertPipelineNodeToken, pipelineNodes]
+  )
+
+  const pipelineNodeGroups = useMemo(() => groupPipelineNodesByCategory(pipelineNodes), [pipelineNodes])
+  const pipelineNodeTagFilters = useMemo(() => collectPipelineNodeFilterTags(pipelineNodes), [pipelineNodes])
+
+  const createPipelineNodeItem = useCallback(
+    (node: (typeof pipelineNodes)[number], categoryLabel: string): QuickPanelListItem => {
+      const fields = pipelineSlashQuickPanelFields(node)
+      const title = t('chat.input.pipeline_nodes.title')
+      return {
+        id: `pipeline-node:${node.node_id}`,
+        label: fields.label,
+        description: fields.description,
+        icon: <Workflow size={16} />,
+        suffix: categoryLabel,
+        filterText: `${fields.slashId} ${node.name} ${node.description} ${node.tags.join(' ')} ${categoryLabel}`,
+        searchAliases: [title, categoryLabel, node.node_id, node.name, fields.slashId, ...node.tags],
+        action: ({ inputAdapter, searchText }) => {
+          insertPipelineNodeToken(node, inputAdapter, searchText)
+        }
+      }
+    },
+    [insertPipelineNodeToken, t]
+  )
+
+  const createPipelineNodeItems = useCallback(
+    (nodes: readonly (typeof pipelineNodes)[number][]) =>
+      nodes.map((node) =>
+        createPipelineNodeItem(node, t(`chat.input.pipeline_nodes.category.${classifyPipelineNode(node)}`))
+      ),
+    [createPipelineNodeItem, t]
+  )
+
+  const createPipelinePresetItem = useCallback(
+    (preset: PipelineModelPreset): QuickPanelListItem => {
+      const presetSuffix = t('chat.input.pipeline_nodes.preset_suffix')
+      const fields = pipelinePresetSlashQuickPanelFields(preset)
+      return {
+        id: `pipeline-preset:${preset.id}`,
+        label: fields.label,
+        description: fields.description,
+        icon: <WandSparkles size={16} />,
+        suffix: presetSuffix,
+        filterText: `${preset.slashId} ${preset.displayName} ${preset.model} ${preset.alias} ${preset.providerName} ${presetSuffix}`,
+        searchAliases: [
+          preset.slashId,
+          preset.alias,
+          preset.displayName,
+          preset.model,
+          preset.providerName,
+          presetSuffix,
+          t('chat.input.pipeline_nodes.presets')
+        ],
+        action: ({ inputAdapter }) => {
+          insertPipelineModelPreset(preset, inputAdapter)
+        }
+      }
+    },
+    [insertPipelineModelPreset, t]
+  )
+
+  const pipelinePresetItems = useMemo<QuickPanelListItem[]>(
+    () => pipelineModelPresets.map((preset) => createPipelinePresetItem(preset)),
+    [createPipelinePresetItem, pipelineModelPresets]
+  )
+
+  const featuredPipelinePresetItems = useMemo<QuickPanelListItem[]>(
+    () => pickFeaturedPipelinePresets(pipelineModelPresets).map((preset) => createPipelinePresetItem(preset)),
+    [createPipelinePresetItem, pipelineModelPresets]
+  )
+
+  const pipelineNodeItems = useMemo<QuickPanelListItem[]>(
+    () => createPipelineNodeItems(pipelineNodeGroups.flatMap((group) => group.nodes)),
+    [createPipelineNodeItems, pipelineNodeGroups]
+  )
+
+  const pipelineCategoryLaunchers = useMemo<ComposerToolLauncher[]>(
+    () =>
+      pipelineNodeGroups.map((group) => {
+        const label = t(`chat.input.pipeline_nodes.category.${group.category}`)
+        const items = [
+          ...group.nodes.map((node) => createPipelineNodeItem(node, label)),
+          ...(group.category === 'image' ? pipelinePresetItems : [])
+        ]
+        const symbol = `${PIPELINE_NODES_LAUNCHER_ID}:${group.category}`
+        return {
+          id: symbol,
+          kind: 'panel',
+          sources: ['root-panel'],
+          label,
+          description: t('chat.input.pipeline_nodes.category_count', { count: items.length }),
+          icon: PIPELINE_NODE_CATEGORY_ICONS[group.category],
+          searchAliases: [label, group.category],
+          panelSymbol: symbol,
+          action: ({ parentPanel, queryAnchor, quickPanel, triggerInfo }) => {
+            quickPanel.open({
+              title: label,
+              list: items,
+              symbol,
+              parentPanel,
+              queryAnchor,
+              triggerInfo: triggerInfo ?? { type: 'button' }
+            })
+          }
+        }
+      }),
+    [createPipelineNodeItem, pipelineNodeGroups, pipelinePresetItems, t]
+  )
+
+  const pipelineTagFilterItems = useMemo<QuickPanelListItem[]>(() => {
+    const filterLabel = t('chat.input.pipeline_nodes.filter_by_tag')
+    const tagSuffix = t('chat.input.pipeline_nodes.tag_suffix')
+    return pipelineNodeTagFilters.map((filter) => {
+      const items = createPipelineNodeItems(filter.nodes)
+      const symbol = `${PIPELINE_NODES_LAUNCHER_ID}:tag:${filter.tag}`
+      const title = t('chat.input.pipeline_nodes.tag_title', { tag: filter.tag })
+      return {
+        id: symbol,
+        label: `#${filter.tag}`,
+        description: t('chat.input.pipeline_nodes.category_count', { count: filter.count }),
+        icon: <Tags size={16} />,
+        suffix: tagSuffix,
+        isMenu: true,
+        filterText: `${filter.tag} #${filter.tag} ${filterLabel}`,
+        searchAliases: [filter.tag, filterLabel, tagSuffix],
+        action: ({ context, parentPanel, queryAnchor }) => {
+          context.open({
+            title,
+            list: items,
+            symbol,
+            parentPanel,
+            queryAnchor,
+            triggerInfo: { type: 'button' }
+          })
+        }
+      }
+    })
+  }, [createPipelineNodeItems, pipelineNodeTagFilters, t])
+
+  const pipelineTagSearchItems = useMemo<QuickPanelListItem[]>(
+    () => pipelineTagFilterItems.map((item) => ({ ...item, isMenu: false })),
+    [pipelineTagFilterItems]
+  )
+
+  const pipelineNodesLauncher = useMemo<ComposerToolLauncher>(() => {
+    const title = t('chat.input.pipeline_nodes.title')
+    const filterLabel = t('chat.input.pipeline_nodes.filter_by_tag')
+    const allNodesLabel = t('chat.input.pipeline_nodes.all_nodes')
+    const presetsLabel = t('chat.input.pipeline_nodes.presets')
+    const tagsSymbol = `${PIPELINE_NODES_LAUNCHER_ID}:tags`
+    const allNodesSymbol = `${PIPELINE_NODES_LAUNCHER_ID}:all`
+    const presetsSymbol = `${PIPELINE_NODES_LAUNCHER_ID}:presets`
+    return {
+      id: PIPELINE_NODES_LAUNCHER_ID,
+      kind: 'panel',
+      sources: ['root-panel'],
+      order: 15,
+      hidden: !isCocoAgent || pipelineNodeItems.length === 0,
+      label: title,
+      icon: <Workflow />,
+      searchAliases: [
+        title,
+        'pipeline',
+        'node',
+        filterLabel,
+        presetsLabel,
+        ...pipelineCategoryLaunchers.map((launcher) => String(launcher.label))
+      ],
+      panelSymbol: PIPELINE_NODES_LAUNCHER_ID,
+      rootSearchItems: [...pipelinePresetItems, ...pipelineNodeItems, ...pipelineTagSearchItems],
+      action: ({ parentPanel, queryAnchor, quickPanel, triggerInfo }) => {
+        const categoryItems: QuickPanelListItem[] = pipelineCategoryLaunchers.map((launcher) => ({
+          id: launcher.id,
+          label: launcher.label,
+          description: launcher.description,
+          icon: launcher.icon,
+          isMenu: true,
+          searchAliases: launcher.searchAliases,
+          action: ({
+            context,
+            inputAdapter,
+            parentPanel: nestedParentPanel,
+            queryAnchor: nestedQueryAnchor,
+            searchText
+          }) => {
+            launcher.action?.({
+              inputAdapter,
+              parentPanel: nestedParentPanel,
+              queryAnchor: nestedQueryAnchor,
+              quickPanel: context,
+              searchText,
+              source: 'root-panel',
+              triggerInfo: { type: 'button' }
+            })
+          }
+        }))
+        const presetsItem: QuickPanelListItem | null =
+          pipelinePresetItems.length === 0
+            ? null
+            : {
+                id: presetsSymbol,
+                label: presetsLabel,
+                description: t('chat.input.pipeline_nodes.preset_count', { count: pipelinePresetItems.length }),
+                icon: <WandSparkles size={16} />,
+                isMenu: true,
+                searchAliases: [presetsLabel, t('chat.input.pipeline_nodes.preset_suffix')],
+                action: ({ context, parentPanel: nestedParentPanel, queryAnchor: nestedQueryAnchor }) => {
+                  context.open({
+                    title: presetsLabel,
+                    list: pipelinePresetItems,
+                    symbol: presetsSymbol,
+                    parentPanel: nestedParentPanel,
+                    queryAnchor: nestedQueryAnchor,
+                    triggerInfo: { type: 'button' }
+                  })
+                }
+              }
+        const tagFilterItem: QuickPanelListItem | null =
+          pipelineTagFilterItems.length === 0
+            ? null
+            : {
+                id: tagsSymbol,
+                label: filterLabel,
+                description: t('chat.input.pipeline_nodes.category_count', { count: pipelineTagFilterItems.length }),
+                icon: <Tags size={16} />,
+                isMenu: true,
+                searchAliases: [filterLabel, t('chat.input.pipeline_nodes.tag_suffix')],
+                action: ({ context, parentPanel: nestedParentPanel, queryAnchor: nestedQueryAnchor }) => {
+                  context.open({
+                    title: filterLabel,
+                    list: pipelineTagFilterItems,
+                    symbol: tagsSymbol,
+                    parentPanel: nestedParentPanel,
+                    queryAnchor: nestedQueryAnchor,
+                    triggerInfo: { type: 'button' }
+                  })
+                }
+              }
+        const allNodesItem: QuickPanelListItem = {
+          id: allNodesSymbol,
+          label: allNodesLabel,
+          description: t('chat.input.pipeline_nodes.category_count', { count: pipelineNodeItems.length }),
+          icon: <Workflow size={16} />,
+          isMenu: true,
+          searchAliases: [allNodesLabel],
+          action: ({ context, parentPanel: nestedParentPanel, queryAnchor: nestedQueryAnchor }) => {
+            context.open({
+              title: allNodesLabel,
+              list: pipelineNodeItems,
+              symbol: allNodesSymbol,
+              parentPanel: nestedParentPanel,
+              queryAnchor: nestedQueryAnchor,
+              triggerInfo: { type: 'button' }
+            })
+          }
+        }
+        quickPanel.open({
+          title,
+          list: [
+            ...featuredPipelinePresetItems,
+            ...(presetsItem ? [presetsItem] : []),
+            ...categoryItems,
+            ...(tagFilterItem ? [tagFilterItem] : []),
+            allNodesItem
+          ],
+          symbol: PIPELINE_NODES_LAUNCHER_ID,
+          parentPanel,
+          queryAnchor,
+          triggerInfo: triggerInfo ?? { type: 'button' }
+        })
+      }
+    }
+  }, [
+    featuredPipelinePresetItems,
+    isCocoAgent,
+    pipelineCategoryLaunchers,
+    pipelineNodeItems,
+    pipelinePresetItems,
+    pipelineTagFilterItems,
+    pipelineTagSearchItems,
+    t
+  ])
+
+  useEffect(
+    () => toolsRegistry.registerLaunchers(PIPELINE_NODES_LAUNCHER_ID, isCocoAgent ? [pipelineNodesLauncher] : []),
+    [isCocoAgent, pipelineNodesLauncher, toolsRegistry]
   )
 
   // Skills live in their own submenu (opened as the `agent-skills` launcher), with a pinned footer
@@ -1333,7 +1816,30 @@ const AgentComposerInner = ({
 
   const buildQueuedPayload = useCallback(
     (draft: ComposerSerializedDraft): ComposerQueuedMessagePayload | null => {
-      const payload = buildComposerQueuedPayload(draft, {
+      const hasImageAttachment = files.some((file) => file.type === 'image')
+      const imageToImageNode = hasImageAttachment
+        ? findPipelineNode(pipelineNodes, resolvePipelineNodeIdForAttachments('model.text-to-image', true))
+        : null
+      const effectiveDraft =
+        imageToImageNode == null
+          ? draft
+          : {
+              ...draft,
+              tokens: draft.tokens.map((token) => {
+                if (token.kind !== 'pipelineNode') return token
+                const tokenPayload = readPipelineNodeTokenPayload(token)
+                if (resolvePipelineNodeIdForAttachments(tokenPayload.nodeId, true) === tokenPayload.nodeId) return token
+                const replacement = pipelineNodeToComposerToken(imageToImageNode, tokenPayload.values)
+                return {
+                  ...token,
+                  label: replacement.label,
+                  description: replacement.description,
+                  promptText: replacement.promptText,
+                  payload: replacement.payload
+                }
+              })
+            }
+      const payload = buildComposerQueuedPayload(effectiveDraft, {
         files,
         fileTokenId: agentComposerTokenId.file,
         extra: () => ({
@@ -1352,7 +1858,7 @@ const AgentComposerInner = ({
         userMessageParts: withKnowledgeScopePart(payload.userMessageParts, knowledgeBaseIds)
       }
     },
-    [fastMode, files, model, reasoningEffort, selectedKnowledgeBasesInScope]
+    [fastMode, files, model, pipelineNodes, reasoningEffort, selectedKnowledgeBasesInScope]
   )
 
   const sendQueuedPayload = useCallback(
@@ -1383,6 +1889,19 @@ const AgentComposerInner = ({
     },
     [accessiblePaths, agentId, chatSendMessage, launchOptions, saveHistory, sessionId, sessionTopicId]
   )
+
+  useEffect(() => {
+    const pending = takePendingAgentBranchSend(sessionId)
+    if (!pending) return
+    void sendQueuedPayload(pending).then((sent) => {
+      if (!sent) {
+        logger.warn('Failed to auto-send edited message in branched Agent session', {
+          sessionId
+        })
+        toast.error(t('chat.input.send_failed'))
+      }
+    })
+  }, [sendQueuedPayload, sessionId, t])
 
   const clearCurrentDraft = useCallback(() => {
     setText('')
@@ -1418,6 +1937,66 @@ const AgentComposerInner = ({
     setTimeoutTimer,
     workspaceKey
   ])
+
+  const branchEditedMessage = useCallback(
+    async (payload: ComposerQueuedMessagePayload) => {
+      if (!editingMessageForSession) return false
+      let pendingBranchSessionId: string | undefined
+      try {
+        const attachments = (payload.attachments as ComposerAttachment[] | undefined) ?? []
+        const freshFileParts = await buildAgentFilePartsForAttachments(
+          attachments.filter((attachment) => Boolean(attachment.path)),
+          accessiblePaths
+        )
+        const originalFileParts = editingMessageForSession.parts.filter(
+          (part): part is Extract<CherryMessagePart, { type: 'file' }> => part.type === 'file'
+        )
+        const originalBySourceId = new Map(
+          originalFileParts.flatMap((part) => {
+            const sourceId = readCherryMeta(part)?.fileTokenSourceId
+            return sourceId ? [[sourceId, part] as const] : []
+          })
+        )
+        const retainedFileParts = attachments.flatMap((attachment, index) => {
+          if (attachment.path) return []
+          const matched =
+            (attachment.fileTokenSourceId && originalBySourceId.get(attachment.fileTokenSourceId)) ??
+            originalFileParts[index]
+          return matched ? [matched] : []
+        })
+        const branched = await ipcApi.request('ai.agent.session.branch', {
+          sessionId,
+          messageId: editingMessageForSession.message.id,
+          parts: [...payload.userMessageParts, ...retainedFileParts, ...freshFileParts]
+        })
+
+        pendingBranchSessionId = branched.id
+        queuePendingAgentBranchSend(branched.id, {
+          ...payload,
+          userMessageParts: [...payload.userMessageParts, ...retainedFileParts, ...freshFileParts],
+          // File parts were resolved against the source message/workspace above.
+          // Do not rebuild attachments after navigation or they would be sent twice.
+          attachments: []
+        })
+        draftBeforeEditingRef.current = null
+        restoredEditingSessionIdRef.current = null
+        stopEditing()
+        clearCurrentDraft()
+        prepareCanvasSessionTransition()
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 550))
+        await openRoute('/app/agents', { sessionId: branched.id })
+        return true
+      } catch (error) {
+        if (pendingBranchSessionId) {
+          discardPendingAgentBranchSend(pendingBranchSessionId)
+        }
+        logger.warn('Failed to branch edited Agent message', error as Error)
+        toast.error(t('message.error.operation_unavailable'))
+        return false
+      }
+    },
+    [accessiblePaths, clearCurrentDraft, editingMessageForSession, sessionId, stopEditing, t]
+  )
 
   // Queue mode (same as chat): while the session streams, follow-ups queue here and auto-drain on idle.
   const { isFulfilled: sessionFulfilled, markSeen: markSessionSeen } = useTopicStreamStatus(sessionTopicId)
@@ -1469,6 +2048,10 @@ const AgentComposerInner = ({
       }
       const payload = buildQueuedPayload(draft)
       if (!payload) return
+      if (editingMessageForSession) {
+        await branchEditedMessage(payload)
+        return
+      }
 
       // Busy (streaming) → queue the follow-up; the head auto-drains when the session goes idle and
       // the dock lets the user steer/edit/remove items.
@@ -1510,6 +2093,7 @@ const AgentComposerInner = ({
     },
     [
       buildQueuedPayload,
+      branchEditedMessage,
       clearTimeoutTimer,
       clearCurrentDraft,
       agentId,
@@ -1517,6 +2101,7 @@ const AgentComposerInner = ({
       draftPersistenceEnabled,
       enqueueFollowup,
       files,
+      editingMessageForSession,
       isStreaming,
       model,
       sendDisabled,
@@ -1536,11 +2121,13 @@ const AgentComposerInner = ({
     excludeId: sessionId
   })
   const resourceMentionSources = useAgentResourceMentionSource({
-    accessiblePaths,
+    accessiblePaths: isCocoAgent ? EMPTY_ACCESSIBLE_PATHS : accessiblePaths,
     files,
     setFiles,
     enabled: enableResourceMention,
-    getAdditionalItems: getEntityReferenceItems
+    getAdditionalItems: isCocoAgent ? undefined : getEntityReferenceItems,
+    sessionAssetsOnly: isCocoAgent,
+    getSessionAssets: isCocoAgent ? getCocoSessionAssets : undefined
   })
 
   const toolbarCustomTools = useMemo<ComposerToolbarCustomTool[]>(() => {
@@ -1688,6 +2275,17 @@ const AgentComposerInner = ({
           sendBlockedReason={sendDisabled || hasPendingReference ? t('common.loading') : missingModelMessage}
           isLoading={isStreaming}
           onSendDraft={handleSendDraft}
+          editingState={
+            editingMessageForSession
+              ? {
+                  messageId: editingMessageForSession.message.id,
+                  highlightKey: editingMessageForSession.editingSessionId,
+                  onLocate: handleLocateEditingMessage,
+                  onCancel: handleCancelMessageEditing,
+                  onSave: handleSendDraft
+                }
+              : undefined
+          }
           onPause={abortAgentSession}
           queueContent={
             <>
@@ -1883,24 +2481,28 @@ export const MissingAgentHomeComposer = (props: MissingAgentHomeComposerProps) =
 // Agent changes reset the composer root; session/workspace isolation is owned by AgentComposerRoot.
 const AgentComposer = (props: Props) => {
   return (
-    <AgentComposerRoot
-      key={props.agentId}
-      {...props}
-      deferQuickPanel
-      renderControls={props.externalContextControls ? renderAgentInputControls : renderAgentToolbarControls}
-    />
+    <MessageEditingProvider>
+      <AgentComposerRoot
+        key={props.agentId}
+        {...props}
+        deferQuickPanel
+        renderControls={props.externalContextControls ? renderAgentInputControls : renderAgentToolbarControls}
+      />
+    </MessageEditingProvider>
   )
 }
 
 export const AgentHomeComposer = (props: Props) => {
   return (
-    <AgentComposerRoot
-      key={props.agentId}
-      {...props}
-      canChangeAgent={props.canChangeAgent ?? true}
-      forceNarrowLayout
-      renderControls={renderAgentHomeControls}
-    />
+    <MessageEditingProvider>
+      <AgentComposerRoot
+        key={props.agentId}
+        {...props}
+        canChangeAgent={props.canChangeAgent ?? true}
+        forceNarrowLayout
+        renderControls={renderAgentHomeControls}
+      />
+    </MessageEditingProvider>
   )
 }
 

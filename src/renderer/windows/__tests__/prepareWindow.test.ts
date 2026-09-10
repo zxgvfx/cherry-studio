@@ -59,4 +59,28 @@ describe('prepareWindow', () => {
     await pending
     expect(settled).toBe(true)
   })
+
+  it('still awaits i18n when preference preload exceeds preferenceTimeoutMs', async () => {
+    let resolveI18n!: () => void
+    initI18nMock.mockImplementationOnce(() => new Promise<void>((resolve) => (resolveI18n = resolve)))
+    vi.mocked(preferenceService.preload).mockImplementationOnce(() => new Promise<void>(() => {}))
+
+    let settled = false
+    const pending = prepareWindow({
+      preference: ['app.language'],
+      preferenceTimeoutMs: 20
+    }).then(() => {
+      settled = true
+    })
+
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    await new Promise((resolve) => window.setTimeout(resolve, 30))
+    expect(settled).toBe(false)
+
+    resolveI18n()
+    await pending
+    expect(settled).toBe(true)
+  })
 })

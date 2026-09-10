@@ -25,6 +25,8 @@ import type { FetchFunction } from '@ai-sdk/provider-utils'
 import { loadApiKey, withoutTrailingSlash } from '@ai-sdk/provider-utils'
 import { OpenAICompatibleRerankingModel } from '@cherrystudio/ai-sdk-provider'
 
+import { wrapNewApiImageFetch, wrapNewApiImageModel } from './newapiImageModel'
+
 export const NEWAPI_PROVIDER_NAME = 'newapi' as const
 
 export type NewApiEndpointType =
@@ -149,12 +151,15 @@ export function createNewApi(options: NewApiProviderSettings = {}): NewApiProvid
     })
 
   provider.imageModel = (modelId: string) =>
-    new OpenAICompatibleImageModel(modelId, {
-      provider: `${NEWAPI_PROVIDER_NAME}.image`,
-      url,
-      headers: authHeaders,
-      fetch: customFetch
-    })
+    wrapNewApiImageModel(
+      modelId,
+      new OpenAICompatibleImageModel(modelId, {
+        provider: `${NEWAPI_PROVIDER_NAME}.image`,
+        url,
+        headers: authHeaders,
+        fetch: wrapNewApiImageFetch(customFetch)
+      })
+    )
 
   provider.rerankingModel = (modelId: string) =>
     new OpenAICompatibleRerankingModel(modelId, {

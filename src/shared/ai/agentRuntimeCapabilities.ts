@@ -123,5 +123,25 @@ export const AGENT_RUNTIME_CAPABILITIES = {
         descriptionKey: `agent.tools.builtin.${tool.name}.description`,
         category: tool.category
       }))
+  },
+  coco: {
+    labelKey: 'library.config.agent.field.runtime.option.coco',
+    labelFallback: 'COCO Agent',
+    // Native Cherry permission cards stay unused; Studio mode/permission live in
+    // configuration.coco_mode / configuration.coco_permission (schema is .loose()).
+    permissionModes: ['default'] as const satisfies readonly AgentPermissionMode[],
+    modelTiers: false,
+    heartbeat: false,
+    // COCO's local Cherry loop bridges the same managed knowledge, MCP, and
+    // skill services used by the native agent runtimes.
+    knowledgeBases: true,
+    mcp: true,
+    skills: true,
+    claudeRegistryTools: false,
+    slashCommands: [],
+    createDefaults: { permissionMode: 'default' },
+    isModelCompatible: (_provider, model) => isGatewayRoutableModel(model),
+    transport: 'coco-pipeline',
+    builtinTools: () => []
   }
 } as const satisfies Record<AgentType, AgentRuntimeCapabilities>

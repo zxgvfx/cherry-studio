@@ -1,5 +1,6 @@
 import type { ResourceCreateValues } from '@renderer/types/resourceCatalog'
 import { AGENT_RUNTIME_CAPABILITIES } from '@shared/ai/agentRuntimeCapabilities'
+import { DEFAULT_COCO_MODE, DEFAULT_COCO_PERMISSION } from '@shared/ai/cocoAgent'
 import type { CreateAssistantDto } from '@shared/data/api/schemas/assistants'
 import type { CreateAgentCommand } from '@shared/ipc/schemas/ai'
 
@@ -32,7 +33,13 @@ export function buildCreateAgentCommand(values: ResourceCreateValues): CreateAge
     ...(caps.skills ? { skillIds: values.skillIds } : {}),
     configuration: {
       avatar: values.avatar,
-      permission_mode: permissionMode
+      permission_mode: permissionMode,
+      ...(values.agentType === 'coco'
+        ? {
+            coco_mode: values.cocoMode ?? DEFAULT_COCO_MODE,
+            coco_permission: values.cocoPermission ?? DEFAULT_COCO_PERMISSION
+          }
+        : {})
     }
   }
 }

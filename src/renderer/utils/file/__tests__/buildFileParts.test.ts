@@ -116,4 +116,29 @@ describe('buildFilePartsForAttachments', () => {
       composerFileKind: 'pasted-text'
     })
   })
+
+  it('skips FileEntry copy when the attachment already has a pipeline asset id', async () => {
+    const [part] = await buildFilePartsForAttachments([
+      attachment({
+        path: undefined,
+        pipelineAssetId: 'img-1',
+        previewUrl: 'http://pipeline/api/assets/img-1/file'
+      })
+    ])
+
+    expect(window.api.file.createInternalEntry).not.toHaveBeenCalled()
+    expect(part).toEqual({
+      type: 'file',
+      url: 'http://pipeline/api/assets/img-1/file',
+      mediaType: 'image/png',
+      filename: 'image.png',
+      providerMetadata: {
+        cherry: {
+          fileTokenSourceId: 'source-1',
+          pipelineAssetId: 'img-1',
+          previewUrl: 'http://pipeline/api/assets/img-1/file'
+        }
+      }
+    })
+  })
 })

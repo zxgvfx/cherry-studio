@@ -38,8 +38,15 @@ import {
 import type { CompactionAnchorData } from '@shared/ai/compaction'
 import { classifyTurn } from '@shared/ai/transport'
 import type { CherryMessagePart, ContentReference, ReasoningUIPart } from '@shared/data/types/message'
-import type { CherryProviderMetadata, ComposerMessageSnapshot, ComposerMessageToken } from '@shared/data/types/uiParts'
-import { readCherryMeta } from '@shared/data/types/uiParts'
+import type {
+  CherryProviderMetadata,
+  ComposerMessageSnapshot,
+  ComposerMessageToken,
+  PipelineAssetPartData,
+  PipelineReviewPartData,
+  PipelineRunProgressPartData
+} from '@shared/data/types/uiParts'
+import { getComposerMessageFileTokenPayload, readCherryMeta } from '@shared/data/types/uiParts'
 import { getToolName, isDataUIPart, isFileUIPart, isToolUIPart } from 'ai'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import React, { useMemo } from 'react'
@@ -73,6 +80,7 @@ import {
 } from './messagePartLayouts'
 import { useMessageParts, useTranslationOverlayEntry } from './MessagePartsContext'
 import MessageProcessGroup from './MessageProcessGroup'
+import { PipelineReviewBlock, PipelineRunProgressBlock } from './PipelineRunBlocks'
 import PlaceholderBlock, { type PlaceholderStatus } from './PlaceholderBlock'
 import RetryStatusBlock from './RetryStatusBlock'
 import ThinkingBlock, { ThinkingBlockContent } from './ThinkingBlock'
@@ -201,6 +209,24 @@ function getVideoFilePath(part: CherryMessagePart): string | undefined {
   return undefined
 }
 
+function isPipelineAssetPart(
+  part: CherryMessagePart
+): part is CherryMessagePart & { type: 'data-pipeline-asset'; data: PipelineAssetPartData } {
+  return isDataUIPart(part) && part.type === 'data-pipeline-asset' && !!part.data
+}
+
+function isPipelineRunProgressPart(
+  part: CherryMessagePart
+): part is CherryMessagePart & { type: 'data-pipeline-run-progress'; data: PipelineRunProgressPartData } {
+  return isDataUIPart(part) && part.type === 'data-pipeline-run-progress' && !!part.data
+}
+
+function isPipelineReviewPart(
+  part: CherryMessagePart
+): part is CherryMessagePart & { type: 'data-pipeline-review'; data: PipelineReviewPartData } {
+  return isDataUIPart(part) && part.type === 'data-pipeline-review' && !!part.data
+}
+
 // ============================================================================
 // Part grouping
 // ============================================================================
@@ -259,6 +285,13 @@ function groupPartEntries(entries: readonly PartEntry[]): GroupedEntry[] {
       } else {
         acc.push([entry])
       }
+    } else if (isPipelineAssetPart(part)) {
+      const prev = acc[acc.length - 1]
+      if (Array.isArray(prev) && isPipelineAssetPart(prev[0].part)) {
+        prev.push(entry)
+      } else {
+        acc.push([entry])
+      }
     } else {
       acc.push(entry)
     }
@@ -279,7 +312,8 @@ function isComposerTokenVisibleInText(token: ComposerMessageToken, text: string)
 }
 
 function getComposerFileTokenNames(token: ComposerMessageToken): Set<string> {
-  const names = [token.payload?.origin_name, token.payload?.name, token.label].filter((name): name is string => !!name)
+  const payload = getComposerMessageFileTokenPayload(token.payload)
+  const names = [payload?.origin_name, payload?.name, token.label].filter((name): name is string => !!name)
   return new Set(names)
 }
 
@@ -442,7 +476,15 @@ function isPotentiallyVisibleEntry(entry: PartEntry, messageId: string): boolean
     return !!toolResponse && (canRenderMessageTool(toolResponse) || isReportArtifactsToolResponse(toolResponse))
   }
   if (partType === 'file') return !!(part as { url?: string }).url
-  if (partType === 'data-video' || partType === 'data-error') return 'data' in part && !!part.data
+  if (
+    partType === 'data-video' ||
+    partType === 'data-error' ||
+    partType === 'data-pipeline-asset' ||
+    partType === 'data-pipeline-run-progress' ||
+    partType === 'data-pipeline-review'
+  ) {
+    return 'data' in part && !!part.data
+  }
   return true
 }
 
@@ -624,6 +666,22 @@ function renderPart(
           <MessageVideo url={rawData.url} filePath={rawData.filePath} />
         </React.Suspense>
       )
+    }
+
+    case 'data-pipeline-asset': {
+      // Final files are shown as report_artifacts rows (preview + drag to DCC).
+      // Do not also mount a large product card in the chat stream.
+      return null
+    }
+
+    case 'data-pipeline-run-progress': {
+      if (!isPipelineRunProgressPart(part)) return null
+      return <PipelineRunProgressBlock key={partId} data={part.data} />
+    }
+
+    case 'data-pipeline-review': {
+      if (!isPipelineReviewPart(part)) return null
+      return <PipelineReviewBlock key={partId} data={part.data} />
     }
 
     case 'data-retry': {
@@ -851,6 +909,10 @@ function renderGroupedEntry(
           )}
         </AnimatedBlockWrapper>
       )
+    }
+
+    if (isPipelineAssetPart(firstPart)) {
+      return null
     }
 
     if (isDataUIPart(firstPart) && firstPart.type === 'data-video') {

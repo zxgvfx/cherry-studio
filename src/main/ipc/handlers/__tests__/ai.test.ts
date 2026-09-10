@@ -10,6 +10,7 @@ const {
   fileEntryService,
   messageService,
   createAgent,
+  branchAgentSession,
   createBuiltinSupportSession
 } = vi.hoisted(() => ({
   appGetMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   fileEntryService: { findById: vi.fn() },
   messageService: { getById: vi.fn() },
   createAgent: vi.fn(),
+  branchAgentSession: vi.fn(),
   createBuiltinSupportSession: vi.fn()
 }))
 vi.mock('@application', () => ({ application: { get: appGetMock } }))
@@ -25,6 +27,7 @@ vi.mock('@data/services/FileEntryService', () => ({ fileEntryService }))
 vi.mock('@data/services/MessageService', () => ({ messageService }))
 vi.mock('@main/ai/agents/createAgent', () => ({ createAgent }))
 vi.mock('@main/ai/agents/createBuiltinSupportSession', () => ({ createBuiltinSupportSession }))
+vi.mock('@main/ai/agentSession/branchAgentSession', () => ({ branchAgentSession }))
 
 import { aiHandlers } from '../ai'
 
@@ -411,6 +414,19 @@ describe('aiHandlers — agent sessions & tasks', () => {
 
     await expect(aiHandlers['ai.agent.create'](request, ctx)).resolves.toBe(agent)
     expect(createAgent).toHaveBeenCalledWith(request, ctx)
+  })
+
+  it('branches an Agent session through the history and canvas command', async () => {
+    const request = {
+      sessionId: 'session-1',
+      messageId: 'message-2',
+      parts: [{ type: 'text' as const, text: 'corrected' }]
+    }
+    const branched = { id: 'session-branch' }
+    branchAgentSession.mockResolvedValue(branched)
+
+    await expect(aiHandlers['ai.agent.session.branch'](request, ctx)).resolves.toBe(branched)
+    expect(branchAgentSession).toHaveBeenCalledWith(request)
   })
 
   it('prewarm_agent_session acquires a warm lease keyed to the sender window', async () => {

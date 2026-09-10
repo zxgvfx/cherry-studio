@@ -1453,10 +1453,18 @@ export default function ComposerSurfaceRuntime({
         style: editorElementStyle
       },
       handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
-        const isEnterPressed = (event.key === 'Enter' || event.key === 'NumpadEnter') && !event.isComposing
+        const isEnterKey = event.key === 'Enter' || event.key === 'NumpadEnter'
+        const isImeComposing = event.isComposing || view?.composing || event.keyCode === 229
+        const isEnterPressed = isEnterKey && !isImeComposing
         const isShiftEnterPressed =
           isEnterPressed && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
         const qp = quickPanelRef.current
+        // Some Windows IMEs report `isComposing=false` on the Enter keydown
+        // that commits the candidate, while ProseMirror still reports an
+        // active composition (or the browser exposes legacy keyCode 229).
+        // Let that event reach the editor before QuickPanel/send handling so
+        // the committed suffix is present when the user sends afterwards.
+        if (isEnterKey && isImeComposing && !event.isComposing) return false
         if (
           ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Tab', 'Enter', 'NumpadEnter', 'Escape'].includes(event.key)
         ) {

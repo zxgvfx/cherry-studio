@@ -23,9 +23,19 @@ import {
 } from '../useTopic'
 
 const mockCloseConversationTabs = vi.hoisted(() => vi.fn())
+const mockIpcRequest = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 
 vi.mock('@renderer/hooks/tab', () => ({
   useCloseConversationTabs: () => mockCloseConversationTabs
+}))
+
+vi.mock('@renderer/ipc', () => ({
+  useIpcOn: vi.fn(),
+  ipcApi: { request: mockIpcRequest }
+}))
+
+vi.mock('@renderer/utils/conversationEntry', () => ({
+  forgetLastUsedChatTopic: vi.fn()
 }))
 
 vi.mock('@renderer/services/EventService', () => ({

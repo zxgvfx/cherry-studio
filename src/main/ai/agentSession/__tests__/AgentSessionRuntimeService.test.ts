@@ -31,7 +31,10 @@ const mocks = vi.hoisted(() => ({
   getSessionById: vi.fn(),
   getAgent: vi.fn(),
   ensureTraceId: vi.fn(),
-  recordUsage: vi.fn()
+  recordUsage: vi.fn(),
+  patchUsageCost: vi.fn(),
+  fetchNewApiCost: vi.fn(),
+  isNewApiBillable: vi.fn()
 }))
 
 vi.mock('@data/services/AgentSessionService', () => ({
@@ -58,7 +61,15 @@ vi.mock('@data/services/AgentSessionMessageService', () => ({
 }))
 
 vi.mock('@data/services/AiUsageRecordService', () => ({
-  aiUsageRecordService: { recordInvocation: mocks.recordUsage }
+  aiUsageRecordService: {
+    recordInvocation: mocks.recordUsage,
+    patchInvocationCost: mocks.patchUsageCost
+  }
+}))
+
+vi.mock('@main/ai/utils/newApiCostLookup', () => ({
+  fetchNewApiLastRequestCost: mocks.fetchNewApiCost,
+  isNewApiBillableProvider: mocks.isNewApiBillable
 }))
 
 vi.mock('@main/ai/utils/usageCapture', () => ({
@@ -251,6 +262,8 @@ describe('AgentSessionRuntimeService', () => {
     mocks.resolveCrashOrphanedMessages.mockReturnValue(undefined)
     mocks.ensureTraceId.mockReturnValue('b'.repeat(32))
     mocks.recordUsage.mockReturnValue(undefined)
+    mocks.fetchNewApiCost.mockResolvedValue(undefined)
+    mocks.isNewApiBillable.mockReturnValue(false)
     mocks.closeWarmQueries.mockResolvedValue(undefined)
     // A live agent with a model — the drain re-reads this to bail on a deleted model. Tests exercising
     // the deleted-model path override it with `{ model: null }`.
@@ -641,6 +654,59 @@ describe('AgentSessionRuntimeService', () => {
       )
     )
     void service.closeSession('session-1')
+  })
+
+  it('patches COCO message usage with the cost returned by NewAPI', async () => {
+    const service = new AgentSessionRuntimeService()
+    service.beginTurn(baseTurnInput)
+    const entry = getEntry(service)
+    entry.usageCapture = {
+      owner: 'agent-sdk',
+      credentialReceipt: { attribution: 'unknown' },
+      providerId: 'coco-vapi',
+      providerName: 'Coco VAPI',
+      source: { type: 'agent', id: 'agent-1', name: 'COCO', icon: null },
+      frozenModels: [
+        {
+          modelId: 'gpt-image-2',
+          modelName: 'gpt-image-2',
+          pricingSnapshot: null,
+          aliases: ['gpt-image-2']
+        }
+      ]
+    }
+    mocks.isNewApiBillable.mockReturnValue(true)
+    mocks.fetchNewApiCost.mockResolvedValue({ amount: 0.04, currency: 'CNY' })
+
+    ;(service as any).recordRuntimeUsage(entry, {
+      requestId: 'coco-agent:newapi-request',
+      model: 'gpt-image-2',
+      messageAssociation: 'current-turn',
+      usage: {
+        inputTokens: 6000,
+        outputTokens: 266,
+        totalTokens: 6266,
+        noCacheTokens: 6000,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0
+      },
+      metrics: { timeCompletionMs: 32_000 }
+    })
+
+    expect(mocks.fetchNewApiCost).toHaveBeenCalledWith({
+      providerId: 'coco-vapi',
+      modelName: 'gpt-image-2',
+      promptTokens: 6000,
+      completionTokens: 266,
+      sinceTs: expect.any(Number)
+    })
+    await vi.waitFor(() =>
+      expect(mocks.patchUsageCost).toHaveBeenCalledWith('coco-agent:newapi-request', {
+        amount: 0.04,
+        currency: 'CNY',
+        source: 'provider'
+      })
+    )
   })
 
   it('ignores SDK usage when provider-call middleware owns the gateway route', () => {

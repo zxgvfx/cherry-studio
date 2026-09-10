@@ -3,23 +3,51 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getPersist: vi.fn(),
+  setPersist: vi.fn(),
   get: vi.fn()
 }))
 
 vi.mock('@data/CacheService', () => ({
-  cacheService: { getPersist: mocks.getPersist }
+  cacheService: { getPersist: mocks.getPersist, setPersist: mocks.setPersist }
 }))
 
 vi.mock('@data/DataApiService', () => ({
   dataApiService: { get: mocks.get }
 }))
 
-import { resolveAgentEntrySessionId, resolveChatEntryTopicId } from '@renderer/utils/conversationEntry'
+import {
+  forgetLastUsedAgentSession,
+  forgetLastUsedChatTopic,
+  resolveAgentEntrySessionId,
+  resolveChatEntryTopicId
+} from '@renderer/utils/conversationEntry'
 
 const notFoundError = () => new DataApiError(ErrorCode.NOT_FOUND, 'not found', 404)
 
 afterEach(() => {
   vi.clearAllMocks()
+})
+
+describe('forgetLastUsedChatTopic', () => {
+  it('clears persist only when the remembered topic is among the deleted ids', () => {
+    mocks.getPersist.mockReturnValue('topic-last')
+    forgetLastUsedChatTopic(['topic-other', 'topic-last'])
+    expect(mocks.setPersist).toHaveBeenCalledWith('ui.chat.last_used_topic_id', null)
+  })
+
+  it('leaves persist alone when a different topic was deleted', () => {
+    mocks.getPersist.mockReturnValue('topic-last')
+    forgetLastUsedChatTopic(['topic-other'])
+    expect(mocks.setPersist).not.toHaveBeenCalled()
+  })
+})
+
+describe('forgetLastUsedAgentSession', () => {
+  it('clears persist only when the remembered session is among the deleted ids', () => {
+    mocks.getPersist.mockReturnValue('session-last')
+    forgetLastUsedAgentSession(['session-last'])
+    expect(mocks.setPersist).toHaveBeenCalledWith('ui.agent.last_used_session_id', null)
+  })
 })
 
 describe('resolveChatEntryTopicId', () => {
@@ -38,6 +66,7 @@ describe('resolveChatEntryTopicId', () => {
     mocks.get.mockRejectedValueOnce(notFoundError()).mockResolvedValueOnce({ topic: { id: 'topic-latest' } })
 
     await expect(resolveChatEntryTopicId()).resolves.toBe('topic-latest')
+    expect(mocks.setPersist).toHaveBeenCalledWith('ui.chat.last_used_topic_id', null)
     expect(mocks.get).toHaveBeenNthCalledWith(2, '/topics/latest')
   })
 
@@ -66,13 +95,22 @@ describe('resolveChatEntryTopicId', () => {
     expect(mocks.get).toHaveBeenCalledTimes(2)
   })
 
-  it('rethrows non-NOT_FOUND validation errors instead of silently rebinding', async () => {
+  it('falls through to latest when last-used lookup fails with a non-NOT_FOUND error', async () => {
     mocks.getPersist.mockReturnValue('topic-last')
+    const serverError = new DataApiError(ErrorCode.INTERNAL_SERVER_ERROR, 'boom', 500)
+    mocks.get.mockRejectedValueOnce(serverError).mockResolvedValueOnce({ topic: { id: 'topic-latest' } })
+
+    await expect(resolveChatEntryTopicId()).resolves.toBe('topic-latest')
+    expect(mocks.setPersist).toHaveBeenCalledWith('ui.chat.last_used_topic_id', null)
+    expect(mocks.get).toHaveBeenNthCalledWith(2, '/topics/latest')
+  })
+
+  it('rethrows when the latest lookup itself fails', async () => {
+    mocks.getPersist.mockReturnValue(null)
     const serverError = new DataApiError(ErrorCode.INTERNAL_SERVER_ERROR, 'boom', 500)
     mocks.get.mockRejectedValue(serverError)
 
     await expect(resolveChatEntryTopicId()).rejects.toBe(serverError)
-    expect(mocks.get).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -91,6 +129,7 @@ describe('resolveAgentEntrySessionId', () => {
     mocks.get.mockRejectedValueOnce(notFoundError()).mockResolvedValueOnce({ session: { id: 'session-latest' } })
 
     await expect(resolveAgentEntrySessionId()).resolves.toBe('session-latest')
+    expect(mocks.setPersist).toHaveBeenCalledWith('ui.agent.last_used_session_id', null)
     expect(mocks.get).toHaveBeenNthCalledWith(2, '/agent-sessions/latest')
   })
 

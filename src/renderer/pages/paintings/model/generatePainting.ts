@@ -35,6 +35,8 @@ export interface GeneratePaintingOptions {
   readonly paramValues: Record<string, unknown>
   /** Attached input images, already encoded as `data:` URL strings. */
   readonly inputImages?: string[]
+  /** FileEntry ids for edit inputs — preferred; avoids Qt renderer binary round-trips. */
+  readonly inputFileIds?: string[]
 }
 
 export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMetadata[]> {
@@ -52,7 +54,8 @@ export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMet
           paramValues: opts.paramValues,
           // Painting-owned images: reaped once no painting references them (file-entry-cleanup.md §4.1).
           cleanupPolicy: 'delete_when_unreferenced',
-          ...(opts.inputImages && opts.inputImages.length > 0 && { inputImages: opts.inputImages })
+          ...(opts.inputImages && opts.inputImages.length > 0 && { inputImages: opts.inputImages }),
+          ...(opts.inputFileIds && opts.inputFileIds.length > 0 && { inputFileIds: opts.inputFileIds })
         }
       })
       // A failure now crosses IpcApi as an IpcError (name 'IpcError'), so an abort would

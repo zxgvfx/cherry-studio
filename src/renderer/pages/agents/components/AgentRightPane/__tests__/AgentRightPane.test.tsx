@@ -1,3 +1,4 @@
+import type * as TopicMessageFlowLayout from '@renderer/components/chat/flow/topicMessageFlowLayout'
 import type * as ArtifactPanePath from '@renderer/components/chat/panes/artifactPanePath'
 import { useRightPanelState } from '@renderer/components/chat/panes/Shell'
 import type * as ChatPrimitives from '@renderer/components/chat/primitives'
@@ -20,6 +21,7 @@ import type * as AgentRightPaneProjection from '../agentRightPaneProjection'
 
 const {
   buildAgentToolFlowProjectionMock,
+  dataApiGetMock,
   getToolResultMock,
   fileSessionDiscardMock,
   fileSessionFlushMock,
@@ -33,9 +35,11 @@ const {
   useCommandHandlerMock,
   useDirectoryTreeMock,
   ipcRequestMock,
+  openRouteMock,
   toastErrorMock
 } = vi.hoisted(() => ({
   buildAgentToolFlowProjectionMock: vi.fn(),
+  dataApiGetMock: vi.fn(),
   getToolResultMock: vi.fn(),
   fileSessionDiscardMock: vi.fn(),
   fileSessionFlushMock: vi.fn().mockResolvedValue(undefined),
@@ -63,6 +67,7 @@ const {
   useCommandHandlerMock: vi.fn(),
   useDirectoryTreeMock: vi.fn(),
   ipcRequestMock: vi.fn(),
+  openRouteMock: vi.fn().mockResolvedValue(undefined),
   toastErrorMock: vi.fn()
 }))
 
@@ -174,6 +179,15 @@ vi.mock('@renderer/components/chat/agent/AgentContextUsageSummary', () => ({
   AgentContextUsageSummary: () => <div data-testid="context-usage" />
 }))
 
+vi.mock('@renderer/components/chat/agent/CocoSessionCanvasDialog', () => ({
+  CocoSessionCanvasEditor: () => <div data-testid="coco-canvas-pane" />,
+  readPipelineSessionId: () => undefined
+}))
+
+vi.mock('@renderer/components/chat/agent/CocoSessionAssetsPanel', () => ({
+  CocoSessionAssetsPanel: () => <div data-testid="coco-assets-pane" />
+}))
+
 vi.mock('@renderer/components/chat/messages/MessageList', () => ({
   default: () => <div data-testid="message-list" />
 }))
@@ -188,6 +202,46 @@ vi.mock('@renderer/hooks/useToolResult', () => ({
 
 vi.mock('@renderer/ipc', () => ({
   ipcApi: { request: ipcRequestMock }
+}))
+
+vi.mock('@data/DataApiService', () => ({
+  dataApiService: { get: dataApiGetMock }
+}))
+
+// The branch panel reuses the Topic flow canvas. Keep the real layout so the graph
+// shape stays under test, and swap only the ReactFlow surface for clickable nodes.
+vi.mock('@renderer/components/chat/flow', async () => {
+  const { layoutTopicMessageFlowGraph } = await vi.importActual<typeof TopicMessageFlowLayout>(
+    '@renderer/components/chat/flow/topicMessageFlowLayout'
+  )
+
+  return {
+    layoutTopicMessageFlowGraph,
+    TopicMessageFlowCanvas: ({
+      graph,
+      onNodeSelect
+    }: {
+      graph: { nodes: { data: { messageId: string; isActive: boolean; role: string } }[] }
+      onNodeSelect?: (messageId: string) => void
+    }) => (
+      <div data-testid="agent-branch-flow">
+        {graph.nodes.map(({ data }) => (
+          <button
+            key={data.messageId}
+            type="button"
+            data-active={String(data.isActive)}
+            data-role={data.role}
+            onClick={() => onNodeSelect?.(data.messageId)}>
+            {data.messageId}
+          </button>
+        ))}
+      </div>
+    )
+  }
+})
+
+vi.mock('@renderer/services/mainWindowNavigation', () => ({
+  openRoute: openRouteMock
 }))
 
 vi.mock('@renderer/services/toast', () => ({
@@ -329,6 +383,10 @@ vi.mock('@renderer/data/hooks/usePreference', () => ({
 
 vi.mock('@renderer/hooks/agent/useAgentSessionCompaction', () => ({
   useAgentSessionCompaction: () => ({ status: 'idle' })
+}))
+
+vi.mock('@renderer/hooks/agent/useAgent', () => ({
+  useAgent: () => ({ agent: { id: 'agent-1', type: 'coco', configuration: {} } })
 }))
 
 vi.mock('@renderer/hooks/agent/useAgentSessionContextUsage', () => ({
@@ -517,6 +575,7 @@ describe('AgentRightPane', () => {
       nodeById: fileTreeModelState.nodeById
     }))
     getToolResultMock.mockReturnValue('Loaded flow result')
+    dataApiGetMock.mockResolvedValue({ items: [], nextCursor: undefined })
   })
 
   it('uses a title header and keeps stable shortcuts available while the pane is open', () => {
@@ -534,6 +593,7 @@ describe('AgentRightPane', () => {
 
     expect(screen.queryByRole('button', { name: 'agent.session.list.title' })).toBeNull()
     expect(screen.getByRole('button', { name: 'agent.right_pane.tabs.files' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'agent.right_pane.tabs.canvas' })).toBeNull()
     expect(screen.getByRole('button', { name: 'agent.right_pane.tabs.status' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'trace.label' })).toBeInTheDocument()
     expect(screen.getByTestId('status-shortcut-preview')).toBeInTheDocument()
@@ -557,6 +617,154 @@ describe('AgentRightPane', () => {
     fireEvent.click(activeStatusShortcut as HTMLElement)
 
     expect(screen.getByTestId('right-pane')).toHaveAttribute('data-open', 'false')
+  })
+
+  it('opens the canvas pane from the header shortcut for coco agents', () => {
+    render(
+      <TestAgentRightPane
+        agentId="agent-1"
+        agentType="coco"
+        sessionId="session-a"
+        workspacePath="/workspace"
+        messages={[]}
+        partsByMessageId={{}}>
+        <AgentRightPane.Shortcuts />
+        <AgentRightPane.Viewport />
+      </TestAgentRightPane>
+    )
+
+    const canvasShortcut = screen.getByTestId('coco-session-canvas-button')
+    expect(canvasShortcut).toHaveAttribute('data-shell-tab-shortcut', 'canvas')
+    const statusShortcut = document.querySelector('[data-shell-tab-shortcut="status"]')
+    expect(statusShortcut).toBeInTheDocument()
+    expect(
+      canvasShortcut.compareDocumentPosition(statusShortcut as Node) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+
+    fireEvent.click(canvasShortcut)
+
+    expect(screen.getByTestId('right-pane')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('shell-tab-title')).toHaveTextContent('agent.right_pane.tabs.canvas')
+    expect(screen.getByTestId('coco-canvas-pane')).toBeInTheDocument()
+  })
+
+  it('opens the session assets pane from the header shortcut for coco agents', () => {
+    render(
+      <TestAgentRightPane agentId="agent-1" agentType="coco" sessionId="session-a" messages={[]} partsByMessageId={{}}>
+        <AgentRightPane.Shortcuts />
+        <AgentRightPane.Viewport />
+      </TestAgentRightPane>
+    )
+
+    const assetsShortcut = screen.getByTestId('coco-session-assets-button')
+    expect(assetsShortcut).toHaveAttribute('data-shell-tab-shortcut', 'assets')
+    fireEvent.click(assetsShortcut)
+
+    expect(screen.getByTestId('right-pane')).toHaveAttribute('data-open', 'true')
+    expect(screen.getByTestId('shell-tab-title')).toHaveTextContent('agent.right_pane.tabs.assets')
+    expect(screen.getByTestId('coco-assets-pane')).toBeInTheDocument()
+  })
+
+  it('renders the shared branch topology and switches branches inside the current route', async () => {
+    const baseSession = {
+      agentId: 'agent-1',
+      name: 'Conversation',
+      isNameManuallyEdited: false,
+      workspaceId: 'workspace-1',
+      workspace: { id: 'workspace-1', type: 'user', path: '/workspace' },
+      orderKey: 'a0',
+      lastActivityAt: '2026-01-01T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    }
+    ipcRequestMock.mockResolvedValueOnce([
+      { ...baseSession, id: 'session-a' },
+      {
+        ...baseSession,
+        id: 'session-branch',
+        branchParentId: 'session-a',
+        branchPointMessageId: 'main-question',
+        createdAt: '2026-01-01T00:01:00.000Z'
+      }
+    ])
+    const message = (id: string, role: 'user' | 'assistant', createdAt: string) => ({
+      id,
+      role,
+      status: 'success',
+      searchableText: id,
+      agentSessionId: 'session',
+      createdAt,
+      updatedAt: createdAt
+    })
+    // `session-branch` forked at `main-question`, so it re-lists the shared history
+    // under its own ids. The graph must fold that prefix back onto `shared-answer`.
+    dataApiGetMock.mockImplementation((path: string) =>
+      Promise.resolve({
+        items: path.includes('session-branch')
+          ? [
+              message('branch-shared-answer', 'assistant', '2026-01-01T00:01:00.000Z'),
+              message('branch-question', 'user', '2026-01-01T00:01:01.000Z')
+            ]
+          : [
+              message('shared-answer', 'assistant', '2026-01-01T00:00:00.000Z'),
+              message('main-question', 'user', '2026-01-01T00:00:01.000Z')
+            ],
+        nextCursor: undefined
+      })
+    )
+
+    render(
+      <TestAgentRightPane sessionId="session-a" messages={[]} partsByMessageId={{}}>
+        <AgentRightPane.Shortcuts />
+        <AgentRightPane.Viewport />
+      </TestAgentRightPane>
+    )
+
+    fireEvent.click(screen.getByTestId('agent-session-branches-button'))
+
+    const flow = await screen.findByTestId('agent-branch-flow')
+    await waitFor(() => {
+      expect(within(flow).getByRole('button', { name: 'branch-question' })).toBeInTheDocument()
+    })
+    // The forked prefix is not duplicated, and the active branch keeps its own tip.
+    expect(within(flow).queryByRole('button', { name: 'branch-shared-answer' })).toBeNull()
+    expect(within(flow).getByRole('button', { name: 'main-question' })).toHaveAttribute('data-active', 'true')
+
+    fireEvent.click(within(flow).getByRole('button', { name: 'branch-question' }))
+
+    await waitFor(() => {
+      expect(openRouteMock).toHaveBeenCalledWith('/app/agents', { sessionId: 'session-branch' })
+    })
+  })
+
+  it('shows an empty state instead of mounting an empty branch canvas', async () => {
+    ipcRequestMock.mockResolvedValueOnce([
+      {
+        id: 'session-a',
+        agentId: 'agent-1',
+        name: 'Conversation',
+        isNameManuallyEdited: false,
+        workspaceId: 'workspace-1',
+        workspace: { id: 'workspace-1', type: 'user', path: '/workspace' },
+        orderKey: 'a0',
+        lastActivityAt: '2026-01-01T00:00:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+    ])
+    dataApiGetMock.mockResolvedValue({ items: [], nextCursor: undefined })
+
+    render(
+      <TestAgentRightPane sessionId="session-a" messages={[]} partsByMessageId={{}}>
+        <AgentRightPane.Shortcuts />
+        <AgentRightPane.Viewport />
+      </TestAgentRightPane>
+    )
+
+    fireEvent.click(screen.getByTestId('agent-session-branches-button'))
+
+    expect(await screen.findByTestId('empty-state')).toBeInTheDocument()
+    expect(screen.queryByTestId('agent-branch-flow')).toBeNull()
   })
 
   it('registers the sidebar command independently and prioritizes the resource pane', () => {
@@ -743,6 +951,7 @@ describe('AgentRightPane', () => {
 
     expect(screen.queryByRole('button', { name: 'agent.session.list.title' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'agent.right_pane.tabs.files' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'agent.right_pane.tabs.canvas' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'agent.right_pane.tabs.status' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'trace.label' })).toBeNull()
   })

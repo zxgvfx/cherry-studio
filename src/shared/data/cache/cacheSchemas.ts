@@ -380,6 +380,7 @@ export type RendererPersistCacheSchema = {
   'ui.topic.expansion.time': string[]
   'ui.topic.expansion.assistant': string[] | null
   'ui.agent.last_used_session_id': string | null
+  'ui.agent.last_used_branch_by_session': Record<string, string>
   'ui.agent.last_used_agent_id': string | null
   'ui.agent.last_used_workspace_id': string | null
   // Kept separate so the assistant and agent surfaces don't bleed into each other.
@@ -413,6 +414,7 @@ export const DefaultRendererPersistCache: RendererPersistCacheSchema = {
   'ui.topic.expansion.time': [],
   'ui.topic.expansion.assistant': null,
   'ui.agent.last_used_session_id': null,
+  'ui.agent.last_used_branch_by_session': {},
   'ui.agent.last_used_agent_id': null,
   'ui.agent.last_used_workspace_id': null,
   'ui.agent.right_pane_open_override': null,

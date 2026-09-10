@@ -46,6 +46,7 @@ import { COPILOT_DEFAULT_HEADERS } from './constants'
 import type { ServingAuthMethod, ServingCredentialReceipt } from './credential'
 import { appendDashScopeWebExtractor } from './custom/dashscope/dashscopeWebExtractor'
 import { dmxapiUsesCustomTransport } from './custom/dmxapi/dmxapiImageRouting'
+import { prepareOpenAiImageEditRequest } from './custom/newapiImageModel'
 import { resolveAiSdkProviderId, type ResolvedEndpoint, resolveEffectiveEndpoint } from './endpoint'
 import { buildGrokCliRequestHeaders, rewriteGrokCliResponsesBody } from './grokCli'
 import { isVertexMaasModelId, normalizeVertexCredentials } from './vertex'
@@ -362,6 +363,17 @@ export async function resolveProviderAiSdkConfig(
   // that install their own fetch wrapper (e.g. CherryAI request signing) compose
   // on top of customFetch; `??=` preserves them rather than clobbering them.
   config.providerSettings.fetch ??= customFetch
+  // Image edits POST multipart `/images/edits`. Provider extraHeaders can force
+  // `Content-Type: application/json`, and the SDK's nameless Blob parts omit
+  // `filename=` — Higress then returns `invalid_multipart`. Wrap every image
+  // model's fetch (vapi / openai-compatible included), not only `newapi`.
+  if (isGenerateImageModel(model)) {
+    const innerFetch = config.providerSettings.fetch
+    config.providerSettings.fetch = (input, init) => {
+      const prepared = prepareOpenAiImageEditRequest(input, init)
+      return innerFetch(prepared.input, prepared.init)
+    }
+  }
 
   return {
     config,

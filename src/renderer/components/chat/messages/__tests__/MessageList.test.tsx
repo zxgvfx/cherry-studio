@@ -651,12 +651,14 @@ describe('MessageList', () => {
     expect(scrollToKey).toHaveBeenCalledWith('assistantassistant-1', 'start')
   })
 
-  it('does not register the message outline scroll listener while outline is disabled', () => {
+  it('only registers turn tracking, not the outline listener, while outline is disabled', () => {
     const addEventListenerSpy = vi.spyOn(messageVirtualListMocks.scrollElement!, 'addEventListener')
 
     renderMessageList([createMessage('assistant-1', 'assistant')])
 
-    expect(addEventListenerSpy).not.toHaveBeenCalledWith('scroll', expect.any(Function), { passive: true })
+    const scrollListeners = addEventListenerSpy.mock.calls.filter(([event]) => event === 'scroll')
+    expect(scrollListeners).toHaveLength(1)
+    expect((scrollListeners[0][1] as EventListener).name).toBe('handleAnchorUpdate')
   })
 
   it('limits message outline work to mounted message elements', () => {

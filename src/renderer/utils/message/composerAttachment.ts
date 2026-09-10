@@ -40,6 +40,10 @@ export interface ComposerAttachment {
   type: FileType
   /** Pasted-text marker (existing composer-only kind). */
   composerFileKind?: ComposerFileKind
+  /** Existing pipeline asset UUID; send should attach this id instead of re-uploading. */
+  pipelineAssetId?: string
+  /** Thumbnail for image session assets (file:// or pipeline file URL). */
+  previewUrl?: string
 }
 
 /**

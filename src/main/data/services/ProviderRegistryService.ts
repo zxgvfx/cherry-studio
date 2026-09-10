@@ -48,6 +48,7 @@ import {
 import { RegistryLoader } from '@cherrystudio/provider-registry/node'
 import type { StoredEndpointConfigOverride } from '@data/db/schemas/userProvider'
 import { loggerService } from '@logger'
+import { GEMINI_STYLE_IMAGE_SUPPORT, isGeminiStyleImageModel } from '@main/ai/utils/geminiImageParams'
 import { ErrorCode, isDataApiError } from '@shared/data/api/errors'
 import type { ProviderPreset, ProviderPresetField } from '@shared/data/api/schemas/providers'
 import type {
@@ -1213,6 +1214,11 @@ class ProviderRegistryService {
     // imageGeneration block without polluting the global models.json.
     if (registryOverride?.imageGeneration) return registryOverride.imageGeneration
     if (presetModel?.imageGeneration) return presetModel.imageGeneration
+    // New API / coco-vapi list Nano Banana under ids like `nano-banana-pro@vapi`
+    // that are not catalog rows. Without this fallback the painting form has no
+    // size field, leftover DALL·E `1792x1024` leaks onto the OpenAI images wire,
+    // and the relay returns `unsupported size`.
+    if (isGeminiStyleImageModel(modelId)) return GEMINI_STYLE_IMAGE_SUPPORT
     return null
   }
 }

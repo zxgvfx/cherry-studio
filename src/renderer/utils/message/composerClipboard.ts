@@ -445,18 +445,21 @@ function mergeFileTokenPayload(
   token: ComposerMessageToken,
   filePayloadsBySourceId: ReadonlyMap<string, FileClipboardPayload>
 ): ClipboardComposerMessageToken {
-  if (token.kind !== 'file') return token
+  // Only file tokens carry a clipboard payload — sanitization drops every other
+  // kind's payload — so strip payload shapes the clipboard cannot represent.
+  const { payload, ...base } = token
+  if (token.kind !== 'file') return base
 
-  const tokenPayload = readFileDisplayPayload(token.payload) ?? undefined
+  const tokenPayload = readFileDisplayPayload(payload) ?? undefined
   const sourceId = readComposerFileTokenSourceIdFromTokenId(token.id)
   const matchingFilePayload = sourceId ? filePayloadsBySourceId.get(sourceId) : undefined
 
   if (!matchingFilePayload) {
-    return tokenPayload ? { ...token, payload: tokenPayload } : token
+    return tokenPayload ? { ...base, payload: tokenPayload } : base
   }
 
   return {
-    ...token,
+    ...base,
     payload: {
       ...matchingFilePayload,
       ...tokenPayload,

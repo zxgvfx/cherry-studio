@@ -22,6 +22,7 @@ import {
 
 const mockCloseConversationTabs = vi.hoisted(() => vi.fn())
 const mockUseIpcOn = vi.hoisted(() => vi.fn())
+const mockIpcRequest = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const mockT = vi.hoisted(() => (key: string) => key)
 
 vi.mock('@renderer/hooks/tab', () => ({
@@ -29,7 +30,12 @@ vi.mock('@renderer/hooks/tab', () => ({
 }))
 
 vi.mock('@renderer/ipc', () => ({
-  useIpcOn: mockUseIpcOn
+  useIpcOn: mockUseIpcOn,
+  ipcApi: { request: mockIpcRequest }
+}))
+
+vi.mock('@renderer/utils/conversationEntry', () => ({
+  forgetLastUsedAgentSession: vi.fn()
 }))
 
 const buildInfiniteReturn = (overrides: Record<string, unknown> = {}) => ({
@@ -645,6 +651,7 @@ describe('useSessions', () => {
     const deleted = await act(async () => result.current.deleteSession('session-a'))
 
     expect(deleteTrigger).toHaveBeenCalledWith({ params: { sessionId: 'session-a' } })
+    expect(mockIpcRequest).toHaveBeenCalledWith('ai.stream.abort', { topicId: 'agent-session:session-a' })
     expect(mockCloseConversationTabs).toHaveBeenCalledWith('agents', ['session-a'])
     expect(deleted).toBe(true)
   })

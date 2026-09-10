@@ -71,6 +71,8 @@ files:
   - "!node_modules/onnxruntime-node/bin/**" # native binary is downloaded on first use (Toolchain/onnxruntime), never bundled — see OnnxRuntimeBinaryService
   - "!**/*.{h,iobj,ipdb,tlog,recipe,vcxproj,vcxproj.filters,Makefile,*.Makefile}" # filter .node build files
   - "resources/**/*" # include all files in resources, and unpack them from asar for runtime access
+  - "!resources/hermes-agent/**" # Hermes SDK is synchronized from the shared RAR at runtime
+  - "!resources/hermes-runtime/**" # Coco runner and Python requirements are in the same RAR
   - "!resources/devtools/**" # dev-only extensions are loaded from source in development
 asarUnpack:
   - resources/**

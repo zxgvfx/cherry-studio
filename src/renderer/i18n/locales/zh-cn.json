@@ -25,6 +25,7 @@
       "next": "下一个",
       "noQuestions": "暂无问题",
       "other": "其他",
+      "otherDescription": "自由输入文本",
       "previous": "上一个",
       "progress": "{{current}} / {{total}}",
       "skip": "跳过",
@@ -311,6 +312,46 @@
       }
     },
     "right_pane": {
+      "assets": {
+        "add_to_composer": "添加到对话框",
+        "added_to_composer": "已将 {{name}} 添加到对话框",
+        "copy_id": "复制资产 ID",
+        "count": "当前会话共 {{count}} 个资产",
+        "delete_confirm_description": "将从当前会话和资产库中删除“{{name}}”。此操作会使已有引用失效。",
+        "delete_confirm_title": "删除资产？",
+        "delete_failed": "删除资产失败：{{error}}",
+        "deleted": "已删除 {{name}}",
+        "download_failed": "下载失败：{{error}}",
+        "drag_failed": "准备拖拽文件失败：{{error}}",
+        "empty": "当前筛选下没有会话资产",
+        "filters": {
+          "all": "全部",
+          "generated": "生成",
+          "model": "3D 模型",
+          "upload": "上传"
+        },
+        "load_failed": "加载会话资产失败",
+        "origin": {
+          "generated": "生成",
+          "upload": "上传"
+        },
+        "parent": "来源资产",
+        "refresh": "刷新资产",
+        "scope": {
+          "session": "本会话全部",
+          "turn": "当前第 {{number}} 轮"
+        },
+        "search": "搜索名称、类型或 Asset ID",
+        "source": "来源节点",
+        "title": "会话资产",
+        "zoom": "缩放"
+      },
+      "branches": {
+        "empty": {
+          "description": "编辑历史消息后会在这里显示不同的对话分支。",
+          "title": "暂无分支"
+        }
+      },
       "close": "关闭",
       "flow": {
         "empty": {
@@ -367,6 +408,9 @@
         "workspace": "工作区"
       },
       "tabs": {
+        "assets": "资产",
+        "branches": "分支",
+        "canvas": "画布",
         "files": "文件",
         "flow": "消息流",
         "status": "状态"
@@ -412,6 +456,13 @@
         "reason": "请求失败（{{error}}，HTTP {{status}}），正在重试",
         "retrying": "正在重试 {{attempt}}/{{max}}…",
         "retrying_in": "{{seconds}} 秒后重试 {{attempt}}/{{max}}"
+      },
+      "artifact": {
+        "drag_hint": "拖到 Houdini / 桌面",
+        "drag_to_dcc": "拖到 DCC",
+        "load_3d_preview": "点击加载 3D 预览",
+        "open_in_pane": "在文件面板中打开",
+        "preview_unsupported": "此类型请用「打开方式」查看，或拖到 DCC。"
       },
       "auto_rename": "生成任务名",
       "create": {
@@ -1575,6 +1626,36 @@
       "paste_text_file": "粘贴到输入框",
       "pasted_text_file_name": "已粘贴的文本.txt",
       "pause": "暂停",
+      "pipeline_nodes": {
+        "advanced": "高级参数",
+        "all_nodes": "全部节点",
+        "category": {
+          "3d": "3D 生成",
+          "data": "数据",
+          "image": "图像生成",
+          "interactive": "人机交互",
+          "io": "输入输出",
+          "model": "模型对话",
+          "motion": "动作 / 绑定",
+          "other": "其他",
+          "segmentation": "分割 / 抠图",
+          "video": "视频生成",
+          "workflow": "工作流"
+        },
+        "category_count": "{{count}} 个节点",
+        "empty_hint": "未填的必选项会由编排模型补全；信息不够时会向你提问。",
+        "filter_by_tag": "按标签筛选",
+        "load_failed": "无法加载节点目录",
+        "params": "节点参数",
+        "preset_count": "{{count}} 个预设",
+        "preset_description": "{{model}} · {{provider}}",
+        "preset_suffix": "预设",
+        "presets": "节点预设",
+        "required": "必填",
+        "tag_suffix": "标签",
+        "tag_title": "标签：{{tag}}",
+        "title": "Pipeline 节点"
+      },
       "placeholder": "输入消息，按 {{key}} 发送，输入 / 选择工具或操作，输入 @ 引用话题",
       "placeholder_without_triggers": "在这里输入消息，按 {{key}} 发送",
       "reference_panel": {
@@ -2682,6 +2763,10 @@
       "description": "请选择此文件夹中的具体文件进行预览。",
       "title": "这是一个文件夹"
     },
+    "explode": "炸开",
+    "explode_hint": "分开网格部件，检查分割是否正确",
+    "explode_reset": "重置炸开程度",
+    "explode_unavailable": "这个模型没有可分开的部件",
     "html": {
       "empty": {
         "description": "此 HTML 文件没有内容。",
@@ -3418,6 +3503,74 @@
     },
     "config": {
       "agent": {
+        "coco": {
+          "canvas": {
+            "add_node": "添加节点",
+            "add_placeholder": "搜索并添加节点…",
+            "auto_layout": "整理布局",
+            "delete": "删除节点",
+            "empty": "画布还是空的。在空白处右键添加节点，或打开左侧节点面板。",
+            "fit_view": "适应画布",
+            "graph_summary": "{{nodes}} 个节点 · {{edges}} 条连线",
+            "history": "画布历史",
+            "history_current": "当前版本",
+            "history_empty": "还没有可用的画布版本",
+            "history_hint": "每次模型提案和手动保存都会保留；恢复会生成一个新版本。",
+            "history_load_failed": "无法加载画布历史",
+            "history_restore": "恢复",
+            "history_restore_failed": "恢复画布版本失败",
+            "history_restored": "已恢复画布版本，并保留为新的当前版本。",
+            "history_source": {
+              "agent_proposal": "模型提案",
+              "branch_legacy_fallback": "旧会话分支",
+              "history_restore": "历史恢复",
+              "legacy_current": "旧会话当前版本",
+              "manual_save": "手动保存",
+              "session_created": "初始版本",
+              "turn_input": "对话轮次同步"
+            },
+            "history_turn": "第 {{turn}} 轮后的画布",
+            "inspector": "节点属性",
+            "issue_count": "{{count}} 个节点缺必填输入",
+            "literal": "字面量 / 未连接",
+            "live_updating_short": "Agent 正在修改画布，实时同步中…",
+            "load_failed": "无法加载画布",
+            "missing_required": "缺少必填输入：{{ports}}",
+            "more_params": "还有 {{count}} 个参数",
+            "no_match": "没有匹配的节点",
+            "no_selection": "选一个节点来改参数或接线",
+            "node_id": "节点类型",
+            "read_only": "当前画布为只读，不能手动改节点。",
+            "redo": "重做 (Ctrl+Shift+Z)",
+            "run": "运行",
+            "run_empty": "画布是空的，先添加节点再运行。",
+            "run_failed": "运行画布失败",
+            "run_started": "画布已开始运行（{{runId}}）",
+            "running": "运行中…",
+            "save": "保存修改",
+            "save_failed": "保存画布失败",
+            "saved": "画布已保存。下一轮对话里 Agent 会看到你改了什么。",
+            "saving": "保存中…",
+            "snap_to_grid": "对齐网格",
+            "step_id": "步骤 ID",
+            "toggle_inspector": "节点属性面板",
+            "toggle_palette": "节点面板",
+            "undo": "撤销 (Ctrl+Z)",
+            "unknown_node": "节点目录里没有这个类型，只能改连线。",
+            "unsaved": "未保存",
+            "zoom_in": "放大",
+            "zoom_out": "缩小"
+          },
+          "proposal": {
+            "applied": "画布已更新",
+            "apply": "应用到会话画布",
+            "auto_applied": "已写入本 COCO 会话画布。",
+            "empty_diff": "此结果没有脚本 diff。",
+            "label": "Pipeline Script 提案",
+            "reject": "拒绝",
+            "rejected": "已丢弃提案"
+          }
+        },
         "create_banner": "保存后才能绑定工具和 MCP 服务",
         "create_title": "新建智能体",
         "field": {
@@ -3434,6 +3587,32 @@
           },
           "avatar": {
             "hint": "用于资源库和会话识别"
+          },
+          "coco_mode": {
+            "label": "工作模式",
+            "option": {
+              "agent": "Agent",
+              "agent_description": "用 Pipeline Script 搭建并修改本会话画布。",
+              "ask": "Ask",
+              "ask_description": "只读提问当前画布。",
+              "debug": "Debug",
+              "debug_description": "排查诊断与失败节点。",
+              "multitask": "Multitask",
+              "multitask_description": "在同一会话里协调多项画布任务。",
+              "plan": "Plan",
+              "plan_description": "规划节点图，不提交运行。"
+            }
+          },
+          "coco_permission": {
+            "label": "画布权限",
+            "option": {
+              "ask": "询问",
+              "ask_description": "展示脚本 diff，确认后再写入本会话画布。",
+              "auto": "自动",
+              "auto_description": "合法的 Pipeline Script 提案立即写入本会话画布。",
+              "read_only": "只读",
+              "read_only_description": "只查看画布，不提案、不提交。"
+            }
           },
           "description": {
             "hint": "帮助你快速识别用途",
@@ -3488,10 +3667,12 @@
             "label": "运行模式",
             "option": {
               "claude_code": "增强：Claude Agent",
+              "coco": "COCO 智能体",
               "pi": "快速：Pi"
             },
             "selected": {
               "claude_code": "增强",
+              "coco": "COCO",
               "pi": "快速"
             }
           },

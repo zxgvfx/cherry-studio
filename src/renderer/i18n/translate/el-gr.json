@@ -311,6 +311,31 @@
       }
     },
     "right_pane": {
+      "assets": {
+        "copy_id": "[to be translated]:Copy asset ID",
+        "count": "[to be translated]:{{count}} assets in this session",
+        "empty": "[to be translated]:No session assets match this filter",
+        "filters": {
+          "all": "[to be translated]:All",
+          "generated": "[to be translated]:Generated",
+          "model": "[to be translated]:3D models",
+          "upload": "[to be translated]:Uploads"
+        },
+        "load_failed": "[to be translated]:Failed to load session assets",
+        "origin": {
+          "generated": "[to be translated]:Generated",
+          "upload": "[to be translated]:Upload"
+        },
+        "parent": "[to be translated]:Parent asset",
+        "refresh": "[to be translated]:Refresh assets",
+        "scope": {
+          "session": "[to be translated]:All in session",
+          "turn": "[to be translated]:Current turn {{number}}"
+        },
+        "search": "[to be translated]:Search name, type, or asset ID",
+        "source": "[to be translated]:Source node",
+        "title": "[to be translated]:Session assets"
+      },
       "close": "Κλείσιμο",
       "flow": {
         "empty": {
@@ -367,6 +392,9 @@
         "workspace": "Χώρος εργασίας"
       },
       "tabs": {
+        "assets": "[to be translated]:Assets",
+        "branches": "[to be translated]:Branches",
+        "canvas": "[to be translated]:Canvas",
         "files": "Αρχεία",
         "flow": "Ροή",
         "status": "Κατάσταση"
@@ -412,6 +440,13 @@
         "reason": "Η αίτηση απέτυχε ({{error}}, HTTP {{status}}) — επανάληψη",
         "retrying": "Επανάληψη {{attempt}}/{{max}}…",
         "retrying_in": "Επανάληψη {{attempt}}/{{max}} σε {{seconds}}δ"
+      },
+      "artifact": {
+        "drag_hint": "[to be translated]:Drag to Houdini / desktop",
+        "drag_to_dcc": "[to be translated]:Drag to DCC",
+        "load_3d_preview": "[to be translated]:Click to load 3D preview",
+        "open_in_pane": "[to be translated]:Open in file pane",
+        "preview_unsupported": "[to be translated]:Use \"Open with\" for this file type, or drag it into your DCC."
       },
       "auto_rename": "Δημιουργία ονόματος εργασίας",
       "create": {
@@ -1575,6 +1610,36 @@
       "paste_text_file": "Επικόλληση στην είσοδο",
       "pasted_text_file_name": "Επικολλημένο κείμενο.txt",
       "pause": "Παύση",
+      "pipeline_nodes": {
+        "advanced": "[to be translated]:Advanced",
+        "all_nodes": "[to be translated]:All nodes",
+        "category": {
+          "3d": "[to be translated]:3D generation",
+          "data": "[to be translated]:Data",
+          "image": "[to be translated]:Image generation",
+          "interactive": "[to be translated]:Human-in-the-loop",
+          "io": "[to be translated]:Input / output",
+          "model": "[to be translated]:Model chat",
+          "motion": "[to be translated]:Motion / rigging",
+          "other": "[to be translated]:Other",
+          "segmentation": "[to be translated]:Segmentation",
+          "video": "[to be translated]:Video generation",
+          "workflow": "[to be translated]:Workflows"
+        },
+        "category_count": "[to be translated]:{{count}} nodes",
+        "empty_hint": "[to be translated]:Missing required fields are filled by the orchestrator, or it will ask you.",
+        "filter_by_tag": "[to be translated]:Filter by tag",
+        "load_failed": "[to be translated]:Could not load the node catalog",
+        "params": "[to be translated]:Node parameters",
+        "preset_count": "[to be translated]:{{count}} presets",
+        "preset_description": "[to be translated]:{{model}} · {{provider}}",
+        "preset_suffix": "[to be translated]:Preset",
+        "presets": "[to be translated]:Node presets",
+        "required": "[to be translated]:Required",
+        "tag_suffix": "[to be translated]:Tag",
+        "tag_title": "[to be translated]:Tag: {{tag}}",
+        "title": "[to be translated]:Pipeline nodes"
+      },
       "placeholder": "Πληκτρολογήστε ένα μήνυμα. Πατήστε {{key}} για αποστολή. Πληκτρολογήστε / για εργαλεία και ενέργειες ή @ για αναφορά σε θέματα.",
       "placeholder_without_triggers": "Γράψτε το μήνυμά σας εδώ, πατήστε {{key}} για αποστολή",
       "reference_panel": {
@@ -2735,6 +2800,8 @@
         "title": "Το αρχείο είναι πολύ μεγάλο"
       }
     },
+    "reveal_in_folder": "[to be translated]:Show in folder",
+    "reveal_in_folder_error": "[to be translated]:Couldn't show this file in its folder",
     "text": {
       "empty": {
         "description": "Αυτό το αρχείο κειμένου δεν έχει περιεχόμενο.",
@@ -3416,6 +3483,50 @@
     },
     "config": {
       "agent": {
+        "coco": {
+          "canvas": {
+            "add_placeholder": "[to be translated]:Search and add a node…",
+            "auto_layout": "[to be translated]:Arrange",
+            "delete": "[to be translated]:Delete",
+            "empty": "[to be translated]:The canvas is empty. Search for a node to add one.",
+            "fit_view": "[to be translated]:Fit",
+            "graph_summary": "[to be translated]:{{nodes}} nodes · {{edges}} connections",
+            "inspector": "[to be translated]:Node properties",
+            "issue_count": "[to be translated]:{{count}} node(s) missing required inputs",
+            "literal": "[to be translated]:Literal / unconnected",
+            "live_updating_short": "[to be translated]:The agent is editing the canvas — syncing live…",
+            "load_failed": "[to be translated]:Could not load the canvas",
+            "missing_required": "[to be translated]:Missing required inputs: {{ports}}",
+            "more_params": "[to be translated]:{{count}} more parameter(s)",
+            "no_match": "[to be translated]:No matching nodes",
+            "no_selection": "[to be translated]:Select a node to edit parameters or connections",
+            "node_id": "[to be translated]:Node type",
+            "read_only": "[to be translated]:This canvas is read-only.",
+            "redo": "[to be translated]:Redo (Ctrl+Shift+Z)",
+            "save": "[to be translated]:Save changes",
+            "save_failed": "[to be translated]:Could not save the canvas",
+            "saved": "[to be translated]:Canvas saved. The agent will see your edits on the next turn.",
+            "saving": "[to be translated]:Saving…",
+            "snap_to_grid": "[to be translated]:Snap to grid",
+            "step_id": "[to be translated]:Step ID",
+            "toggle_inspector": "[to be translated]:Node properties panel",
+            "toggle_palette": "[to be translated]:Node palette",
+            "undo": "[to be translated]:Undo (Ctrl+Z)",
+            "unknown_node": "[to be translated]:This node type is not in the catalog; only its connections can be edited.",
+            "unsaved": "[to be translated]:Unsaved",
+            "zoom_in": "[to be translated]:Zoom in",
+            "zoom_out": "[to be translated]:Zoom out"
+          },
+          "proposal": {
+            "applied": "[to be translated]:Canvas updated",
+            "apply": "[to be translated]:Apply to session canvas",
+            "auto_applied": "[to be translated]:Applied to this COCO session canvas.",
+            "empty_diff": "[to be translated]:No script diff in this result.",
+            "label": "[to be translated]:Pipeline Script proposal",
+            "reject": "[to be translated]:Reject",
+            "rejected": "[to be translated]:Proposal discarded"
+          }
+        },
         "create_banner": "Αποθήκευση πριν τη σύνδεση εργαλείων και διακομιστών MCP",
         "create_title": "Νέος πράκτορας",
         "field": {
@@ -3432,6 +3543,32 @@
           },
           "avatar": {
             "hint": "Χρησιμοποιείται για την αναγνώρισή του στη βιβλιοθήκη και στις συνεδρίες"
+          },
+          "coco_mode": {
+            "label": "[to be translated]:Mode",
+            "option": {
+              "agent": "[to be translated]:Agent",
+              "agent_description": "[to be translated]:Build and edit this session canvas with Pipeline Script.",
+              "ask": "[to be translated]:Ask",
+              "ask_description": "[to be translated]:Read-only questions about the current canvas.",
+              "debug": "[to be translated]:Debug",
+              "debug_description": "[to be translated]:Inspect diagnostics and failed nodes.",
+              "multitask": "[to be translated]:Multitask",
+              "multitask_description": "[to be translated]:Coordinate several canvas tasks in one session.",
+              "plan": "[to be translated]:Plan",
+              "plan_description": "[to be translated]:Plan the graph without submitting a run."
+            }
+          },
+          "coco_permission": {
+            "label": "[to be translated]:Canvas permission",
+            "option": {
+              "ask": "[to be translated]:Ask",
+              "ask_description": "[to be translated]:Show a script diff and wait before applying it to this session canvas.",
+              "auto": "[to be translated]:Auto",
+              "auto_description": "[to be translated]:Apply a valid Pipeline Script proposal to this session canvas immediately.",
+              "read_only": "[to be translated]:Read only",
+              "read_only_description": "[to be translated]:Inspect the canvas; do not propose or submit writes."
+            }
           },
           "description": {
             "hint": "Βοηθά στον εντοπισμό του σκοπού αυτού του πράκτορα",
@@ -3486,10 +3623,12 @@
             "label": "Λειτουργία εκτέλεσης",
             "option": {
               "claude_code": "Προηγμένο: Claude Agent",
+              "coco": "[to be translated]:COCO Agent",
               "pi": "Γρήγορο: Pi"
             },
             "selected": {
               "claude_code": "Προηγμένο",
+              "coco": "[to be translated]:COCO",
               "pi": "Γρήγορο"
             }
           },
@@ -7836,6 +7975,7 @@
       "api_host_preview": "Προεπισκόπηση: {{url}}",
       "api_host_tooltip": "Παρακάμψτε τη ρύθμιση μόνο όταν ο πάροχός σας απαιτεί προσαρμοσμένο endpoint συμβατό με OpenAI.",
       "api_key": {
+        "centralized_hint": "[to be translated]:This service is centrally managed — an API key is automatically provisioned per account and cannot be viewed or edited manually.",
         "copy": "Αντιγραφή",
         "enabled_suffix": "ενεργοποιημένο",
         "hide_key": "Απόκρυψη κλειδιού",
@@ -8705,6 +8845,7 @@
     "unpin": "Κατάργηση σταθεροποίησης καρτέλας"
   },
   "title": {
+    "ai_pipeline": "[to be translated]:AI Workflows",
     "apps": "Εφαρμογές",
     "chat": "Συνομιλία",
     "code": "Code Mate",

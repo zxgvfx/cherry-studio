@@ -50,6 +50,15 @@ describe('chat composer token mapping', () => {
     expect(
       fileToComposerToken({ fileTokenSourceId: 's1', name: 'a.ts' } as ComposerAttachment).promptText
     ).toBeUndefined()
+
+    expect(
+      fileToComposerToken({
+        fileTokenSourceId: 'coco-asset-img-1',
+        name: 'shot.png',
+        origin_name: 'shot.png',
+        pipelineAssetId: 'img-1'
+      } as ComposerAttachment).promptText
+    ).toBe('[本轮用户附件 shot.png asset_id=img-1]')
   })
 
   it('uses the unguessable file token source id instead of the file path', () => {

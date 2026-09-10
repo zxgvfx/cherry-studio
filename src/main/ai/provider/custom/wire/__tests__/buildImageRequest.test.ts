@@ -112,6 +112,14 @@ describe('buildVendorProviderOptions — OpenAI image family (dual-keyed)', () =
     const paramValues = { quality: 'auto', background: '', numInferenceSteps: 20, cfg: 7.5 }
     expect(engine('openai', paramValues)).toEqual({})
   })
+
+  it('also emits google.imageConfig for New API Gemini/Nano Banana aspect + resolution', () => {
+    expect(engine('newapi', { aspectRatio: '16:9', imageResolution: '2K', quality: 'high' })).toEqual({
+      openai: { quality: 'high' },
+      newapi: { quality: 'high' },
+      google: { imageConfig: { aspectRatio: '16:9', imageSize: '2K' } }
+    })
+  })
 })
 
 describe('buildVendorProviderOptions — cherryin-chat (delivers under the cherryin key, not its own id)', () => {

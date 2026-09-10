@@ -2,6 +2,7 @@
 // Named re-exports only (no `export *`) per naming-conventions §5.
 
 export {
+  getRawModelId,
   isAudioModel,
   isAudioModels,
   isGenerateImageModels,

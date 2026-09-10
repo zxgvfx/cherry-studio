@@ -34,6 +34,7 @@ import type { ConversationCenterSlot, PaneManualToggleSignal } from '@renderer/t
 import type { Citation } from '@renderer/types/message'
 import { getAgentAvatarFromConfiguration } from '@renderer/utils/agent'
 import { buildAgentSessionTopicId } from '@renderer/utils/agentSession'
+import { prepareCanvasSessionTransition } from '@renderer/utils/canvasSessionTransition'
 import { cn } from '@renderer/utils/style'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import type { CherryMessagePart, CherryUIMessage } from '@shared/data/types/message'
@@ -54,6 +55,7 @@ import type { AgentConversationBootstrap } from './useAgentConversationBootstrap
 
 const EMPTY_MESSAGES: CherryUIMessage[] = []
 const EMPTY_PARTS: Record<string, CherryMessagePart[]> = {}
+const NEW_SESSION_CANVAS_SETTLE_MS = 550
 
 interface ModelSwitchTarget {
   agentId: string
@@ -181,6 +183,16 @@ const AgentChat = ({
   const [modelSwitchTarget, setModelSwitchTarget] = useState<ModelSwitchTarget>()
   const [modelSwitchConfirmOpen, setModelSwitchConfirmOpen] = useState(false)
   const [skipModelSwitchConfirmation, setSkipModelSwitchConfirmation] = useState(false)
+  const newSessionTransitionTimerRef = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (newSessionTransitionTimerRef.current !== null) {
+        window.clearTimeout(newSessionTransitionTimerRef.current)
+      }
+    },
+    []
+  )
 
   const sessionSnapshot = conversationBootstrap.session
   const visibleAgentId = sessionSnapshot?.agentId ?? null
@@ -283,17 +295,30 @@ const AgentChat = ({
   const handleCreateEmptySession = useCallback(() => {
     if (!sessionSnapshot || !onCreateEmptySession) return
     const transition = () => {
-      void onCreateEmptySession({
-        agentId: sessionSnapshot.agentId,
-        ...getNewSessionWorkspaceDefaults(sessionSnapshot)
-      })
+      const create = () => {
+        newSessionTransitionTimerRef.current = null
+        void onCreateEmptySession({
+          agentId: sessionSnapshot.agentId,
+          ...getNewSessionWorkspaceDefaults(sessionSnapshot)
+        })
+      }
+      if (!sessionPaneOpen) {
+        create()
+        return
+      }
+      if (newSessionTransitionTimerRef.current !== null) return
+      // ReactFlow must leave the Qt scene before the pane and conversation swap
+      // identity. Tearing all three down in one frame can AV inside Qt6Gui.
+      prepareCanvasSessionTransition()
+      onSessionPaneOpenChange?.(false)
+      newSessionTransitionTimerRef.current = window.setTimeout(create, NEW_SESSION_CANVAS_SETTLE_MS)
     }
     if (sessionSnapshot.workspaceId && sessionSnapshot.workspace?.type !== 'system') {
       transition()
       return
     }
     runAfterFileNavigation(transition)
-  }, [onCreateEmptySession, runAfterFileNavigation, sessionSnapshot])
+  }, [onCreateEmptySession, onSessionPaneOpenChange, runAfterFileNavigation, sessionPaneOpen, sessionSnapshot])
   const handleRestoreComposerFocus = useCallback(() => {
     if (!runtime.sessionId) return
     void EventEmitter.emit(EVENT_NAMES.FOCUS_CHAT_COMPOSER, {
@@ -658,6 +683,7 @@ function AgentChatLayout({
       agentId={sessionSnapshot?.agentId ?? undefined}
       agentName={activeAgent?.name}
       agentAvatar={activeAgent ? getAgentAvatarFromConfiguration(activeAgent.configuration) : undefined}
+      agentType={activeAgent?.type}
       present={!centerSurface}
       revealRequest={resourcePaneRevealRequest}>
       <ConversationShell

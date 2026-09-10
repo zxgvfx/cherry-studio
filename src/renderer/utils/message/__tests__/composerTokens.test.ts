@@ -84,6 +84,18 @@ describe('getComposerTokenClipboardText', () => {
       )
     ).toBe('https://example.com/docs')
   })
+
+  it('returns the slash prompt text for pipeline node tokens', () => {
+    expect(
+      getComposerTokenClipboardText(
+        token({
+          kind: 'pipelineNode',
+          label: '/model.text-to-image',
+          promptText: '/model.text-to-image{"prompt":"cat"}'
+        })
+      )
+    ).toBe('/model.text-to-image{"prompt":"cat"}')
+  })
 })
 
 describe('replaceComposerTokenPromptText', () => {

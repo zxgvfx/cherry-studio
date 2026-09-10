@@ -65,13 +65,15 @@ export default function FBXAnimationViewer({ urls, onLoad, onError }: FBXAnimati
     controls.screenSpacePanning = false
 
     const mixers: THREE.AnimationMixer[] = []
-    const clock = new THREE.Clock()
+    const timer = new THREE.Timer()
+    timer.connect(document)
     let animationId = 0
 
     const animate = () => {
       if (disposed) return
       animationId = requestAnimationFrame(animate)
-      const delta = clock.getDelta()
+      timer.update()
+      const delta = timer.getDelta()
       mixers.forEach((m) => m.update(delta))
       controls.update()
       renderer.render(scene, camera)
@@ -151,6 +153,7 @@ export default function FBXAnimationViewer({ urls, onLoad, onError }: FBXAnimati
       disposed = true
       resizeObserver.disconnect()
       cancelAnimationFrame(animationId)
+      timer.dispose()
       controls.dispose()
       mixers.forEach((m) => m.stopAllAction())
       renderer.dispose()
